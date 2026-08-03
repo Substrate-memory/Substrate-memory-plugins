@@ -7,6 +7,7 @@ finding class, never the matched value.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -113,6 +114,7 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
             "bc7aacce24c8e18f13fa822b02e82431e8f1ae60ac00fffd4fe6bab4738197d4",
             "5b2a6acc6bf7b0ab170a58113ed62ddabb54edb8de8cdb543198346238eb42a3",
             "c68d32a864ded7a7ffc76e3037bbc3a5cf0965c980cae24094995e97e95a63d5",
+            "5cb25cc2c84f8aab3de8532141aee25eb0ca5ae3ce8594fc0fb146cf46979f50",
         }
     ),
 }
@@ -199,7 +201,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "2c93f43f7565b8b347097416543f4210ee9b1f8e79247ea06b2a97b8074a5e52"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "7c4f6a54794e0c50e7e6aa94ca8f9b855da89d9ec3c79c86a1459cb7737e686a"
+    "0000000000000000000000000000000000000000000000000000000000000000"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
@@ -236,6 +238,22 @@ def _normalize_historical_policy_payload(relative_path: str, payload: bytes) -> 
     return payload
 
 
+def _publication_tree_roots(root: Path) -> list[tuple[str, str]]:
+    """Return every commit tree and every ref recursively peeled to a tree."""
+
+    roots = {
+        (f"commit:{commit}", commit)
+        for commit in _git(root, "rev-list", "--all").decode("ascii").splitlines()
+    }
+    refs = _git(root, "for-each-ref", "--format=%(refname)").decode("utf-8").splitlines()
+    for ref in refs:
+        object_id = _git(root, "rev-parse", f"{ref}^{{}}").decode("ascii").strip()
+        object_type = _git(root, "cat-file", "-t", object_id).decode("ascii").strip()
+        if object_type == "tree":
+            roots.add((f"tree:{object_id}", object_id))
+    return sorted(roots)
+
+
 def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
     """Hash every distinct path/class/mode/content tuple across published refs."""
 
@@ -247,10 +265,9 @@ def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
     )
     path_classes[manifest["self_excluded_path"]] = "closed-inventory-manifest"
     projection: set[tuple[str, str, str, str]] = set()
-    commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
-    for commit in commits:
+    for _, treeish in _publication_tree_roots(root):
         for raw_entry in (
-            entry for entry in _git(root, "ls-tree", "-r", "-z", commit).split(b"\0") if entry
+            entry for entry in _git(root, "ls-tree", "-r", "-z", treeish).split(b"\0") if entry
         ):
             metadata, raw_path = raw_entry.split(b"\t", 1)
             mode, object_type, raw_object_id = metadata.split(b" ", 2)
@@ -275,6 +292,47 @@ def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _resolved_python_strings(text: str) -> set[str]:
+    """Resolve bounded constant string assignments without executing candidate code."""
+
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return set()
+    assignments = sorted(
+        (node for node in ast.walk(tree) if isinstance(node, (ast.Assign, ast.AnnAssign))),
+        key=lambda node: (getattr(node, "lineno", 0), getattr(node, "col_offset", 0)),
+    )
+    values: dict[str, str] = {}
+
+    def resolve(node: ast.AST | None) -> str | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Name):
+            return values.get(node.id)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            left = resolve(node.left)
+            right = resolve(node.right)
+            if left is not None and right is not None and len(left) + len(right) <= 256:
+                return left + right
+        return None
+
+    for _ in range(min(len(assignments) + 1, 64)):
+        changed = False
+        for assignment in assignments:
+            value = resolve(assignment.value)
+            if value is None:
+                continue
+            targets = assignment.targets if isinstance(assignment, ast.Assign) else [assignment.target]
+            for target in targets:
+                if isinstance(target, ast.Name) and values.get(target.id) != value:
+                    values[target.id] = value
+                    changed = True
+        if not changed:
+            break
+    return set(values.values())
+
+
 def scan_text(relative_path: str, text: str) -> list[str]:
     """Return content-free findings for one candidate text file."""
 
@@ -296,6 +354,8 @@ def scan_text(relative_path: str, text: str) -> list[str]:
     for label, pattern in PRODUCTION_PATTERNS:
         if pattern.search(production_text):
             findings.append(f"{relative_path}: {label}")
+    if any(value.casefold() == "hermes_api_key" for value in _resolved_python_strings(text)):
+        findings.append(f"{relative_path}: Hermes API credential assignment")
     for value in URL_PATTERN.findall(production_text):
         try:
             hostname = (urlsplit(value).hostname or "").casefold().rstrip(".")
@@ -530,9 +590,8 @@ def _scan_destination_repository(root: Path, manifest: dict[str, Any]) -> list[s
         findings.extend(_scan_bytes(relative_path, path.read_bytes()))
 
     tree_blob_ids: set[str] = set()
-    commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
-    for commit in commits:
-        tree_entries = _git(root, "ls-tree", "-r", "-z", commit).split(b"\0")
+    for root_label, treeish in _publication_tree_roots(root):
+        tree_entries = _git(root, "ls-tree", "-r", "-z", treeish).split(b"\0")
         for raw_entry in (entry for entry in tree_entries if entry):
             metadata, raw_path = raw_entry.split(b"\t", 1)
             mode, object_type, raw_object_id = metadata.split(b" ", 2)
@@ -541,19 +600,21 @@ def _scan_destination_repository(root: Path, manifest: dict[str, Any]) -> list[s
             tree_blob_ids.add(object_id)
             if relative_path not in expected_tracked:
                 findings.append(
-                    f"git:{commit}:{relative_path}: historical path outside closed inventory"
+                    f"git:{root_label}:{relative_path}: historical path outside closed inventory"
                 )
             if object_type != b"blob" or mode not in {b"100644", b"100755"}:
                 findings.append(
-                    f"git:{commit}:{relative_path}: historical entry is not a regular file"
+                    f"git:{root_label}:{relative_path}: historical entry is not a regular file"
                 )
-            for finding in scan_text(f"git-path:{commit}", relative_path):
+            for finding in scan_text(f"git-path:{root_label}", relative_path):
                 _, label = finding.rsplit(": ", 1)
-                findings.append(f"git:{commit}:{relative_path}: {label}")
+                findings.append(f"git:{root_label}:{relative_path}: {label}")
+            if object_type != b"blob":
+                continue
             payload = _git(root, "cat-file", "blob", object_id)
             for finding in _scan_bytes(relative_path, payload):
                 _, label = finding.split(": ", 1)
-                findings.append(f"git:{commit}:{relative_path}: {label}")
+                findings.append(f"git:{root_label}:{relative_path}: {label}")
 
     try:
         historical_policy_digest = _historical_blob_policy_sha256(root, manifest)

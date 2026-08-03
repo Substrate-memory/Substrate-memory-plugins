@@ -256,6 +256,7 @@ def test_destination_scanner_rejects_historical_hermes_api_key_assignment(
         "implicit-concatenated-key",
         "putenv-call",
         "variable-concatenated-key",
+        "separate-variable-segments",
         "unicode-escaped-key",
         "your-prefix",
         "example-prefix",
@@ -283,6 +284,10 @@ def test_destination_scanner_rejects_direct_hermes_key_assignment_shapes(
         "putenv-call": f'os.putenv("HERMES_API_KEY", "{suffix}")',
         "variable-concatenated-key": (
             f'name = "HERMES_API_" + "KEY"; os.environ[name] = "{suffix}"'
+        ),
+        "separate-variable-segments": (
+            'prefix = "HERMES_"\nfamily = "API_"\nsuffix = "KEY"\n'
+            f'name = prefix + family + suffix\nos.environ[name] = "{suffix}"'
         ),
         "unicode-escaped-key": f'{{"HERMES_API_\\u004bEY": "{suffix}"}}',
         "your-prefix": f"{key}=your-{suffix}",
@@ -379,3 +384,25 @@ def test_destination_scanner_rejects_allowed_path_substitution_on_secondary_ref(
     findings = verifier.scan_candidate(root, manifest, layout="destination")
 
     assert "candidate: historical blob policy mismatch" in findings
+
+
+def test_destination_scanner_rejects_allowed_path_substitution_in_direct_tree_ref(
+    tmp_path: Path,
+) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    tracked = root / "README.md"
+    tracked.write_text(
+        "def deploy_private_broker():\n    return 'held implementation'\n",
+        encoding="utf-8",
+    )
+    git(root, "add", "README.md")
+    tree_id = subprocess.check_output(
+        ("git", "write-tree"), cwd=root, text=True
+    ).strip()
+    git(root, "reset", "--hard", "-q", "HEAD")
+    git(root, "update-ref", "refs/tags/unsafe-direct-tree", tree_id)
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert "candidate: historical blob policy mismatch" in findings
+    assert (f"tree:{tree_id}", tree_id) in verifier._publication_tree_roots(root)
