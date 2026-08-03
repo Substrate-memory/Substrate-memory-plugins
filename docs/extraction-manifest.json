@@ -131,7 +131,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "tests/test_publication_scanner.py",
       "reason": "Required only by the independent public repository.",
-      "sha256": "c2352cc593ab08d452479f9ed59651e95acdf0cd5511a94f3830e7910bf65a21"
+      "sha256": "c68d32a864ded7a7ffc76e3037bbc3a5cf0965c980cae24094995e97e95a63d5"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -335,7 +335,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "eb8199baa3626770e7faf620cc73fb46022bca98f425631aff423ef8c008de27",
+      "destination_sha256": "e96cbb7c4c9afa08040ce30f32e555f0f3a21698ca0acacebbcc2474ca95c421",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"

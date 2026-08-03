@@ -253,6 +253,10 @@ def test_destination_scanner_rejects_historical_hermes_api_key_assignment(
         "raw-string",
         "triple-quoted",
         "shell-concatenated",
+        "implicit-concatenated-key",
+        "putenv-call",
+        "variable-concatenated-key",
+        "unicode-escaped-key",
         "your-prefix",
         "example-prefix",
         "replace-prefix",
@@ -273,6 +277,14 @@ def test_destination_scanner_rejects_direct_hermes_key_assignment_shapes(
         "raw-string": f'{key} = r"{suffix}"',
         "triple-quoted": f'{key} = """{suffix}"""',
         "shell-concatenated": f'{key}="{suffix[:20]}""{suffix[20:]}"',
+        "implicit-concatenated-key": (
+            f'os.environ["HERMES_" "API_KEY"] = "{suffix}"'
+        ),
+        "putenv-call": f'os.putenv("HERMES_API_KEY", "{suffix}")',
+        "variable-concatenated-key": (
+            f'name = "HERMES_API_" + "KEY"; os.environ[name] = "{suffix}"'
+        ),
+        "unicode-escaped-key": f'{{"HERMES_API_\\u004bEY": "{suffix}"}}',
         "your-prefix": f"{key}=your-{suffix}",
         "example-prefix": f"{key}=example{suffix}",
         "replace-prefix": f"{key}=replace-me{suffix}",
@@ -341,6 +353,28 @@ def test_destination_scanner_rejects_historical_allowed_path_substitution(
     tracked.write_text("safe candidate\n", encoding="utf-8")
     git(root, "add", "README.md")
     git(root, "commit", "-qm", "restore reviewed allowed path")
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert "candidate: historical blob policy mismatch" in findings
+
+
+def test_destination_scanner_rejects_allowed_path_substitution_on_secondary_ref(
+    tmp_path: Path,
+) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    reviewed_head = subprocess.check_output(
+        ("git", "rev-parse", "HEAD"), cwd=root, text=True
+    ).strip()
+    git(root, "switch", "-qc", "adversarial-secondary-ref")
+    tracked = root / "README.md"
+    tracked.write_text(
+        "def deploy_private_broker():\n    return 'held implementation'\n",
+        encoding="utf-8",
+    )
+    git(root, "add", "README.md")
+    git(root, "commit", "-qm", "publish held source on secondary ref")
+    git(root, "checkout", "-q", "--detach", reviewed_head)
 
     findings = verifier.scan_candidate(root, manifest, layout="destination")
 

@@ -63,7 +63,8 @@ PRODUCTION_PATTERNS = (
     (
         "Hermes API credential assignment",
         re.compile(
-            r"(?<![A-Za-z0-9_])[\"']?HERMES_API_KEY[\"']?(?:\s*\])?\s*[:=]",
+            r"(?<![A-Za-z0-9_])HERMES_[\"'bBrRuUfF+\s]{0,32}API_"
+            r"[\"'bBrRuUfF+\s]{0,32}KEY(?![A-Za-z0-9_])",
             re.IGNORECASE,
         ),
     ),
@@ -105,6 +106,15 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/test_packaging.py": frozenset(
         {"c7a8e84d116319e62b0b7817c1a049225088c8b3baf59c42ad82cbefc3c172b5"}
     ),
+    "tests/test_publication_scanner.py": frozenset(
+        {
+            "c2352cc593ab08d452479f9ed59651e95acdf0cd5511a94f3830e7910bf65a21",
+            "31217ebf89fbd0f13e989a611f46ce5d57a8a384f671d09bb025df2021a8d952",
+            "bc7aacce24c8e18f13fa822b02e82431e8f1ae60ac00fffd4fe6bab4738197d4",
+            "5b2a6acc6bf7b0ab170a58113ed62ddabb54edb8de8cdb543198346238eb42a3",
+            "c68d32a864ded7a7ffc76e3037bbc3a5cf0965c980cae24094995e97e95a63d5",
+        }
+    ),
 }
 
 # This digest freezes the independently reviewed source/destination/class boundary
@@ -115,7 +125,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "2c93f43f7565b8b347097416543f4210ee9b1f8e79247ea06b2a97b8074a5e52"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "6e5d719f5261f9509d70b1a07942eb59d7898ff9165c6982284bf56911f7debc"
+    "0000000000000000000000000000000000000000000000000000000000000000"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
@@ -153,7 +163,7 @@ def _normalize_historical_policy_payload(relative_path: str, payload: bytes) -> 
 
 
 def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
-    """Hash every distinct path/class/mode/content tuple in the HEAD ancestry."""
+    """Hash every distinct path/class/mode/content tuple across published refs."""
 
     path_classes = {
         item["destination"]: item["class"] for item in manifest["entries"]
@@ -163,9 +173,7 @@ def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
     )
     path_classes[manifest["self_excluded_path"]] = "closed-inventory-manifest"
     projection: set[tuple[str, str, str, str]] = set()
-    # Other public refs remain subject to the independent content/object scan.
-    # Local-only remote refs must not change this candidate-specific seal.
-    commits = _git(root, "rev-list", "HEAD").decode("ascii").splitlines()
+    commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
     for commit in commits:
         for raw_entry in (
             entry for entry in _git(root, "ls-tree", "-r", "-z", commit).split(b"\0") if entry
@@ -204,6 +212,13 @@ def scan_text(relative_path: str, text: str) -> list[str]:
     if sentinels and relative_path not in SYNTHETIC_FIXTURE_ALLOWLIST:
         findings.append(f"{relative_path}: synthetic sentinel outside exact fixture allowlist")
     production_text = SYNTHETIC_SENTINEL_PATTERN.sub("[SYNTHETIC-SENTINEL]", text)
+    production_text = re.sub(
+        r"\\(?:u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2}))",
+        lambda match: chr(int(match.group(1) or match.group(2), 16))
+        if int(match.group(1) or match.group(2), 16) < 128
+        else match.group(0),
+        production_text,
+    )
     for label, pattern in PRODUCTION_PATTERNS:
         if pattern.search(production_text):
             findings.append(f"{relative_path}: {label}")
