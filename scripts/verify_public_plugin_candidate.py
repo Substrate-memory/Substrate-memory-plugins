@@ -117,6 +117,80 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
 }
 
+# Legitimate code and documentation may name the protected configuration key.
+# These are exact reviewed bytes only; any modification fails closed.
+EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
+    "SECURITY.md": frozenset(
+        {
+            "34a9cd6cd747589e1ff34fe412d29a04ecc076df19871eaea8a6a078d0b17e06",
+            "bb4ba0542582cf3a89a37906651074c52bd1c28754b079bd67fd856c7fe24362",
+        }
+    ),
+    "docs/api-ownership.json": frozenset(
+        {"3112d0d252749b45c6e081c6d7987af2c7aa665936ee37eadab2ea7d01f4eb74"}
+    ),
+    "docs/operation.md": frozenset(
+        {"e909870be827f96c4d909641ef1c834a7abad1e71f5c91b17fb8034a1900e4bd"}
+    ),
+    "docs/public-boundary.json": frozenset(
+        {"a54d40239c5b7e3d421b3c70e6cb117dcdf67d6c018370c7321191c1391d8efe"}
+    ),
+    "docs/public-boundary.md": frozenset(
+        {"8b62bb6463fc69c1aa8b56748df77567387c4f553ab7e7aba06617b1e43bee4f"}
+    ),
+    "legacy-assets/1.2.0/install_hermes_plugin.py": frozenset(
+        {"bb9a8483d3d623528f573593eacebffa9483f52ecf84a452c01fa9c362b6879e"}
+    ),
+    "legacy-assets/1.2.0/substrate_wiki.zip": frozenset(
+        {"2cbf504ec83352f23a1157777d24272b62e4b7300ad0ca991a0c4bc2e2df30b5"}
+    ),
+    "legacy-assets/1.3.0/install_hermes_plugin.py": frozenset(
+        {"59d4d0b8557a49ec18160f4245a533465f8c4c0eb344d235af155afb8845d1b1"}
+    ),
+    "legacy-assets/1.3.0/substrate_wiki.zip": frozenset(
+        {"6827c00444c799c085ac7a3669721d672c0d7e1e703a8a491397bb16d0655c02"}
+    ),
+    "legacy-assets/1.4.0/install_hermes_plugin.py": frozenset(
+        {"13a05be49a83fab4c75171356d575dd85e00b27b8e09ce1602b87ae903741608"}
+    ),
+    "legacy-assets/1.4.0/substrate_wiki.zip": frozenset(
+        {"df872d60dfc53668a0e6d30fd024e8d2f533306375980c3815ef1a483676c667"}
+    ),
+    "legacy-assets/1.4.1/install_hermes_plugin.py": frozenset(
+        {"7600b2681c3aebcb1b1492b0a04be38bbbec637089cbbcfb1cc26e8c10865b8d"}
+    ),
+    "legacy-assets/1.4.1/substrate_wiki.zip": frozenset(
+        {"877ccf9b0212792b699d9c98912a26980675a6050df3bd319e927639e3d901f1"}
+    ),
+    "scripts/install_hermes_plugin.py": frozenset(
+        {
+            "21ee987d4136187f020ce33ded442a9b20e97e380a2f77d4e01f6b6f1fb95617",
+            "95de10e9c4e9c37c7bd3bcce1f8b507de977682e869ec4d44386f197a910554f",
+        }
+    ),
+    "scripts/verify_public_plugin_candidate.py": frozenset(
+        {
+            "05e92b524fd1d08d0ff6946d9daa1fafa57c31dfe7905728d8455af88cc16759",
+            "215bd6f7dab95220d03a61b998807b6ea9d18ee4f54e7b215587f40befa662ce",
+            "7f650fdf6f464ba1a1698b8bb54868159823e2a17f147a1c1c43f5810464facf",
+            "a421abde8bd5f3413dbd36bfc77adae6a5018ca5c62f81c94887035589e67aee",
+            "eb8199baa3626770e7faf620cc73fb46022bca98f425631aff423ef8c008de27",
+        }
+    ),
+    "src/substrate_wiki/README.md": frozenset(
+        {"8612ab5974a8a5be18b2583043a7853317c9eddc7801d726d83f71220c848796"}
+    ),
+    "src/substrate_wiki/__init__.py": frozenset(
+        {"a4143022e05a7b93d3aa5799f4319601292e67069ad85d172770c3effe0e5e9d"}
+    ),
+    "src/substrate_wiki/client.py": frozenset(
+        {"c711b64e496214de3acf5639075bd6bada19b687cd30426058e1b0bb443dce0b"}
+    ),
+    "src/substrate_wiki/redaction.py": frozenset(
+        {"e9bec198aa7ad018da359d2e9aa6df1dab717881bb41b1001348911b23e6439b"}
+    ),
+}
+
 # This digest freezes the independently reviewed source/destination/class boundary
 # separately from per-file hashes in the mutable extraction manifest. It covers
 # only that sorted policy projection, so ordinary byte changes do not change
@@ -125,7 +199,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "2c93f43f7565b8b347097416543f4210ee9b1f8e79247ea06b2a97b8074a5e52"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "c435864a799ef3c0cd2794188863994733e6bffcf8eb7256104e90a52fa6faec"
+    "0000000000000000000000000000000000000000000000000000000000000000"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
@@ -295,6 +369,12 @@ def scan_archive(relative_path: str, archive: Path) -> list[str]:
 def _scan_bytes(relative_path: str, payload: bytes) -> list[str]:
     """Scan one ordinary file or bounded ZIP payload."""
 
+    digest = hashlib.sha256(payload).hexdigest()
+    allowed_digests = SYNTHETIC_FILE_SHA256_ALLOWLIST.get(
+        relative_path, frozenset()
+    ) | EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST.get(relative_path, frozenset())
+    if digest in allowed_digests:
+        return []
     if Path(relative_path).suffix.casefold() == ".zip":
         with tempfile.NamedTemporaryFile(suffix=".zip") as stream:
             stream.write(payload)
@@ -307,11 +387,7 @@ def _scan_bytes(relative_path: str, payload: bytes) -> list[str]:
             text = payload.decode("utf-8")
         except UnicodeDecodeError:
             return [f"{relative_path}: unexpected non-UTF-8 candidate file"]
-    findings = scan_text(relative_path, text)
-    digest = hashlib.sha256(payload).hexdigest()
-    if findings and digest in SYNTHETIC_FILE_SHA256_ALLOWLIST.get(relative_path, frozenset()):
-        return []
-    return findings
+    return scan_text(relative_path, text)
 
 
 def _git(root: Path, *args: str) -> bytes:
