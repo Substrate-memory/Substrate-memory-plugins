@@ -14,6 +14,7 @@ import pytest
 REPOSITORY_ROOT = Path(__file__).parents[1]
 BUILDER_PATH = REPOSITORY_ROOT / "scripts" / "build_plugin.py"
 INSTALLER_PATH = REPOSITORY_ROOT / "scripts" / "install_hermes_plugin.py"
+RELEASE_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
 PLUGIN_SOURCE = REPOSITORY_ROOT / "src" / "substrate_wiki"
 LEGACY_RELEASE_120 = REPOSITORY_ROOT / "legacy-assets" / "1.2.0"
 LEGACY_RELEASE_130 = REPOSITORY_ROOT / "legacy-assets" / "1.3.0"
@@ -74,6 +75,30 @@ def test_packaged_readme_uses_the_standalone_release_installer() -> None:
 
     assert "python3 install_hermes_plugin.py" in readme
     assert "python scripts/install_hermes_plugin.py" not in readme
+
+
+def test_release_workflow_keeps_dependency_execution_out_of_privileged_publisher() -> None:
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    verify, publish = workflow.split("\n  publish:\n", maxsplit=1)
+
+    assert "github.ref == 'refs/heads/main' && github.sha == inputs.candidate_sha" in verify
+    assert "persist-credentials: false" in verify
+    assert "uv sync --frozen --extra dev --no-install-project" in verify
+    assert "uv run --no-sync" in verify
+    assert "contents: write" not in verify
+    assert "id-token: write" not in verify
+    assert "attestations: write" not in verify
+
+    assert "environment: public-release" in publish
+    assert "github.ref == 'refs/heads/main' && github.sha == inputs.candidate_sha" in publish
+    assert "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" in publish
+    assert "contents: write" in publish
+    assert "id-token: write" in publish
+    assert "attestations: write" in publish
+    assert "actions/checkout@" not in publish
+    assert "uv sync" not in publish
+    assert "uv run" not in publish
+    assert "setuptools" not in publish
 
 
 def test_archive_is_canonical_and_release_clean(tmp_path: Path) -> None:

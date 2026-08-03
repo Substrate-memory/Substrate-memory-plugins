@@ -199,3 +199,40 @@ def test_destination_scanner_rejects_secret_in_annotated_tag_message(tmp_path: P
 
     assert any(finding.startswith("git-object:") for finding in findings)
     assert any("OpenAI-shaped credential" in finding for finding in findings)
+
+
+def test_destination_scanner_rejects_directly_referenced_secret_blob(tmp_path: Path) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    secret = ("sk-" + "G" * 32).encode("ascii")
+    object_id = subprocess.check_output(
+        ("git", "hash-object", "-w", "--stdin"),
+        cwd=root,
+        input=secret,
+    ).decode("ascii").strip()
+    git(root, "update-ref", "refs/tags/unsafe-direct-blob", object_id)
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert any(finding.startswith(f"git-object:{object_id}:blob") for finding in findings)
+    assert any("OpenAI-shaped credential" in finding for finding in findings)
+
+
+def test_destination_scanner_rejects_historical_hermes_api_key_assignment(
+    tmp_path: Path,
+) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    historical = root / "production.env"
+    historical.write_text(
+        "HERMES_API_" + "KEY=" + "H" * 40 + "\n",
+        encoding="utf-8",
+    )
+    git(root, "add", "production.env")
+    git(root, "commit", "-qm", "unsafe Hermes credential history")
+    historical.unlink()
+    git(root, "add", "-u")
+    git(root, "commit", "-qm", "remove working-tree credential")
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert any(finding.startswith("git:") for finding in findings)
+    assert any("Hermes API credential assignment" in finding for finding in findings)

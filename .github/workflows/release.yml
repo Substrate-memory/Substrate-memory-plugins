@@ -12,23 +12,29 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.sha == inputs.candidate_sha
     runs-on: ubuntu-latest
-    environment: public-release
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: read
+    outputs:
+      release_version: ${{ steps.metadata.outputs.release_version }}
+      artifact_digest: ${{ steps.release_artifact.outputs.artifact-digest }}
+    env:
+      PYTHONPATH: src
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.candidate_sha }}
           fetch-depth: 0
-      - name: Bind release to the exact protected-main candidate
+          persist-credentials: false
+      - name: Bind workflow and release to the exact protected-main candidate
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: |
           set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$CANDIDATE_SHA"
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           git fetch --no-tags origin main
@@ -47,44 +53,82 @@ jobs:
           version: "0.11.32"
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - run: uv sync --frozen --extra dev
+      - name: Install only frozen verification dependencies
+        run: uv sync --frozen --extra dev --no-install-project
       - name: Verify version and all release-critical behavior
+        id: metadata
         run: |
           set -euo pipefail
           version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("src/substrate_wiki/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
           test -n "$version"
-          uv run --frozen --extra dev ruff check .
-          uv run --frozen --extra dev python -m compileall -q src scripts
-          uv run --frozen --extra dev python -m pytest -q
-          uv run --frozen --extra dev python scripts/verify_migration_baseline.py
-          uv run --frozen --extra dev python scripts/benchmark_migration.py \
+          uv run --no-sync ruff check .
+          uv run --no-sync python -m compileall -q src scripts
+          uv run --no-sync python -m pytest -q
+          uv run --no-sync python scripts/verify_migration_baseline.py
+          uv run --no-sync python scripts/benchmark_migration.py \
             --profile ci \
             --output "$RUNNER_TEMP/hermes-migration-baseline.json"
-          uv run --frozen --extra dev python scripts/verify_fresh_migration_run.py \
+          uv run --no-sync python scripts/verify_fresh_migration_run.py \
             --receipt "$RUNNER_TEMP/hermes-migration-baseline.json"
-          printf 'RELEASE_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'release_version=%s\n' "$version" >> "$GITHUB_OUTPUT"
       - name: Build and verify exact release bytes twice
         env:
           HERMES_PLUGIN_SOURCE_COMMIT: ${{ inputs.candidate_sha }}
         run: |
           set -euo pipefail
-          uv run --frozen --extra dev python scripts/build_plugin.py
+          uv run --no-sync python scripts/build_plugin.py
           cp dist/substrate_wiki.zip "$RUNNER_TEMP/first-substrate_wiki.zip"
           rm -rf dist release-assets
-          uv run --frozen --extra dev python scripts/build_plugin.py
+          uv run --no-sync python scripts/build_plugin.py
           cmp "$RUNNER_TEMP/first-substrate_wiki.zip" dist/substrate_wiki.zip
-          uv run --frozen --extra dev python scripts/build_plugin.py --check
+          uv run --no-sync python scripts/build_plugin.py --check
           cp scripts/install_hermes_plugin.py dist/install_hermes_plugin.py
           (cd dist && sha256sum install_hermes_plugin.py substrate_wiki.zip > SHA256SUMS)
+      - name: Upload exact verified release bytes
+        id: release_artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ inputs.candidate_sha }}
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.sha == inputs.candidate_sha
+    runs-on: ubuntu-latest
+    environment: public-release
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download exact verified release bytes
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ inputs.candidate_sha }}
+          path: dist
+      - name: Verify downloaded release set
+        run: |
+          set -euo pipefail
+          test -n "${{ needs.verify.outputs.artifact_digest }}"
+          test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = \
+            "SHA256SUMS install_hermes_plugin.py substrate_wiki.zip "
+          (cd dist && sha256sum -c SHA256SUMS)
       - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
         with:
           subject-path: "dist/*"
       - name: Create immutable tag and GitHub release
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$CANDIDATE_SHA"
           tag="v$RELEASE_VERSION"
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
             test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)" = "$CANDIDATE_SHA"

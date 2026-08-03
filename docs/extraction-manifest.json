@@ -41,7 +41,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": ".github/workflows/release.yml",
       "reason": "Required only by the independent public repository.",
-      "sha256": "51b7211eed46144db6458879f1fc4f84afa2a71ea4b662ed329187224216739c"
+      "sha256": "5a5e99ea889b7ebef81479225b49dcee7d81b16b1479a96e4777dcef1b39ff44"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -119,7 +119,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "pyproject.toml",
       "reason": "Required only by the independent public repository.",
-      "sha256": "87c804fe8ff65c5bedf71b00f85b913cde3dc2f6d11fabe160e2244cb9d8a7cd"
+      "sha256": "b9ad4f26c1e748a241196b15635e206d7216fe537c3b4c7deb6ce58ab8dcb60f"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -131,7 +131,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "tests/test_publication_scanner.py",
       "reason": "Required only by the independent public repository.",
-      "sha256": "9a4682e57e2f585f1a533e03f16b9febc34758588a5f8c717537a9e32786d158"
+      "sha256": "5b2a6acc6bf7b0ab170a58113ed62ddabb54edb8de8cdb543198346238eb42a3"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -143,7 +143,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "uv.lock",
       "reason": "Required only by the independent public repository.",
-      "sha256": "d8187ece248dca99d4b1fadf4351003c35d61aa602fca2bc058b6a7783add4e3"
+      "sha256": "70c4a7336d28dd84f6c3e06a241c130ba7d286f43a20c5bd611ab4954451c92a"
     }
   ],
   "destination_repository": "Substrate-memory/hermes-substrate-wiki",
@@ -335,7 +335,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "6783ae1de897c6d2b382e2ab04f08e63c23b6e3153875c6ca86cabf9ba173748",
+      "destination_sha256": "d8b6da985fec27a265b78ef6823d4ef634dfee860c3ed7f865b566732784c6e0",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -519,7 +519,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_packaging.py",
-      "destination_sha256": "19bc8d2fe3bbb323c588848bda8fbd795554184474e0a8e95c58a339db3728c1",
+      "destination_sha256": "8e03eef04e41395ade22147e9e033bb3d33284e0ece11335e558af6faae61291",
       "source": "tests/contract/test_hermes_plugin_packaging.py",
       "source_sha256": "c54967830788555b8d7bd5d2f871baeb6b98d7804a2bc7410ab297078bc20ee7",
       "transformation": "modified_for_standalone"

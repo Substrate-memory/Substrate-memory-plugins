@@ -60,6 +60,15 @@ PRODUCTION_PATTERNS = (
         "Bearer credential",
         re.compile(r"Authorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/-]{20,}", re.IGNORECASE),
     ),
+    (
+        "Hermes API credential assignment",
+        re.compile(
+            r"\bHERMES_API_KEY\s*[:=]\s*[\"']?"
+            r"(?!(?:your-|example|replace-me))"
+            r"[A-Za-z0-9._~+/-]{20,}",
+            re.IGNORECASE,
+        ),
+    ),
     ("private key material", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
 )
 
@@ -338,9 +347,12 @@ def _scan_destination_repository(root: Path, manifest: dict[str, Any]) -> list[s
             continue
         findings.extend(_scan_bytes(relative_path, path.read_bytes()))
 
+    tree_blob_ids: set[str] = set()
     commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
     for commit in commits:
         for relative_path in _nul_paths(_git(root, "ls-tree", "-r", "--name-only", "-z", commit)):
+            object_id = _git(root, "rev-parse", f"{commit}:{relative_path}")
+            tree_blob_ids.add(object_id.decode("ascii").strip())
             for finding in scan_text(f"git-path:{commit}", relative_path):
                 _, label = finding.rsplit(": ", 1)
                 findings.append(f"git:{commit}:{relative_path}: {label}")
@@ -356,7 +368,9 @@ def _scan_destination_repository(root: Path, manifest: dict[str, Any]) -> list[s
     }
     for object_id in sorted(reachable_objects):
         object_type = _git(root, "cat-file", "-t", object_id).decode("ascii").strip()
-        if object_type not in {"commit", "tag"}:
+        if object_type not in {"blob", "commit", "tag"}:
+            continue
+        if object_type == "blob" and object_id in tree_blob_ids:
             continue
         payload = _git(root, "cat-file", object_type, object_id)
         for finding in _scan_bytes(f"git-object:{object_id}:{object_type}.txt", payload):
