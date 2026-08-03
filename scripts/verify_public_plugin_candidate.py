@@ -63,7 +63,7 @@ PRODUCTION_PATTERNS = (
     (
         "Hermes API credential assignment",
         re.compile(
-            r"(?<![A-Za-z0-9_])[\"']?HERMES_API_KEY[\"']?\s*[:=]\s*"
+            r"(?<![A-Za-z0-9_])[\"']?HERMES_API_KEY[\"']?(?:\s*\])?\s*[:=]\s*"
             r"[\"']?[A-Za-z0-9._~+/-]{20,}",
             re.IGNORECASE,
         ),

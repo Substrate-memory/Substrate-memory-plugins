@@ -242,7 +242,7 @@ def test_destination_scanner_rejects_historical_hermes_api_key_assignment(
 
 @pytest.mark.parametrize(
     "shape",
-    ("quoted-json", "your-prefix", "example-prefix", "replace-prefix"),
+    ("quoted-json", "bracket-assignment", "your-prefix", "example-prefix", "replace-prefix"),
 )
 def test_destination_scanner_rejects_direct_hermes_key_assignment_shapes(
     tmp_path: Path,
@@ -253,6 +253,7 @@ def test_destination_scanner_rejects_direct_hermes_key_assignment_shapes(
     suffix = "Q" * 40
     values = {
         "quoted-json": f'"{key}": "{suffix}"',
+        "bracket-assignment": f'os.environ["{key}"] = "{suffix}"',
         "your-prefix": f"{key}=your-{suffix}",
         "example-prefix": f"{key}=example{suffix}",
         "replace-prefix": f"{key}=replace-me{suffix}",
