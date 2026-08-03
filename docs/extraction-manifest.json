@@ -53,13 +53,13 @@
       "class": "standalone_repository_policy_or_test",
       "path": "BOUNDARY.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "26b6295955854217e004ecd1191de0cb44365ac3ae068ba8d4304dc8a592e20a"
+      "sha256": "2eddde2695fcdda7c98c38eb1036c85ce2afd5820af09873a4b496048b399698"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "CHANGELOG.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "6e4d35b23db07d608173b7242f9b6f7ab06294d257781b0ee475447393a6f903"
+      "sha256": "5bced51d83268f2e6dc9e1e23e324267fcf17861f6dcb43ec3e67f9dc8da8d7f"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -77,13 +77,13 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "8793ef3bbab749be6e1089034ba627d24c8b733ffd4311951b590dae01d2ca02"
+      "sha256": "8510e5bbf41a3e79a6d5fee1f7816db734307fe7e2a7786b6a61c1ba280520a5"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "SECURITY.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "bb4ba0542582cf3a89a37906651074c52bd1c28754b079bd67fd856c7fe24362"
+      "sha256": "34a9cd6cd747589e1ff34fe412d29a04ecc076df19871eaea8a6a078d0b17e06"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -131,7 +131,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "tests/test_publication_scanner.py",
       "reason": "Required only by the independent public repository.",
-      "sha256": "5b2a6acc6bf7b0ab170a58113ed62ddabb54edb8de8cdb543198346238eb42a3"
+      "sha256": "bc7aacce24c8e18f13fa822b02e82431e8f1ae60ac00fffd4fe6bab4738197d4"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -335,7 +335,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "d8b6da985fec27a265b78ef6823d4ef634dfee860c3ed7f865b566732784c6e0",
+      "destination_sha256": "7f650fdf6f464ba1a1698b8bb54868159823e2a17f147a1c1c43f5810464facf",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"

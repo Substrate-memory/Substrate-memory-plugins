@@ -1,6 +1,6 @@
 # Hermes Substrate Wiki
 
-`substrate_wiki` is the official Hermes integration for Substrate: **the memory that decides what your agents are allowed to do**. This release connects one Hermes profile to a Substrate server through a bounded, cited memory interface and durable, redacted history capture.
+`substrate_wiki` is the official Hermes integration for Substrate: **the memory that decides what your agents are allowed to do**. The pending `v1.5.0` candidate connects one Hermes profile to a Substrate server through a bounded, cited memory interface and durable, redacted history capture.
 
 The broader product uses memory to ground deterministic agent permissions. **Version 1.5.0 is the memory-provider integration only:** it does not authorize actions, include the local runtime or policy compiler, or support a no-server mode. Those gaps are explicit rather than silently presented as hosted-only features.
 

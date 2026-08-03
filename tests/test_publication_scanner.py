@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 REPOSITORY_ROOT = Path(__file__).parents[1]
 VERIFIER_PATH = REPOSITORY_ROOT / "scripts" / "verify_public_plugin_candidate.py"
 
@@ -236,3 +238,70 @@ def test_destination_scanner_rejects_historical_hermes_api_key_assignment(
 
     assert any(finding.startswith("git:") for finding in findings)
     assert any("Hermes API credential assignment" in finding for finding in findings)
+
+
+@pytest.mark.parametrize(
+    "shape",
+    ("quoted-json", "your-prefix", "example-prefix", "replace-prefix"),
+)
+def test_destination_scanner_rejects_direct_hermes_key_assignment_shapes(
+    tmp_path: Path,
+    shape: str,
+) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    key = "HERMES_API_" + "KEY"
+    suffix = "Q" * 40
+    values = {
+        "quoted-json": f'"{key}": "{suffix}"',
+        "your-prefix": f"{key}=your-{suffix}",
+        "example-prefix": f"{key}=example{suffix}",
+        "replace-prefix": f"{key}=replace-me{suffix}",
+    }
+    payload = values[shape].encode("ascii")
+    object_id = subprocess.check_output(
+        ("git", "hash-object", "-w", "--stdin"),
+        cwd=root,
+        input=payload,
+    ).decode("ascii").strip()
+    git(root, "update-ref", f"refs/tags/unsafe-{shape}", object_id)
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert any(finding.startswith(f"git-object:{object_id}:blob") for finding in findings)
+    assert any("Hermes API credential assignment" in finding for finding in findings)
+
+
+def test_destination_scanner_rejects_add_then_delete_held_source(tmp_path: Path) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    held = root / "infra" / "deploy.py"
+    held.parent.mkdir()
+    held.write_text("def deploy_private_broker():\n    return 'held'\n", encoding="utf-8")
+    git(root, "add", "infra/deploy.py")
+    git(root, "commit", "-qm", "unsafe held source history")
+    held.unlink()
+    git(root, "add", "-u")
+    git(root, "commit", "-qm", "remove held source from current tree")
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert any(
+        finding.endswith("infra/deploy.py: historical path outside closed inventory")
+        for finding in findings
+    )
+
+
+def test_destination_scanner_rejects_historical_symlink_substitution(tmp_path: Path) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    tracked = root / "README.md"
+    tracked.unlink()
+    tracked.symlink_to("private-held-target")
+    git(root, "add", "README.md")
+    git(root, "commit", "-qm", "unsafe historical symlink")
+    tracked.unlink()
+    tracked.write_text("safe candidate\n", encoding="utf-8")
+    git(root, "add", "README.md")
+    git(root, "commit", "-qm", "restore regular candidate file")
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert any("historical entry is not a regular file" in finding for finding in findings)

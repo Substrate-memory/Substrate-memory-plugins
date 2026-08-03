@@ -1,13 +1,13 @@
 # Changelog
 
-## 1.5.0 — standalone source release
+## 1.5.0 — pending standalone source candidate
 
-- Establishes this public repository as the independently built plugin source.
+- When released and cut over with the companion Substrate-v2 change, establishes this public repository as the independently built plugin source.
 - Preserves provider, configuration, state, and server protocol identities.
 - Separates repository-native release assets from immutable imported releases.
 - Moves privacy-safe migration benchmarks and plugin-owned verification out of Substrate-v2.
 - Declares the permanent MIT/open versus held hosted-service boundary and DCO contribution terms.
-- Explicitly records that local/no-server runtime and policy authorization are not implemented in this release.
+- Explicitly records that local/no-server runtime and policy authorization are not implemented in this candidate.
 
 All notable changes to the public `substrate_wiki` plugin are recorded here.
 

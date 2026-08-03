@@ -13,9 +13,9 @@ This boundary is declared on day one and will not be moved later. Substrate asks
 
 ## Current implementation status
 
-Release `v1.5.0` contains the Hermes `substrate_wiki` plugin/client, local spool and checkpoint machinery, client-side credential redaction, history replay, deterministic packaging, and installation tooling. It requires a configured Substrate server.
+The pending `v1.5.0` candidate contains the Hermes `substrate_wiki` plugin/client, local spool and checkpoint machinery, client-side credential redaction, history replay, deterministic packaging, and installation tooling. It requires a configured Substrate server. No `v1.5.0` tag or release exists yet.
 
-The local runtime, local entity model, privacy-deletion implementation, and policy compiler are on the open side of the permanent boundary but are **not implemented in this release**. `v1.5.0` does not authorize agent actions and does not provide a no-server mode. Those absences are explicit product gaps, not held commercial features.
+The local runtime, local entity model, privacy-deletion implementation, and policy compiler are on the open side of the permanent boundary but are **not implemented in this candidate**. The candidate does not authorize agent actions and does not provide a no-server mode. Those absences are explicit product gaps, not held commercial features.
 
 ## Paid hosted tier
 

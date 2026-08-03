@@ -1,8 +1,8 @@
 # Security policy
 
-## Supported version
+## Supported versions
 
-Security fixes target the latest released `substrate_wiki` version. Version 1.5.0 targets Hermes 0.18.2 and is verified by the standalone contract suites documented in `COMPATIBILITY.md`; full host-lifecycle certification remains pending.
+No standalone version has been released from this repository yet. The pending `v1.5.0` candidate targets Hermes 0.18.2 and is verified by the standalone contract suites documented in `COMPATIBILITY.md`; full host-lifecycle certification remains pending. Candidate CI artifacts are not supported releases.
 
 ## Report a vulnerability
 

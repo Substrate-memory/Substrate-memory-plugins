@@ -63,9 +63,8 @@ PRODUCTION_PATTERNS = (
     (
         "Hermes API credential assignment",
         re.compile(
-            r"\bHERMES_API_KEY\s*[:=]\s*[\"']?"
-            r"(?!(?:your-|example|replace-me))"
-            r"[A-Za-z0-9._~+/-]{20,}",
+            r"(?<![A-Za-z0-9_])[\"']?HERMES_API_KEY[\"']?\s*[:=]\s*"
+            r"[\"']?[A-Za-z0-9._~+/-]{20,}",
             re.IGNORECASE,
         ),
     ),
@@ -76,6 +75,13 @@ PRODUCTION_PATTERNS = (
 # change invalidates the exemption, so adding or replacing any credential-shaped
 # value fails closed. Values are populated only after the release candidate is frozen.
 SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
+    "README.md": frozenset(
+        {
+            "8510e5bbf41a3e79a6d5fee1f7816db734307fe7e2a7786b6a61c1ba280520a5",
+            "8793ef3bbab749be6e1089034ba627d24c8b733ffd4311951b590dae01d2ca02",
+            "c8eb7c5157ac7027dbf6ae86235e63dea6a2dd1faab46f0cbcbd536fbdd21ecf",
+        }
+    ),
     "scripts/benchmark_migration.py": frozenset(
         {"ef57926174b22c2c22e73843a08a5ea9b7b45481bf51ef08dac21129ea9c929a"}
     ),
@@ -84,6 +90,9 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     "tests/test_history_replay.py": frozenset(
         {"87272a47ab814803a77a39cafeb1b193b48678bc889b49712b11bace8b7d8c87"}
+    ),
+    "tests/test_hardening.py": frozenset(
+        {"91e53ca9b16ed43ebd49e7196bd6613f24c03cbf356f2bfc0ea03798cb065753"}
     ),
     "tests/test_memory_provider.py": frozenset(
         {"c2edfbbe5a6320088f58db89b1880200b3e844ed3780885a02ef62d3218ab2b1"}
@@ -350,13 +359,25 @@ def _scan_destination_repository(root: Path, manifest: dict[str, Any]) -> list[s
     tree_blob_ids: set[str] = set()
     commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
     for commit in commits:
-        for relative_path in _nul_paths(_git(root, "ls-tree", "-r", "--name-only", "-z", commit)):
-            object_id = _git(root, "rev-parse", f"{commit}:{relative_path}")
-            tree_blob_ids.add(object_id.decode("ascii").strip())
+        tree_entries = _git(root, "ls-tree", "-r", "-z", commit).split(b"\0")
+        for raw_entry in (entry for entry in tree_entries if entry):
+            metadata, raw_path = raw_entry.split(b"\t", 1)
+            mode, object_type, raw_object_id = metadata.split(b" ", 2)
+            relative_path = raw_path.decode("utf-8")
+            object_id = raw_object_id.decode("ascii")
+            tree_blob_ids.add(object_id)
+            if relative_path not in expected_tracked:
+                findings.append(
+                    f"git:{commit}:{relative_path}: historical path outside closed inventory"
+                )
+            if object_type != b"blob" or mode not in {b"100644", b"100755"}:
+                findings.append(
+                    f"git:{commit}:{relative_path}: historical entry is not a regular file"
+                )
             for finding in scan_text(f"git-path:{commit}", relative_path):
                 _, label = finding.rsplit(": ", 1)
                 findings.append(f"git:{commit}:{relative_path}: {label}")
-            payload = _git(root, "show", f"{commit}:{relative_path}")
+            payload = _git(root, "cat-file", "blob", object_id)
             for finding in _scan_bytes(relative_path, payload):
                 _, label = finding.split(": ", 1)
                 findings.append(f"git:{commit}:{relative_path}: {label}")
