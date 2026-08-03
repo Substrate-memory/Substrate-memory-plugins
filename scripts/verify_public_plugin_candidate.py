@@ -153,7 +153,7 @@ def _normalize_historical_policy_payload(relative_path: str, payload: bytes) -> 
 
 
 def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
-    """Hash every distinct path/class/mode/content tuple in reachable commit trees."""
+    """Hash every distinct path/class/mode/content tuple in the HEAD ancestry."""
 
     path_classes = {
         item["destination"]: item["class"] for item in manifest["entries"]
@@ -163,7 +163,9 @@ def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
     )
     path_classes[manifest["self_excluded_path"]] = "closed-inventory-manifest"
     projection: set[tuple[str, str, str, str]] = set()
-    commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
+    # Other public refs remain subject to the independent content/object scan.
+    # Local-only remote refs must not change this candidate-specific seal.
+    commits = _git(root, "rev-list", "HEAD").decode("ascii").splitlines()
     for commit in commits:
         for raw_entry in (
             entry for entry in _git(root, "ls-tree", "-r", "-z", commit).split(b"\0") if entry
