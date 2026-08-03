@@ -4,7 +4,10 @@
 
 The broader product uses memory to ground deterministic agent permissions. **Version 1.5.0 is the memory-provider integration only:** it does not authorize actions, include the local runtime or policy compiler, or support a no-server mode. Those gaps are explicit rather than silently presented as hosted-only features.
 
-**This repository is the source of truth for the plugin.** `Substrate-v2` owns the server and HTTP contract; it does not own or embed plugin source.
+**This repository is the publication-approved source candidate for the plugin.** It becomes
+the sole editable source only after the protected default branch, first immutable release,
+and companion `Substrate-v2` retirement change are complete. `Substrate-v2` owns the server
+and HTTP contract; its embedded plugin copy remains frozen during that transition.
 
 ## Status
 
@@ -18,9 +21,12 @@ The broader product uses memory to ground deterministic agent permissions. **Ver
 
 Hermes 0.19.0 is unsupported. The 0.18.2 interface is contract-tested; full host-lifecycle certification is still pending. There is no silent auto-update or configuration rewrite.
 
-## Install the verified release
+## Release availability
 
-Download the two assets from [release v1.5.0](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v1.5.0), then verify and install using the SHA-256 values published with that release:
+`v1.5.0` is not published yet. Do not treat candidate archives or CI artifacts as an
+installable release. After the immutable release exists, download its three assets from
+[release v1.5.0](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v1.5.0),
+then verify and install using the SHA-256 values published with that release:
 
 ```bash
 curl --fail --location --remote-name \

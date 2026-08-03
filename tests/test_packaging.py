@@ -77,6 +77,20 @@ def test_packaged_readme_uses_the_standalone_release_installer() -> None:
     assert "python scripts/install_hermes_plugin.py" not in readme
 
 
+def test_root_readme_keeps_candidate_and_release_state_truthful() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    boundary = json.loads(
+        (REPOSITORY_ROOT / "docs" / "public-boundary.json").read_text(encoding="utf-8")
+    )
+
+    assert boundary["repository"]["candidate_source_of_truth"] is True
+    assert boundary["repository"]["source_of_truth"] is False
+    assert "publication-approved source candidate" in readme
+    assert "`v1.5.0` is not published yet" in readme
+    assert "This repository is the source of truth" not in readme
+    assert "Install the verified release" not in readme
+
+
 def test_release_workflow_keeps_dependency_execution_out_of_privileged_publisher() -> None:
     workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
     verify, publish = workflow.split("\n  publish:\n", maxsplit=1)
