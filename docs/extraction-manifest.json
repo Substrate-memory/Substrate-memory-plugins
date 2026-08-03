@@ -335,7 +335,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "8976a9faf58e8cb1726f4c8f0d3d0f6a743fca6bdb14c1ea82233477b7b9f450",
+      "destination_sha256": "a4dcbfa86e677acde1aa74a0dbf3bcd8942d0b5ea2c6453f896c9fb1a21ecdf8",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
