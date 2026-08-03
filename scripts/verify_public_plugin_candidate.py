@@ -1,0 +1,451 @@
+"""Verify the exact future public-plugin candidate is free of real secrets and endpoints.
+
+The verifier is intentionally content-free: findings contain only a relative path and
+finding class, never the matched value.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import stat
+import subprocess
+import tempfile
+import zipfile
+from pathlib import Path, PurePosixPath
+from typing import Any, Literal
+from urllib.parse import urlsplit
+
+SYNTHETIC_SENTINEL_PREFIX = "SUBSTRATE_SYNTHETIC_SECRET_DO_NOT_USE_"
+SYNTHETIC_SENTINEL_PATTERN = re.compile(
+    rf"(?<![A-Za-z0-9_]){SYNTHETIC_SENTINEL_PREFIX}[0-9]{{24}}(?![A-Za-z0-9_])"
+)
+SYNTHETIC_SENTINEL_CANDIDATE_PATTERN = re.compile(rf"{SYNTHETIC_SENTINEL_PREFIX}[A-Za-z0-9_]+")
+SYNTHETIC_FIXTURE_ALLOWLIST = {
+    "tests/fixtures/public-plugin-secret-sentinels.json",
+}
+BINARY_SUFFIXES = {".pyc", ".png", ".jpg", ".jpeg", ".webp"}
+MAX_ARCHIVE_MEMBERS = 512
+MAX_ARCHIVE_MEMBER_BYTES = 8 * 1024 * 1024
+MAX_ARCHIVE_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_ARCHIVE_COMPRESSION_RATIO = 100.0
+URL_PATTERN = re.compile(r"https?://[^\\\s'\"<>()]+", re.IGNORECASE)
+DOCUMENTATION_HOST_SUFFIXES = (
+    ".invalid",
+    ".test",
+    ".example",
+    ".example.com",
+    ".example.net",
+    ".example.org",
+)
+DOCUMENTATION_HOSTS = {
+    "example.com",
+    "example.net",
+    "example.org",
+    "github.com",
+    "developercertificate.org",
+    "hermes-agent.nousresearch.com",
+    "json-schema.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+}
+PRODUCTION_PATTERNS = (
+    ("OpenAI-shaped credential", re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b")),
+    ("NVIDIA-shaped credential", re.compile(r"\bnvapi-[A-Za-z0-9_-]{20,}\b")),
+    ("GitHub-shaped credential", re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}\b")),
+    (
+        "Bearer credential",
+        re.compile(r"Authorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/-]{20,}", re.IGNORECASE),
+    ),
+    ("private key material", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
+)
+
+# Exact-file exemptions are permitted only for synthetic adversarial tests. A byte
+# change invalidates the exemption, so adding or replacing any credential-shaped
+# value fails closed. Values are populated only after the release candidate is frozen.
+SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
+    "scripts/benchmark_migration.py": frozenset(
+        {"ef57926174b22c2c22e73843a08a5ea9b7b45481bf51ef08dac21129ea9c929a"}
+    ),
+    "tests/fixtures/credential_redaction_vectors.json": frozenset(
+        {"0cf55fa5cf91acdc164f2eb6936eb49af19ed9c432d060c475db4a9090cd169b"}
+    ),
+    "tests/test_history_replay.py": frozenset(
+        {"87272a47ab814803a77a39cafeb1b193b48678bc889b49712b11bace8b7d8c87"}
+    ),
+    "tests/test_memory_provider.py": frozenset(
+        {"c2edfbbe5a6320088f58db89b1880200b3e844ed3780885a02ef62d3218ab2b1"}
+    ),
+    "tests/test_migration_baseline.py": frozenset(
+        {"0a3c7af6a761a1b22c5b94f7e1738d5d420e5f085f775d792728ed9ca684ac13"}
+    ),
+}
+
+# This digest freezes the independently reviewed source/destination/class boundary
+# separately from per-file hashes in the mutable extraction manifest. It covers
+# only that sorted policy projection, so ordinary byte changes do not change
+# policy. Adding, moving, or reclassifying a file requires explicit review.
+TRUSTED_INVENTORY_POLICY_SHA256 = (
+    "2c93f43f7565b8b347097416543f4210ee9b1f8e79247ea06b2a97b8074a5e52"
+)
+
+
+def scan_text(relative_path: str, text: str) -> list[str]:
+    """Return content-free findings for one candidate text file."""
+
+    findings: list[str] = []
+    sentinels = SYNTHETIC_SENTINEL_PATTERN.findall(text)
+    sentinel_candidates = SYNTHETIC_SENTINEL_CANDIDATE_PATTERN.findall(text)
+    if len(sentinel_candidates) != len(sentinels):
+        findings.append(f"{relative_path}: malformed synthetic sentinel")
+    if sentinels and relative_path not in SYNTHETIC_FIXTURE_ALLOWLIST:
+        findings.append(f"{relative_path}: synthetic sentinel outside exact fixture allowlist")
+    production_text = SYNTHETIC_SENTINEL_PATTERN.sub("[SYNTHETIC-SENTINEL]", text)
+    for label, pattern in PRODUCTION_PATTERNS:
+        if pattern.search(production_text):
+            findings.append(f"{relative_path}: {label}")
+    for value in URL_PATTERN.findall(production_text):
+        try:
+            hostname = (urlsplit(value).hostname or "").casefold().rstrip(".")
+        except ValueError:
+            findings.append(f"{relative_path}: production-shaped HTTP(S) endpoint")
+            continue
+        allowed = (
+            hostname in {"localhost", "127.0.0.1", "::1"}
+            or hostname in DOCUMENTATION_HOSTS
+            or hostname.endswith(DOCUMENTATION_HOST_SUFFIXES)
+        )
+        if not allowed:
+            findings.append(f"{relative_path}: production-shaped HTTP(S) endpoint")
+    return findings
+
+
+def scan_archive(relative_path: str, archive: Path) -> list[str]:
+    """Inspect every bounded UTF-8 member of a ZIP candidate."""
+
+    findings: list[str] = []
+    try:
+        with zipfile.ZipFile(archive) as bundle:
+            members = bundle.infolist()
+            if len(members) > MAX_ARCHIVE_MEMBERS:
+                return [f"{relative_path}: archive member count exceeds bound"]
+            total_bytes = 0
+            for member in members:
+                member_path = PurePosixPath(member.filename)
+                target = f"{relative_path}!/{member.filename}"
+                if member.flag_bits & 0x1:
+                    findings.append(f"{target}: encrypted archive member")
+                    continue
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    findings.append(f"{target}: unsafe archive path")
+                    continue
+                mode = member.external_attr >> 16
+                if stat.S_ISLNK(mode):
+                    findings.append(f"{target}: archive symlink is forbidden")
+                    continue
+                if member.is_dir():
+                    continue
+                total_bytes += member.file_size
+                if total_bytes > MAX_ARCHIVE_TOTAL_BYTES:
+                    return sorted(findings + [f"{relative_path}: archive size exceeds bound"])
+                if member.file_size > MAX_ARCHIVE_MEMBER_BYTES:
+                    findings.append(f"{target}: archive member size exceeds bound")
+                    continue
+                ratio = member.file_size / max(member.compress_size, 1)
+                if ratio > MAX_ARCHIVE_COMPRESSION_RATIO:
+                    findings.append(f"{target}: archive compression ratio exceeds bound")
+                    continue
+                try:
+                    payload = bundle.read(member)
+                except RuntimeError:
+                    findings.append(f"{target}: unreadable archive member")
+                    continue
+                if member_path.suffix.casefold() in BINARY_SUFFIXES:
+                    text = payload.decode("latin-1")
+                else:
+                    try:
+                        text = payload.decode("utf-8")
+                    except UnicodeDecodeError:
+                        findings.append(f"{target}: unexpected non-UTF-8 archive member")
+                        text = payload.decode("latin-1")
+                findings.extend(scan_text(target, text))
+    except (OSError, zipfile.BadZipFile):
+        return [f"{relative_path}: invalid ZIP archive"]
+    return sorted(findings)
+
+
+def _scan_bytes(relative_path: str, payload: bytes) -> list[str]:
+    """Scan one ordinary file or bounded ZIP payload."""
+
+    if Path(relative_path).suffix.casefold() == ".zip":
+        with tempfile.NamedTemporaryFile(suffix=".zip") as stream:
+            stream.write(payload)
+            stream.flush()
+            return scan_archive(relative_path, Path(stream.name))
+    if Path(relative_path).suffix.casefold() in BINARY_SUFFIXES:
+        text = payload.decode("latin-1")
+    else:
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return [f"{relative_path}: unexpected non-UTF-8 candidate file"]
+    findings = scan_text(relative_path, text)
+    digest = hashlib.sha256(payload).hexdigest()
+    if findings and digest in SYNTHETIC_FILE_SHA256_ALLOWLIST.get(relative_path, frozenset()):
+        return []
+    return findings
+
+
+def _git(root: Path, *args: str) -> bytes:
+    try:
+        return subprocess.run(
+            ("git", "-C", str(root), *args),
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("candidate Git inventory is unavailable") from exc
+
+
+def _nul_paths(payload: bytes) -> list[str]:
+    return [value.decode("utf-8") for value in payload.split(b"\0") if value]
+
+
+def _all_candidate_paths(root: Path) -> set[str]:
+    """Enumerate every file/symlink outside Git metadata, including ignored files."""
+
+    paths: set[str] = set()
+    for directory, names, files in os.walk(root, followlinks=False):
+        directory_path = Path(directory)
+        if directory_path == root and ".git" in names:
+            names.remove(".git")
+        for name in (*names, *files):
+            path = directory_path / name
+            if path.is_file() or path.is_symlink():
+                paths.add(path.relative_to(root).as_posix())
+    return paths
+
+
+def _scan_destination_repository(root: Path, manifest: dict[str, Any]) -> list[str]:
+    """Scan the closed working tree plus every blob reachable from a Git ref."""
+
+    findings: list[str] = []
+    try:
+        inventory_policy = {
+            "entries": sorted(
+                (
+                    {
+                        "source": item["source"],
+                        "destination": item["destination"],
+                        "class": item["class"],
+                    }
+                    for item in manifest["entries"]
+                ),
+                key=lambda item: item["destination"],
+            ),
+            "destination_only": sorted(
+                (
+                    {"path": item["path"], "class": item["class"]}
+                    for item in manifest["destination_only"]
+                ),
+                key=lambda item: item["path"],
+            ),
+        }
+        policy_payload = json.dumps(
+            inventory_policy, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    except (KeyError, TypeError):
+        findings.append("candidate: invalid closed inventory path/class policy")
+    else:
+        if hashlib.sha256(policy_payload).hexdigest() != TRUSTED_INVENTORY_POLICY_SHA256:
+            findings.append("candidate: closed inventory path/class policy mismatch")
+    tracked = set(_nul_paths(_git(root, "ls-files", "-z")))
+    unexpected = _all_candidate_paths(root) - tracked
+    for relative_path in sorted(unexpected):
+        findings.append(f"{relative_path}: unexpected untracked candidate file")
+        path = root / relative_path
+        if path.is_symlink() or not path.is_file():
+            findings.append(f"{relative_path}: unsafe or missing untracked file")
+            continue
+        findings.extend(_scan_bytes(relative_path, path.read_bytes()))
+
+    sources: set[str] = set()
+    destinations: set[str] = set()
+    for item in manifest["entries"]:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("source"), str)
+            or not isinstance(item.get("destination"), str)
+        ):
+            raise ValueError("invalid destination inventory entry")
+        source_path = item["source"]
+        relative_path = item["destination"]
+        if source_path in sources:
+            findings.append(f"{source_path}: duplicate source inventory entry")
+        if relative_path in destinations:
+            findings.append(f"{relative_path}: duplicate destination inventory entry")
+        sources.add(source_path)
+        destinations.add(relative_path)
+        expected_digest = item.get("destination_sha256")
+        if not isinstance(expected_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+            findings.append(f"{relative_path}: missing destination SHA-256")
+        elif (root / relative_path).is_file() and hashlib.sha256(
+            (root / relative_path).read_bytes()
+        ).hexdigest() != expected_digest:
+            findings.append(f"{relative_path}: destination SHA-256 mismatch")
+
+    destination_only = manifest.get("destination_only")
+    if not isinstance(destination_only, list):
+        raise ValueError("destination-only inventory is missing")
+    destination_only_paths: set[str] = set()
+    for item in destination_only:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            raise ValueError("invalid destination-only inventory entry")
+        relative_path = item["path"]
+        if relative_path in destination_only_paths:
+            findings.append(f"{relative_path}: duplicate destination-only inventory entry")
+        if relative_path in destinations:
+            findings.append(f"{relative_path}: path appears in both destination inventories")
+        destination_only_paths.add(relative_path)
+        expected_digest = item.get("sha256")
+        if not isinstance(expected_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+            findings.append(f"{relative_path}: missing destination-only SHA-256")
+        elif (root / relative_path).is_file() and hashlib.sha256(
+            (root / relative_path).read_bytes()
+        ).hexdigest() != expected_digest:
+            findings.append(f"{relative_path}: destination-only SHA-256 mismatch")
+
+    self_path = manifest.get("self_excluded_path")
+    if not isinstance(self_path, str):
+        raise ValueError("manifest self-exclusion is missing")
+    expected_tracked = destinations | destination_only_paths | {self_path}
+    findings.extend(
+        f"{path}: tracked candidate path is absent from closed inventory"
+        for path in sorted(tracked - expected_tracked)
+    )
+    findings.extend(
+        f"{path}: closed inventory path is not tracked"
+        for path in sorted(expected_tracked - tracked)
+    )
+
+    for relative_path in sorted(tracked):
+        path = root / relative_path
+        if path.is_symlink() or not path.is_file():
+            findings.append(f"{relative_path}: unsafe or missing tracked file")
+            continue
+        findings.extend(_scan_bytes(relative_path, path.read_bytes()))
+
+    commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
+    for commit in commits:
+        for relative_path in _nul_paths(_git(root, "ls-tree", "-r", "--name-only", "-z", commit)):
+            for finding in scan_text(f"git-path:{commit}", relative_path):
+                _, label = finding.rsplit(": ", 1)
+                findings.append(f"git:{commit}:{relative_path}: {label}")
+            payload = _git(root, "show", f"{commit}:{relative_path}")
+            for finding in _scan_bytes(relative_path, payload):
+                _, label = finding.split(": ", 1)
+                findings.append(f"git:{commit}:{relative_path}: {label}")
+
+    reachable_objects = {
+        line.split(b" ", 1)[0].decode("ascii")
+        for line in _git(root, "rev-list", "--objects", "--all").splitlines()
+        if line
+    }
+    for object_id in sorted(reachable_objects):
+        object_type = _git(root, "cat-file", "-t", object_id).decode("ascii").strip()
+        if object_type not in {"commit", "tag"}:
+            continue
+        payload = _git(root, "cat-file", object_type, object_id)
+        for finding in _scan_bytes(f"git-object:{object_id}:{object_type}.txt", payload):
+            _, label = finding.rsplit(": ", 1)
+            findings.append(f"git-object:{object_id}:{object_type}: {label}")
+    return sorted(set(findings))
+
+
+def _load_manifest(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or not isinstance(value.get("entries"), list):
+        raise ValueError("invalid public plugin move manifest")
+    return value
+
+
+def scan_candidate(
+    root: Path,
+    manifest_path: Path,
+    *,
+    layout: Literal["auto", "source", "destination"] = "auto",
+) -> list[str]:
+    """Scan the closed candidate repository or the exact embedded source manifest."""
+
+    manifest = _load_manifest(manifest_path)
+    findings: list[str] = []
+    seen: set[str] = set()
+    entries = manifest["entries"]
+    if layout == "auto":
+        if all(
+            isinstance(item, dict) and (root / str(item.get("source"))).is_file()
+            for item in entries
+        ):
+            selected_layout = "source"
+        elif all(
+            isinstance(item, dict) and (root / str(item.get("destination"))).is_file()
+            for item in entries
+        ):
+            selected_layout = "destination"
+        else:
+            return ["candidate: neither source nor destination layout is complete"]
+    else:
+        selected_layout = layout
+    if selected_layout == "destination":
+        return _scan_destination_repository(root, manifest)
+    for item in entries:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("source"), str)
+            or not isinstance(item.get("destination"), str)
+        ):
+            raise ValueError("invalid public plugin move entry")
+        relative_path = item[selected_layout]
+        if relative_path in seen:
+            raise ValueError("duplicate public plugin move source")
+        seen.add(relative_path)
+        source = root / relative_path
+        if not source.is_file():
+            findings.append(f"{relative_path}: missing manifest source")
+            continue
+        expected_digest = item.get("source_sha256")
+        if not isinstance(expected_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+            findings.append(f"{relative_path}: missing source SHA-256")
+        elif hashlib.sha256(source.read_bytes()).hexdigest() != expected_digest:
+            findings.append(f"{relative_path}: source SHA-256 mismatch")
+        findings.extend(_scan_bytes(relative_path, source.read_bytes()))
+    return sorted(findings)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--layout", choices=("auto", "source", "destination"), default="auto")
+    args = parser.parse_args(argv)
+    root = args.root.resolve()
+    if args.manifest is None:
+        candidates = (
+            root / "docs" / "extraction-manifest.json",
+            root / "docs" / "file-move-manifest.json",
+        )
+        manifest = next(
+            (candidate for candidate in candidates if candidate.is_file()), candidates[0]
+        )
+    else:
+        manifest = args.manifest if args.manifest.is_absolute() else root / args.manifest
+    findings = scan_candidate(root, manifest, layout=args.layout)
+    print(json.dumps({"findings": findings, "status": "pass" if not findings else "fail"}))
+    return 0 if not findings else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

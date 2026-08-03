@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://substrate.invalid/schemas/hermes-migration-receipt-v1.json",
+  "title": "Hermes migration aggregate benchmark receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol",
+    "profile",
+    "manifest_sha256",
+    "harness_sha256",
+    "hosted_calls",
+    "representative_provider",
+    "runs"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "stream-v2"},
+    "profile": {"type": "string", "minLength": 1},
+    "manifest_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "harness_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "hosted_calls": {"const": 0},
+    "representative_provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "network_access",
+        "quota_requests_per_minute",
+        "cost_usd_per_request"
+      ],
+      "properties": {
+        "mode": {"const": "deterministic_simulation"},
+        "network_access": {"const": false},
+        "quota_requests_per_minute": {"type": "integer", "minimum": 1},
+        "cost_usd_per_request": {"type": "number", "minimum": 0}
+      }
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/run"}
+    }
+  },
+  "$defs": {
+    "nonnegative": {"type": "number", "minimum": 0},
+    "nonnegativeInteger": {"type": "integer", "minimum": 0},
+    "phaseMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discovery",
+        "source_reading",
+        "normalization_redaction",
+        "request_encoding",
+        "network_wait",
+        "server_persistence",
+        "queue_delay",
+        "provider_extraction",
+        "entity_resolution",
+        "projection_indexing",
+        "summary_reduction"
+      ],
+      "properties": {
+        "discovery": {"$ref": "#/$defs/nonnegative"},
+        "source_reading": {"$ref": "#/$defs/nonnegative"},
+        "normalization_redaction": {"$ref": "#/$defs/nonnegative"},
+        "request_encoding": {"$ref": "#/$defs/nonnegative"},
+        "network_wait": {"$ref": "#/$defs/nonnegative"},
+        "server_persistence": {"$ref": "#/$defs/nonnegative"},
+        "queue_delay": {"$ref": "#/$defs/nonnegative"},
+        "provider_extraction": {"$ref": "#/$defs/nonnegative"},
+        "entity_resolution": {"$ref": "#/$defs/nonnegative"},
+        "projection_indexing": {"$ref": "#/$defs/nonnegative"},
+        "summary_reduction": {"$ref": "#/$defs/nonnegative"}
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "fixture_kind",
+        "concurrency",
+        "fixture_sha256",
+        "source_file_bytes",
+        "input_bytes",
+        "windows",
+        "events",
+        "wall_time_seconds",
+        "cpu_seconds",
+        "peak_rss_bytes",
+        "events_per_second",
+        "mib_per_second",
+        "windows_per_minute",
+        "requests",
+        "retries",
+        "terminal_failures",
+        "phase_seconds",
+        "traces",
+        "lifecycle_seconds",
+        "queue",
+        "provider",
+        "integrity",
+        "quality"
+      ],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "fixture_kind": {"enum": ["sqlite", "official_export_jsonl"]},
+        "concurrency": {"type": "integer", "minimum": 1, "maximum": 4},
+        "fixture_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "source_file_bytes": {"$ref": "#/$defs/nonnegativeInteger"},
+        "input_bytes": {"$ref": "#/$defs/nonnegativeInteger"},
+        "windows": {"type": "integer", "minimum": 1},
+        "events": {"type": "integer", "minimum": 1},
+        "wall_time_seconds": {"$ref": "#/$defs/nonnegative"},
+        "cpu_seconds": {"$ref": "#/$defs/nonnegative"},
+        "peak_rss_bytes": {"$ref": "#/$defs/nonnegativeInteger"},
+        "events_per_second": {"$ref": "#/$defs/nonnegative"},
+        "mib_per_second": {"$ref": "#/$defs/nonnegative"},
+        "windows_per_minute": {"$ref": "#/$defs/nonnegative"},
+        "requests": {"$ref": "#/$defs/nonnegativeInteger"},
+        "retries": {"$ref": "#/$defs/nonnegativeInteger"},
+        "terminal_failures": {"$ref": "#/$defs/nonnegativeInteger"},
+        "phase_seconds": {
+          "$ref": "#/$defs/phaseMap",
+          "required": [
+            "discovery",
+            "source_reading",
+            "normalization_redaction",
+            "request_encoding",
+            "network_wait",
+            "server_persistence",
+            "queue_delay",
+            "provider_extraction",
+            "entity_resolution",
+            "projection_indexing",
+            "summary_reduction"
+          ]
+        },
+        "traces": {
+          "type": "array",
+          "minItems": 11,
+          "maxItems": 11,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["phase", "seconds"],
+            "properties": {
+              "phase": {"enum": [
+                "discovery",
+                "source_reading",
+                "normalization_redaction",
+                "request_encoding",
+                "network_wait",
+                "server_persistence",
+                "queue_delay",
+                "provider_extraction",
+                "entity_resolution",
+                "projection_indexing",
+                "summary_reduction"
+              ]},
+              "seconds": {"$ref": "#/$defs/nonnegative"}
+            }
+          }
+        },
+        "lifecycle_seconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transferred", "first_usable", "fully_ready"],
+          "properties": {
+            "transferred": {"$ref": "#/$defs/nonnegative"},
+            "first_usable": {"$ref": "#/$defs/nonnegative"},
+            "fully_ready": {"$ref": "#/$defs/nonnegative"}
+          }
+        },
+        "queue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_depth", "max_age_seconds"],
+          "properties": {
+            "max_depth": {"$ref": "#/$defs/nonnegativeInteger"},
+            "max_age_seconds": {"$ref": "#/$defs/nonnegative"}
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requests",
+            "retries",
+            "observed_time_seconds",
+            "modeled_quota_seconds",
+            "modeled_cost_usd",
+            "quota_requests_per_minute",
+            "worker_threads_used",
+            "max_in_flight"
+          ],
+          "properties": {
+            "requests": {"$ref": "#/$defs/nonnegativeInteger"},
+            "retries": {"$ref": "#/$defs/nonnegativeInteger"},
+            "observed_time_seconds": {"$ref": "#/$defs/nonnegative"},
+            "modeled_quota_seconds": {"$ref": "#/$defs/nonnegative"},
+            "modeled_cost_usd": {"$ref": "#/$defs/nonnegative"},
+            "quota_requests_per_minute": {"type": "integer", "minimum": 1},
+            "worker_threads_used": {"type": "integer", "minimum": 1, "maximum": 4},
+            "max_in_flight": {"type": "integer", "minimum": 1, "maximum": 4}
+          }
+        },
+        "integrity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expected_windows",
+            "projected_windows",
+            "redacted_events",
+            "redaction_failures",
+            "idempotency_replays",
+            "idempotency_replay_kind",
+            "idempotency_state_components",
+            "duplicate_acks",
+            "duplicate_side_effects",
+            "complete"
+          ],
+          "properties": {
+            "expected_windows": {"type": "integer", "minimum": 1},
+            "projected_windows": {"$ref": "#/$defs/nonnegativeInteger"},
+            "redacted_events": {"type": "integer", "minimum": 1},
+            "redaction_failures": {"$ref": "#/$defs/nonnegativeInteger"},
+            "idempotency_replays": {"type": "integer", "const": 1},
+            "idempotency_replay_kind": {"type": "string", "const": "session_end"},
+            "idempotency_state_components": {
+              "type": "array",
+              "const": [
+                "duplicate_acks",
+                "encoded_bytes",
+                "max_queue_depth",
+                "projected_digest",
+                "projected_rows",
+                "queue_items",
+                "received_digest",
+                "received_rows",
+                "redacted_events",
+                "redaction_failures",
+                "requests",
+                "work_queue_items"
+              ]
+            },
+            "duplicate_acks": {"type": "integer", "const": 1},
+            "duplicate_side_effects": {"type": "integer", "const": 0},
+            "complete": {"type": "boolean"}
+          }
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["projection_failures", "terminal_failures"],
+          "properties": {
+            "projection_failures": {"$ref": "#/$defs/nonnegativeInteger"},
+            "terminal_failures": {"$ref": "#/$defs/nonnegativeInteger"}
+          }
+        }
+      }
+    }
+  }
+}
