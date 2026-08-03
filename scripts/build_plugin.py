@@ -19,10 +19,12 @@ PLUGIN_NAME = "substrate_wiki"
 PLUGIN_SOURCE = REPOSITORY_ROOT / "src" / PLUGIN_NAME
 ARCHIVE_PATH = REPOSITORY_ROOT / "dist" / f"{PLUGIN_NAME}.zip"
 INSTALLER_PATH = REPOSITORY_ROOT / "scripts" / "install_hermes_plugin.py"
+LICENSE_PATH = REPOSITORY_ROOT / "LICENSE"
 RELEASES_PATH = REPOSITORY_ROOT / "release-assets"
 PROVENANCE_FILENAME = "PROVENANCE.json"
+LICENSE_FILENAME = "LICENSE"
 TARGET_HERMES_VERSION = "0.18.2"
-BUILD_FORMAT_VERSION = 2
+BUILD_FORMAT_VERSION = 3
 SOURCE_COMMIT_ENVIRONMENT_VARIABLE = "HERMES_PLUGIN_SOURCE_COMMIT"
 PLUGIN_REDACTION_FILENAME = "redaction.py"
 GENERATED_DETECTOR_BLOCK_START = "# BEGIN GENERATED SERVER PROVIDER DETECTORS\n"
@@ -178,6 +180,18 @@ def _require_commit_contains_source(
         )
         if blob.returncode != 0 or blob.stdout != (source / relative).read_bytes():
             raise ValueError(f"plugin source differs from source_commit: {relative.as_posix()}")
+    license_blob = subprocess.run(
+        ("git", "-C", os.fspath(REPOSITORY_ROOT), "show", f"{source_commit}:LICENSE"),
+        check=False,
+        capture_output=True,
+    )
+    if (
+        license_blob.returncode != 0
+        or not LICENSE_PATH.is_file()
+        or LICENSE_PATH.is_symlink()
+        or license_blob.stdout != LICENSE_PATH.read_bytes()
+    ):
+        raise ValueError("LICENSE differs from source_commit")
 
 
 def _provenance_bytes(
@@ -185,6 +199,7 @@ def _provenance_bytes(
 ) -> bytes:
     provenance = {
         "build_format_version": BUILD_FORMAT_VERSION,
+        "license_sha256": hashlib.sha256(LICENSE_PATH.read_bytes()).hexdigest(),
         "plugin_version": _plugin_version(source),
         "provider_id": PLUGIN_NAME,
         "source_commit": _source_commit()
@@ -222,6 +237,11 @@ def build_archive_bytes(source: Path = PLUGIN_SOURCE, *, source_commit: str | No
         archive.writestr(
             _zip_info(f"{PLUGIN_NAME}/{PROVENANCE_FILENAME}"),
             provenance,
+            compresslevel=9,
+        )
+        archive.writestr(
+            _zip_info(f"{PLUGIN_NAME}/{LICENSE_FILENAME}"),
+            LICENSE_PATH.read_bytes(),
             compresslevel=9,
         )
         for relative_path in files:

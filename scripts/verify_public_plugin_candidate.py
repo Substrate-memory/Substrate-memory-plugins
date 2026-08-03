@@ -63,8 +63,7 @@ PRODUCTION_PATTERNS = (
     (
         "Hermes API credential assignment",
         re.compile(
-            r"(?<![A-Za-z0-9_])[\"']?HERMES_API_KEY[\"']?(?:\s*\])?\s*[:=]\s*"
-            r"[\"']?[A-Za-z0-9._~+/-]{20,}",
+            r"(?<![A-Za-z0-9_])[\"']?HERMES_API_KEY[\"']?(?:\s*\])?\s*[:=]",
             re.IGNORECASE,
         ),
     ),
@@ -88,6 +87,9 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/fixtures/credential_redaction_vectors.json": frozenset(
         {"0cf55fa5cf91acdc164f2eb6936eb49af19ed9c432d060c475db4a9090cd169b"}
     ),
+    "tests/test_history.py": frozenset(
+        {"3997fc5c3b538df4ded9e994781fd8384b6b3b42ac695e1f1450ac24f6a92e7c"}
+    ),
     "tests/test_history_replay.py": frozenset(
         {"87272a47ab814803a77a39cafeb1b193b48678bc889b49712b11bace8b7d8c87"}
     ),
@@ -100,6 +102,9 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/test_migration_baseline.py": frozenset(
         {"0a3c7af6a761a1b22c5b94f7e1738d5d420e5f085f775d792728ed9ca684ac13"}
     ),
+    "tests/test_packaging.py": frozenset(
+        {"c7a8e84d116319e62b0b7817c1a049225088c8b3baf59c42ad82cbefc3c172b5"}
+    ),
 }
 
 # This digest freezes the independently reviewed source/destination/class boundary
@@ -109,6 +114,81 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
 TRUSTED_INVENTORY_POLICY_SHA256 = (
     "2c93f43f7565b8b347097416543f4210ee9b1f8e79247ea06b2a97b8074a5e52"
 )
+TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
+    "0000000000000000000000000000000000000000000000000000000000000000"
+)
+SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
+DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
+
+
+def _normalize_historical_policy_payload(relative_path: str, payload: bytes) -> bytes:
+    """Remove the history policy's intentional self-reference before hashing."""
+
+    if relative_path == SCANNER_PATH:
+        text = payload.decode("utf-8")
+        text, count = re.subn(
+            r'(?s)(TRUSTED_HISTORICAL_BLOB_POLICY_SHA256\s*=\s*\(\s*")[0-9a-f]{64}("\s*\))',
+            lambda match: match.group(1) + "0" * 64 + match.group(2),
+            text,
+            count=1,
+        )
+        return text.encode("utf-8") if count else payload
+    if relative_path == DESTINATION_MANIFEST_PATH:
+        try:
+            value = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return payload
+        normalized = 0
+        for item in value.get("entries", []):
+            if isinstance(item, dict) and item.get("destination") == SCANNER_PATH:
+                item["destination_sha256"] = "0" * 64
+                normalized += 1
+        for item in value.get("destination_only", []):
+            if isinstance(item, dict) and item.get("path") == SCANNER_PATH:
+                item["sha256"] = "0" * 64
+                normalized += 1
+        if normalized == 1:
+            return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return payload
+
+
+def _historical_blob_policy_sha256(root: Path, manifest: dict[str, Any]) -> str:
+    """Hash every distinct path/class/mode/content tuple in reachable commit trees."""
+
+    path_classes = {
+        item["destination"]: item["class"] for item in manifest["entries"]
+    }
+    path_classes.update(
+        {item["path"]: item["class"] for item in manifest["destination_only"]}
+    )
+    path_classes[manifest["self_excluded_path"]] = "closed-inventory-manifest"
+    projection: set[tuple[str, str, str, str]] = set()
+    commits = _git(root, "rev-list", "--all").decode("ascii").splitlines()
+    for commit in commits:
+        for raw_entry in (
+            entry for entry in _git(root, "ls-tree", "-r", "-z", commit).split(b"\0") if entry
+        ):
+            metadata, raw_path = raw_entry.split(b"\t", 1)
+            mode, object_type, raw_object_id = metadata.split(b" ", 2)
+            relative_path = raw_path.decode("utf-8")
+            object_id = raw_object_id.decode("ascii")
+            if object_type == b"blob":
+                payload = _git(root, "cat-file", "blob", object_id)
+                normalized_digest = hashlib.sha256(
+                    _normalize_historical_policy_payload(relative_path, payload)
+                ).hexdigest()
+            else:
+                normalized_digest = object_id
+            projection.add(
+                (
+                    relative_path,
+                    path_classes.get(relative_path, "outside-closed-inventory"),
+                    mode.decode("ascii"),
+                    f"{object_type.decode('ascii')}:{normalized_digest}",
+                )
+            )
+    payload = json.dumps(sorted(projection), separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def scan_text(relative_path: str, text: str) -> list[str]:
@@ -381,6 +461,14 @@ def _scan_destination_repository(root: Path, manifest: dict[str, Any]) -> list[s
             for finding in _scan_bytes(relative_path, payload):
                 _, label = finding.split(": ", 1)
                 findings.append(f"git:{commit}:{relative_path}: {label}")
+
+    try:
+        historical_policy_digest = _historical_blob_policy_sha256(root, manifest)
+    except (KeyError, TypeError, ValueError):
+        findings.append("candidate: invalid historical blob policy")
+    else:
+        if historical_policy_digest != TRUSTED_HISTORICAL_BLOB_POLICY_SHA256:
+            findings.append("candidate: historical blob policy mismatch")
 
     reachable_objects = {
         line.split(b" ", 1)[0].decode("ascii")

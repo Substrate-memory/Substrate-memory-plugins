@@ -21,6 +21,7 @@ from typing import Any, cast
 PLUGIN_NAME = "substrate_wiki"
 EXPECTED_VERSION = "1.5.0"
 EXPECTED_HERMES_VERSION = "0.18.2"
+LICENSE_FILENAME = "LICENSE"
 REQUIRED_FILES = {
     "README.md",
     "__init__.py",
@@ -80,6 +81,7 @@ def verify_archive(path: Path, expected_sha256: str = "") -> dict[str, Any]:
         expected_members = {
             f"{PLUGIN_NAME}/",
             f"{PLUGIN_NAME}/PROVENANCE.json",
+            f"{PLUGIN_NAME}/{LICENSE_FILENAME}",
             *(f"{PLUGIN_NAME}/{name}" for name in REQUIRED_FILES),
         }
         if set(names) != expected_members:
@@ -104,7 +106,7 @@ def verify_archive(path: Path, expected_sha256: str = "") -> dict[str, Any]:
             if info.flag_bits & 0x1:
                 raise ValueError("archive contains an encrypted member")
         provenance = json.loads(archive.read(f"{PLUGIN_NAME}/PROVENANCE.json").decode("utf-8"))
-        if provenance.get("build_format_version") != 2:
+        if provenance.get("build_format_version") != 3:
             raise ValueError("unexpected plugin archive build format")
         if provenance.get("provider_id") != PLUGIN_NAME:
             raise ValueError("unexpected plugin provider identity")
@@ -112,6 +114,13 @@ def verify_archive(path: Path, expected_sha256: str = "") -> dict[str, Any]:
             raise ValueError("unexpected plugin version")
         if provenance.get("target_hermes_version") != EXPECTED_HERMES_VERSION:
             raise ValueError("unexpected Hermes target version")
+        license_sha256 = provenance.get("license_sha256")
+        if (
+            not isinstance(license_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", license_sha256) is None
+            or _digest(archive.read(f"{PLUGIN_NAME}/{LICENSE_FILENAME}")) != license_sha256
+        ):
+            raise ValueError("archive license digest mismatch")
         source_files = provenance.get("source_files")
         if not isinstance(source_files, dict):
             raise ValueError("archive provenance has no source file manifest")

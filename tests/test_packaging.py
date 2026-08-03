@@ -31,6 +31,7 @@ LEGACY_141_INSTALLER_SHA256 = "7600b2681c3aebcb1b1492b0a04be38bbbec637089cbbcfb1
 EXPECTED_MEMBERS = [
     "substrate_wiki/",
     "substrate_wiki/PROVENANCE.json",
+    "substrate_wiki/LICENSE",
     "substrate_wiki/README.md",
     "substrate_wiki/__init__.py",
     "substrate_wiki/checkpoint.py",
@@ -127,7 +128,8 @@ def test_archive_is_canonical_and_release_clean(tmp_path: Path) -> None:
             assert info.create_system == 3
             assert "__pycache__" not in info.filename
             assert not info.filename.endswith((".pyc", ".pyo"))
-        for member in EXPECTED_MEMBERS[2:]:
+        assert archive.read("substrate_wiki/LICENSE") == (REPOSITORY_ROOT / "LICENSE").read_bytes()
+        for member in EXPECTED_MEMBERS[3:]:
             source_path = PLUGIN_SOURCE / Path(member).relative_to("substrate_wiki")
             assert archive.read(member) == source_path.read_bytes()
 
@@ -141,7 +143,8 @@ def test_archive_provenance_identifies_version_and_source_hashes(tmp_path: Path)
         provenance = json.loads(archive.read("substrate_wiki/PROVENANCE.json"))
 
     assert provenance == {
-        "build_format_version": 2,
+        "build_format_version": 3,
+        "license_sha256": hashlib.sha256((REPOSITORY_ROOT / "LICENSE").read_bytes()).hexdigest(),
         "plugin_version": "1.5.0",
         "provider_id": "substrate_wiki",
         "source_commit": "unknown",
@@ -458,6 +461,23 @@ def test_installer_rejects_unlisted_archive_members(tmp_path: Path) -> None:
         archive.writestr("substrate_wiki/unlisted.py", "raise RuntimeError('untrusted')\n")
 
     with pytest.raises(ValueError, match="unexpected file set"):
+        installer.verify_archive(archive_path)
+
+
+def test_installer_rejects_license_bytes_that_do_not_match_provenance(tmp_path: Path) -> None:
+    builder = load_builder()
+    installer = load_installer()
+    canonical_path = tmp_path / "canonical.zip"
+    canonical_path.write_bytes(builder.build_archive_bytes(source_commit="a" * 40))
+    archive_path = tmp_path / "tampered-license.zip"
+    with zipfile.ZipFile(canonical_path) as source, zipfile.ZipFile(archive_path, "w") as target:
+        for info in source.infolist():
+            content = source.read(info.filename)
+            if info.filename == "substrate_wiki/LICENSE":
+                content = b"not the reviewed license\n"
+            target.writestr(info, content)
+
+    with pytest.raises(ValueError, match="license digest mismatch"):
         installer.verify_archive(archive_path)
 
 

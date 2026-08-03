@@ -77,6 +77,9 @@ def make_candidate(tmp_path: Path) -> tuple[ModuleType, Path, Path]:
     ).hexdigest()
     git(root, "add", ".")
     git(root, "commit", "-qm", "safe base")
+    verifier.TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
+        verifier._historical_blob_policy_sha256(root, value)
+    )
     return verifier, root, manifest
 
 
@@ -242,7 +245,18 @@ def test_destination_scanner_rejects_historical_hermes_api_key_assignment(
 
 @pytest.mark.parametrize(
     "shape",
-    ("quoted-json", "bracket-assignment", "your-prefix", "example-prefix", "replace-prefix"),
+    (
+        "quoted-json",
+        "bracket-assignment",
+        "f-string",
+        "bytes-map",
+        "raw-string",
+        "triple-quoted",
+        "shell-concatenated",
+        "your-prefix",
+        "example-prefix",
+        "replace-prefix",
+    ),
 )
 def test_destination_scanner_rejects_direct_hermes_key_assignment_shapes(
     tmp_path: Path,
@@ -254,6 +268,11 @@ def test_destination_scanner_rejects_direct_hermes_key_assignment_shapes(
     values = {
         "quoted-json": f'"{key}": "{suffix}"',
         "bracket-assignment": f'os.environ["{key}"] = "{suffix}"',
+        "f-string": f'{key} = f"{suffix}"',
+        "bytes-map": f'"{key}": b"{suffix}"',
+        "raw-string": f'{key} = r"{suffix}"',
+        "triple-quoted": f'{key} = """{suffix}"""',
+        "shell-concatenated": f'{key}="{suffix[:20]}""{suffix[20:]}"',
         "your-prefix": f"{key}=your-{suffix}",
         "example-prefix": f"{key}=example{suffix}",
         "replace-prefix": f"{key}=replace-me{suffix}",
@@ -306,3 +325,23 @@ def test_destination_scanner_rejects_historical_symlink_substitution(tmp_path: P
     findings = verifier.scan_candidate(root, manifest, layout="destination")
 
     assert any("historical entry is not a regular file" in finding for finding in findings)
+
+
+def test_destination_scanner_rejects_historical_allowed_path_substitution(
+    tmp_path: Path,
+) -> None:
+    verifier, root, manifest = make_candidate(tmp_path)
+    tracked = root / "README.md"
+    tracked.write_text(
+        "def deploy_private_broker():\n    return 'held implementation'\n",
+        encoding="utf-8",
+    )
+    git(root, "add", "README.md")
+    git(root, "commit", "-qm", "hide held source at allowed path")
+    tracked.write_text("safe candidate\n", encoding="utf-8")
+    git(root, "add", "README.md")
+    git(root, "commit", "-qm", "restore reviewed allowed path")
+
+    findings = verifier.scan_candidate(root, manifest, layout="destination")
+
+    assert "candidate: historical blob policy mismatch" in findings
