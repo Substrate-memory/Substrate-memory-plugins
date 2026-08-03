@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/Substrate-memory/hermes-substrate-wiki/security/advisories/new
+    about: Never disclose credentials, private data, or exploit details in a public issue.
