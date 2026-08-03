@@ -22,7 +22,7 @@ classifiers = [
 dev = [
   "pytest==9.0.3",
   "pytest-timeout==2.3.1",
-  "ruff==0.9.10",
+  "ruff==0.16.1",
   "setuptools==83.0.0",
 ]
 
