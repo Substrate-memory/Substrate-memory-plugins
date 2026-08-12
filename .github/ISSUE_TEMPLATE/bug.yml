@@ -10,14 +10,14 @@ body:
     id: plugin-version
     attributes:
       label: Plugin version
-      placeholder: 1.5.0
+      placeholder: 2.0.0
     validations:
       required: true
   - type: input
     id: hermes-version
     attributes:
       label: Hermes version
-      placeholder: 0.18.2
+      placeholder: 0.20.0
     validations:
       required: true
   - type: textarea

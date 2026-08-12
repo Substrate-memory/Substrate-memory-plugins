@@ -13,7 +13,7 @@ from types import FrameType
 from typing import Any
 
 from .checkpoint import TERMINAL_STATES, ImportCheckpoint
-from .client import SubstrateClient
+from .client import SubstrateClient, validate_capabilities
 from .history import (
     ConversationReplaySource,
     HermesHistoryImporter,
@@ -68,7 +68,7 @@ def run_job(hermes_home: Path, job_id: str) -> dict[str, object]:
             source = HermesJSONLHistorySource(locator)
         else:
             raise ValueError("unsupported durable source kind")
-        client = SubstrateClient.from_env(timeout=30.0)
+        client = SubstrateClient.from_env(timeout=30.0, hermes_home=hermes_home, hosted_default=True)
         importer = HermesHistoryImporter(
             hermes_home=hermes_home,
             client=client,
@@ -78,24 +78,17 @@ def run_job(hermes_home: Path, job_id: str) -> dict[str, object]:
         )
         importer.checkpoint = checkpoint
         capabilities = client.capabilities()
-        replay = capabilities.get("history_replay")
-        if not (
-            isinstance(replay, dict)
-            and capabilities.get("provider") == "substrate_wiki"
-            and 2 in capabilities.get("capture_schema_versions", [])
-            and replay.get("protocol") == "stream-v2"
-            and replay.get("min_plugin_version") == "1.2.0"
-            and replay.get("content_free_completion") is True
-            and replay.get("incremental_windows") is True
-            and int(replay.get("status_version", 0)) == 2
-            and int(capabilities.get("max_event_bytes", 0)) == 262_144
-        ):
+        try:
+            validate_capabilities(capabilities, require_replay=True, require_entity=False)
+        except Exception:
             checkpoint.set_state("failed", error_class="server_upgrade_required")
-            raise RuntimeError("server_upgrade_required")
+            raise RuntimeError("server_upgrade_required") from None
         status = importer.run(wait=True)
-        if status.get("complete") and os.name == "posix":
-            from .supervisor import unit_instance_name
+        if status.get("complete"):
+            from .supervisor import _systemd_unit_installed, unit_instance_name
 
+            if not _systemd_unit_installed(hermes_home):
+                return status
             subprocess.run(
                 ("systemctl", "--user", "disable", unit_instance_name(hermes_home, job_id)),
                 check=False,

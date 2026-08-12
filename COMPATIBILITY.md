@@ -1,25 +1,28 @@
 # Compatibility
 
-Compatibility has three independent axes: Hermes host, Substrate server capability contract, and plugin version.
+Compatibility has three independent axes: Hermes host, hosted Substrate capability contract, and plugin version.
 
 ## Certified matrix
 
-| Plugin | Hermes | Required server capabilities | Status |
+| Plugin | Hermes | Required hosted capabilities | Status |
 |---|---|---|---|
-| 1.5.0 | 0.18.2 | `stream-v2`, `entity-wiki-v1`, `entity-quality-v2` | Standalone contract-tested; host-lifecycle certification pending |
-| 1.5.0 | 0.19.0 | Not evaluated completely | Unsupported |
-| 1.4.1 | 0.18.2 | Imported immutable historical release | Historical compatibility record |
+| 2.0.0 | 0.20.x | `stream-v2`, `entity-wiki-v1`, `entity-quality-v2`, hosted device authorization | Contract and lifecycle integration tested |
+| 1.4.1 | 0.18.2 | Imported immutable historical release | Historical compatibility record only |
 
-Hermes 0.19.0 requires provider discovery, plugin lifecycle, tool-schema, profile-isolation, import-service, configuration, replay, and rollback verification before support can be claimed.
+Hermes 2.0.0 uses the current 0.20 user-plugin discovery path and native `post_setup` hook.
+Older Hermes lifecycle conventions are not supported by this release.
 
 ## Failure behavior
 
-The plugin fails closed when required capabilities or response contracts are absent. It does not silently fall back to legacy history transmission or an alternate memory provider.
+The plugin fails closed when the hosted origin, capabilities, credential custody, or response
+contracts are invalid. It does not fall back to a local/self-hosted server, legacy history
+transmission, or another memory provider. Expired or revoked credentials start repairable
+hosted onboarding while durable events remain queued.
 
 ## Versioning
 
 - Plugin behavior follows semantic versioning.
-- Breaking server behavior requires a new protocol/schema identifier and concurrent old-version support during migration.
-- No silent plugin auto-update.
-- No automatic configuration or state rewrite.
-- Rollback preserves profile-local configuration, spool, and checkpoints.
+- The hosted origin is fixed at `https://app.trysubstrate.co`.
+- Breaking server behavior requires a new protocol/schema identifier.
+- Installation activates `memory.provider: substrate_wiki`; there is no silent auto-update.
+- Rollback preserves profile-local spool, checkpoints, consent state, and credential custody.

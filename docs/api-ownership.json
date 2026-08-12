@@ -1,9 +1,9 @@
 {
   "authentication": {
-    "owner": "Substrate-v2 server",
-    "plugin_obligation": "send only to the configured validated HTTPS origin",
-    "scheme": "Bearer HERMES_API_KEY",
-    "server_obligation": "constant-time verification and content-free 401 response"
+    "owner": "Substrate-v2 hosted server",
+    "plugin_obligation": "send credentials only to fixed https://app.trysubstrate.co origin and keep them in secure custody",
+    "scheme": "RFC 8628 device authorization issuing a tenant-scoped Bearer credential",
+    "server_obligation": "authenticate the live tenant/account, issue one-time revocable credentials, enforce scope and content-free failures"
   },
   "capabilities": {
     "breaking_change": "new schema or protocol identifier with concurrent server support",
@@ -44,6 +44,18 @@
     }
   },
   "contract_status": "boundary-approved; versioned schemas and fixtures follow in SUB-47",
+  "onboarding": {
+    "approval_endpoint": "POST /oauth/device/approve",
+    "client_id": "substrate-hermes",
+    "credential_management": "owner-only /api/v1/plugin-credentials",
+    "device_authorization_endpoint": "POST /oauth/device_authorization",
+    "scopes": [
+      "capture",
+      "retrieve"
+    ],
+    "token_endpoint": "POST /oauth/token",
+    "verification_endpoint": "GET /oauth/device"
+  },
   "operations": [
     {
       "compatibility": "required",

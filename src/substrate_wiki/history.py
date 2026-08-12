@@ -23,7 +23,7 @@ from .checkpoint import (
     SessionDescriptor,
     discover_legacy_checkpoints,
 )
-from .client import SubstrateAPIError, SubstrateClient
+from .client import SubstrateAPIError, SubstrateClient, validate_capabilities
 from .events import CaptureEventBuilder, content_digest
 from .redaction import configured_secret_values
 
@@ -1340,19 +1340,7 @@ class HermesHistoryImporter:
 
     def prepare(self) -> ImportCheckpoint:
         capabilities = self.client.capabilities()
-        history = capabilities.get("history_replay") if isinstance(capabilities, dict) else None
-        if not (
-            isinstance(history, dict)
-            and capabilities.get("provider") == "substrate_wiki"
-            and 2 in capabilities.get("capture_schema_versions", [])
-            and history.get("protocol") == "stream-v2"
-            and history.get("min_plugin_version") == "1.2.0"
-            and history.get("content_free_completion") is True
-            and history.get("incremental_windows") is True
-            and int(history.get("status_version", 0)) == 2
-            and int(capabilities.get("max_event_bytes", 0)) == 262_144
-        ):
-            raise SubstrateAPIError("server_upgrade_required")
+        validate_capabilities(capabilities, require_replay=True, require_entity=False)
         candidates = _legacy_candidates(self.hermes_home, self.client)
         selected = str(candidates[0]["batch_id"]) if candidates else None
         checkpoint = ImportCheckpoint.create_or_attach(
@@ -1414,7 +1402,13 @@ class HermesHistoryImporter:
         status = checkpoint.status()
         builder = CaptureEventBuilder(
             {"provider_id": "substrate_wiki", "agent_id": self.agent_id},
-            secrets=configured_secret_values(),
+            secrets=tuple(
+                secret
+                for secret in dict.fromkeys(
+                    (*configured_secret_values(), str(getattr(self.client, "api_key", "") or ""))
+                )
+                if secret
+            ),
         )
         event = builder.payload_event(
             "session_boundary",
@@ -1457,7 +1451,13 @@ class HermesHistoryImporter:
                 "platform": session.source,
                 "subject_id": session.subject_id,
             },
-            secrets=configured_secret_values(),
+            secrets=tuple(
+                secret
+                for secret in dict.fromkeys(
+                    (*configured_secret_values(), str(getattr(self.client, "api_key", "") or ""))
+                )
+                if secret
+            ),
         )
         for message in self.source.iter_messages(session, start=start):
             if self.stop_requested():

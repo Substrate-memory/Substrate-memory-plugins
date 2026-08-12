@@ -138,9 +138,10 @@ def test_registers_provider_and_availability_is_local(monkeypatch: pytest.Monkey
     register(Context())
     assert isinstance(captured[0], SubstrateWikiProvider)
     assert captured[0].name == "substrate_wiki"
+    assert captured[0].is_available()
+    monkeypatch.setenv("HERMES_API_URL", "https://other.example.test")
     assert not captured[0].is_available()
-    monkeypatch.setenv("HERMES_API_URL", "https://wiki.example.test")
-    monkeypatch.setenv("HERMES_API_KEY", "key")
+    monkeypatch.setenv("HERMES_API_URL", "https://app.trysubstrate.co")
     assert captured[0].is_available()
 
 
@@ -173,7 +174,7 @@ def test_availability_rejects_non_loopback_http(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("HERMES_API_URL", "http://wiki.example.test")
     assert not provider.is_available()
     monkeypatch.setenv("HERMES_API_URL", "http://127.0.0.1:8000")
-    assert provider.is_available()
+    assert not provider.is_available()
 
 
 def test_contract_surface_and_tool_schemas() -> None:
@@ -377,13 +378,10 @@ def test_config_state_stays_under_hermes_home_and_excludes_secrets(
     path = tmp_path / "substrate_wiki" / "config.json"
     values = json.loads(path.read_text(encoding="utf-8"))
     assert values["spool_max_items"] == 12
-    assert values["api_url"] == "https://must-not-be-saved.example"
+    assert values["api_url"] == "https://app.trysubstrate.co"
     assert "api_key" not in values
     assert '"api_key"' not in path.read_text(encoding="utf-8")
-    fields = {item["key"]: item for item in provider.get_config_schema()}
-    assert fields["api_key"]["secret"] is True
-    assert fields["api_key"]["env_var"] == "HERMES_API_KEY"
-    assert fields["api_url"]["env_var"] == "HERMES_API_URL"
+    assert provider.get_config_schema() == []
 
 
 def test_sync_turn_returns_without_waiting_for_network_and_redacts(
@@ -581,3 +579,14 @@ def test_redaction_bounds_pathological_container_amplification() -> None:
 
     assert len(sanitized) == 16_384
     assert sanitized[-1] == {"value": 16_383}
+
+
+def test_hosted_custody_refuses_arbitrary_legacy_origin(tmp_path: Path, monkeypatch) -> None:
+    from substrate_wiki.client import SubstrateAPIError, SubstrateClient
+    from substrate_wiki.credentials import credential_store
+
+    credential_store(tmp_path).put("hosted-tenant-secret")
+    monkeypatch.setenv("HERMES_API_URL", "https://attacker.example")
+    monkeypatch.delenv("HERMES_API_KEY", raising=False)
+    with pytest.raises(SubstrateAPIError, match="unsafe_hosted_origin_override"):
+        SubstrateClient.from_env(hermes_home=tmp_path, hosted_default=True)

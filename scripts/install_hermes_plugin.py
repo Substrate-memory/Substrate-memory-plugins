@@ -19,17 +19,19 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 PLUGIN_NAME = "substrate_wiki"
-EXPECTED_VERSION = "1.5.0"
-EXPECTED_HERMES_VERSION = "0.18.2"
+EXPECTED_VERSION = "2.0.0"
+EXPECTED_HERMES_VERSION = "0.20.0"
 LICENSE_FILENAME = "LICENSE"
 REQUIRED_FILES = {
     "README.md",
     "__init__.py",
     "cli.py",
     "client.py",
+    "credentials.py",
     "checkpoint.py",
     "events.py",
     "history.py",
+    "onboarding.py",
     "plugin.yaml",
     "py.typed",
     "redaction.py",
@@ -208,7 +210,7 @@ def install_import_service(
         raise ValueError("the import service can only be installed on Linux")
     from hashlib import sha256
 
-    resolved_env = _resolve_env_path(env_path)
+    resolved_env = _resolve_env_path(env_path) if env_path is not None else None
     home_hash = sha256(os.fspath(hermes_home.resolve()).encode()).hexdigest()[:12]
     unit_name = f"substrate-wiki-import-{home_hash}@.service"
     user_units = Path.home() / ".config" / "systemd" / "user"
@@ -232,7 +234,10 @@ def install_import_service(
             "",
             "[Service]",
             "Type=simple",
-            f"EnvironmentFile={_systemd_quote(resolved_env)}",
+            *(
+                (f"EnvironmentFile={_systemd_quote(resolved_env)}",)
+                if resolved_env is not None else ()
+            ),
             f"ExecStart={_systemd_quote(python)} {_systemd_quote(supervisor)} "
             f"--hermes-home {_systemd_quote(hermes_home)} --job-id %i",
             "Restart=on-failure",
@@ -308,6 +313,27 @@ def install_import_service(
     }
 
 
+
+
+def _verify_installed_hermes() -> str:
+    """Fail before mutation unless the current supported Hermes line is installed."""
+    try:
+        result = subprocess.run(
+            ("hermes", "--version"),
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError("Hermes 0.20.x is required and must be on PATH") from exc
+    match = re.search(r"(?<!\d)(0\.20\.\d+)(?!\d)", result.stdout + " " + result.stderr)
+    if match is None:
+        raise ValueError("installed Hermes is unsupported; expected 0.20.x")
+    return match.group(1)
+
 def _entry_exists(path: Path) -> bool:
     """Return whether a directory entry exists without following dangling links."""
     return path.exists() or path.is_symlink()
@@ -343,8 +369,12 @@ def install(
     expected_sha256: str = "",
     install_service: bool = False,
     env_path: Path | None = None,
+    activate: bool = False,
+    onboard: bool = False,
+    headless: bool = False,
 ) -> dict[str, Any]:
     expected_sha256 = _normalize_expected_sha256(expected_sha256, required=True)
+    hermes_version = _verify_installed_hermes() if activate else None
     verified = verify_archive(archive, expected_sha256)
     # Extract only bytes tied to the verified digest. A downloaded path can be
     # replaced by another local process after verification but before install.
@@ -383,6 +413,7 @@ def install(
         "action": "installed" if installed else "upgraded",
         "target": os.fspath(target),
         "rollback": os.fspath(rollback) if rollback is not None else None,
+        "hermes_version": hermes_version,
     }
     if install_service:
         try:
@@ -390,6 +421,51 @@ def install(
         except Exception:
             _restore_plugin_after_failed_install(plugins, target, rollback)
             raise
+    if activate:
+        command = ("hermes", "config", "set", "memory.provider", PLUGIN_NAME)
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+        except Exception:
+            _restore_plugin_after_failed_install(plugins, target, rollback)
+            raise
+        result["memory_provider"] = PLUGIN_NAME
+    if onboard:
+        code = (
+            "import sys; from pathlib import Path; "
+            f"sys.path.insert(0, {os.fspath(target.parent)!r}); "
+            "from substrate_wiki.onboarding import main; "
+            "raise SystemExit(main(sys.argv[1:]))"
+        )
+        command = [
+            sys.executable, "-c", code, "--hermes-home", os.fspath(hermes_home),
+            "--mode", "device" if headless else "auto", "--wait", "--history", "ask", "--json",
+        ]
+        completed = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=None,
+            text=True,
+            timeout=930,
+        )
+        try:
+            onboarding = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            onboarding = {"complete": False, "error_class": "OnboardingLaunchError"}
+        if completed.returncode != 0:
+            onboarding = {
+                "complete": False,
+                "error_class": str(onboarding.get("error_class") or "OnboardingLaunchError"),
+            }
+        result["onboarding"] = onboarding
+        result["onboarding_pending"] = not bool(onboarding.get("complete"))
     return result
 
 
@@ -404,6 +480,12 @@ def main() -> int:
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--install-import-service", action="store_true")
     parser.add_argument("--env-path", type=Path)
+    parser.add_argument("--no-activate", action="store_true",
+                        help="Do not select substrate_wiki as memory.provider")
+    parser.add_argument("--no-onboard", action="store_true",
+                        help="Install only; first activation will resume onboarding")
+    parser.add_argument("--headless", action="store_true",
+                        help="Use the device-code flow without opening a browser")
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -416,6 +498,9 @@ def main() -> int:
             expected_sha256=args.sha256,
             install_service=args.install_import_service,
             env_path=args.env_path,
+            activate=not args.no_activate,
+            onboard=not args.no_onboard,
+            headless=args.headless,
         )
     except (
         OSError,

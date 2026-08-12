@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0 — pending hosted-onboarding candidate
+
+- Targets Hermes 0.20.x user-plugin discovery and native setup hooks.
+- Installs and activates under `$HERMES_HOME/plugins/substrate_wiki`.
+- Adds hosted RFC 8628 onboarding, tenant credential custody, revocation repair, and fixed-origin enforcement.
+- Makes prior-history upload optional while keeping future capture automatic.
+- Adds durable cross-platform history supervision, stable replay IDs, resumable checkpoints, and content-free progress.
+
 ## 1.5.0 — pending standalone source candidate
 
 - When released and cut over with the companion Substrate-v2 change, establishes this public repository as the independently built plugin source.

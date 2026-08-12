@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -94,7 +95,7 @@ def _import_history(args: argparse.Namespace, home: Path) -> dict[str, Any]:
             "quarantined": inventory.quarantined,
             "dry_run": True,
         }
-    client = SubstrateClient.from_env(fallback_url=_fallback_url(home), timeout=30.0)
+    client = SubstrateClient.from_env(fallback_url=_fallback_url(home), timeout=30.0, hermes_home=home, hosted_default=True)
     importer = HermesHistoryImporter(
         hermes_home=home,
         client=client,
@@ -146,11 +147,61 @@ def _cancel(args: argparse.Namespace, home: Path) -> dict[str, Any]:
     return result
 
 
+def _onboarding(args: argparse.Namespace, home: Path) -> dict[str, Any]:
+    from .onboarding import OnboardingManager
+
+    manager = OnboardingManager(home)
+    result = manager.begin(mode=args.mode, open_browser=not args.no_browser)
+    if result.get("phase") == "authorization_pending":
+        print(
+            f"Open {result.get('verification_uri')} and enter {result.get('user_code')}",
+            file=sys.stderr,
+            flush=True,
+        )
+    deadline = time.monotonic() + max(0.0, args.timeout)
+    while args.wait and result.get("phase") == "authorization_pending" and time.monotonic() < deadline:
+        time.sleep(5)
+        result = manager.advance()
+    if result.get("phase") == "awaiting_history_consent":
+        decision = args.history
+        if decision == "ask" and sys.stdin.isatty():
+            print(
+                "Upload all eligible past Hermes conversations to Substrate? [y/N]: ",
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
+            decision = "approve" if sys.stdin.readline().strip().casefold() in {"y", "yes"} else "decline"
+        if decision in {"approve", "decline"}:
+            result = manager.consent_history(decision == "approve")
+    return result
+
+
+def _onboarding_status(_args: argparse.Namespace, home: Path) -> dict[str, Any]:
+    from .onboarding import OnboardingManager
+
+    return OnboardingManager(home).status()
+
+
+def _onboarding_repair(args: argparse.Namespace, home: Path) -> dict[str, Any]:
+    from .onboarding import OnboardingManager
+
+    if not args.yes:
+        raise ValueError("--yes is required")
+    return OnboardingManager(home).repair(wait=args.wait)
+
+
 def substrate_command(args: argparse.Namespace) -> None:
     home = _hermes_home().resolve()
     command = getattr(args, "substrate_command", None)
     try:
-        if command == "import-history":
+        if command == "onboard":
+            result = _onboarding(args, home)
+        elif command == "onboarding-status":
+            result = _onboarding_status(args, home)
+        elif command == "onboarding-repair":
+            result = _onboarding_repair(args, home)
+        elif command == "import-history":
             result = _import_history(args, home)
         elif command == "import-status":
             result = _status(args, home)
@@ -162,7 +213,7 @@ def substrate_command(args: argparse.Namespace) -> None:
             raise ValueError("unknown command")
     except Exception as exc:  # noqa: BLE001 - content-free CLI failure contract
         result = {"error_class": type(exc).__name__, "complete": False}
-        print(json.dumps(result, sort_keys=True) if args.json else f"Import failed: {type(exc).__name__}")
+        print(json.dumps(result, sort_keys=True) if args.json else f"Substrate command failed: {type(exc).__name__}")
         raise SystemExit(1) from None
     if args.json:
         print(json.dumps(result, sort_keys=True))
@@ -173,6 +224,30 @@ def substrate_command(args: argparse.Namespace) -> None:
 
 def register_cli(subparser: argparse.ArgumentParser) -> None:
     commands = subparser.add_subparsers(dest="substrate_command")
+
+    onboard = commands.add_parser("onboard", help="Sign in to the fixed hosted service")
+    onboard.add_argument("--mode", choices=("auto", "browser", "device"), default="auto")
+    onboard.add_argument("--wait", action="store_true")
+    onboard.add_argument("--timeout", type=float, default=900.0)
+    onboard.add_argument("--no-browser", action="store_true")
+    onboard.add_argument(
+        "--history", choices=("ask", "approve", "decline"), default="ask",
+        help="Historical-conversation consent; future capture remains enabled",
+    )
+    onboard.add_argument("--json", action="store_true")
+
+    onboarding_status = commands.add_parser(
+        "onboarding-status", help="Show redacted connection and automatic-import progress"
+    )
+    onboarding_status.add_argument("--json", action="store_true")
+
+    onboarding_repair = commands.add_parser(
+        "onboarding-repair", help="Repair authentication or resume the durable import"
+    )
+    onboarding_repair.add_argument("--yes", action="store_true")
+    onboarding_repair.add_argument("--wait", action="store_true")
+    onboarding_repair.add_argument("--json", action="store_true")
+
     history = commands.add_parser("import-history", help="Start or attach to durable history replay")
     history.add_argument("--yes", action="store_true")
     history.add_argument("--wait", action="store_true")

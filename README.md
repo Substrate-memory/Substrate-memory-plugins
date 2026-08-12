@@ -1,8 +1,8 @@
 # Hermes Substrate Wiki
 
-`substrate_wiki` is the official Hermes integration for Substrate: **the memory that decides what your agents are allowed to do**. The pending `v1.5.0` candidate connects one Hermes profile to a Substrate server through a bounded, cited memory interface and durable, redacted history capture.
+`substrate_wiki` is the official Hermes integration for Substrate: **the memory that decides what your agents are allowed to do**. The pending `v2.0.0` candidate connects one Hermes profile to hosted Substrate at `https://app.trysubstrate.co` through a bounded, cited memory interface and durable, redacted history capture.
 
-The broader product uses memory to ground deterministic agent permissions. **Version 1.5.0 is the memory-provider integration only:** it does not authorize actions, include the local runtime or policy compiler, or support a no-server mode. Those gaps are explicit rather than silently presented as hosted-only features.
+The broader product uses memory to ground deterministic agent permissions. **Version 2.0.0 is the memory-provider integration only:** it does not authorize actions, include the local runtime or policy compiler, or support a no-server mode. Those gaps are explicit rather than silently presented as hosted-only features.
 
 **This repository is the publication-approved source candidate for the plugin.** It becomes
 the sole editable source only after the protected default branch, first immutable release,
@@ -13,47 +13,37 @@ and HTTP contract; its embedded plugin copy remains frozen during that transitio
 
 | Surface | Supported |
 |---|---|
-| Plugin | `substrate_wiki` 1.5.0 |
-| Hermes host | Targets 0.18.2; standalone contract suite verified |
+| Plugin | `substrate_wiki` 2.0.0 |
+| Hermes host | Targets 0.20.x; standalone contract suite verified |
 | Server contract | `stream-v2`, `entity-wiki-v1`, `entity-quality-v2` |
 | Runtime dependencies | Python standard library only |
 | License | MIT |
 
-Hermes 0.19.0 is unsupported. The 0.18.2 interface is contract-tested; full host-lifecycle certification is still pending. There is no silent auto-update or configuration rewrite.
+Hermes 0.20.x provider discovery and setup hooks are targeted. The hosted origin is fixed; there is no local/self-hosted discovery path.
 
 ## Release availability
 
-`v1.5.0` is not published yet. Do not treat candidate archives or CI artifacts as an
+`v2.0.0` is not published yet. Do not treat candidate archives or CI artifacts as an
 installable release. After the immutable release exists, download its three assets from
-[release v1.5.0](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v1.5.0),
+[release v2.0.0](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v2.0.0),
 then verify and install using the SHA-256 values published with that release:
 
 ```bash
 curl --fail --location --remote-name \
-  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v1.5.0/substrate_wiki.zip
+  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0/substrate_wiki.zip
 curl --fail --location --remote-name \
-  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v1.5.0/install_hermes_plugin.py
+  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0/install_hermes_plugin.py
 curl --fail --location --remote-name \
-  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v1.5.0/SHA256SUMS
+  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0/SHA256SUMS
 sha256sum -c SHA256SUMS
 
 python3 install_hermes_plugin.py \
   --archive substrate_wiki.zip \
   --sha256 "$(sha256sum substrate_wiki.zip | cut -d ' ' -f1)" \
-  --install-import-service \
   --yes --json
 ```
 
-The installer validates the archive checksum, repository provenance, declared target-Hermes metadata, and every packaged source digest. It does not probe the installed Hermes executable; compatibility with Hermes `0.18.2` is interface-contract tested, while full host-lifecycle certification remains pending. Installation upgrades atomically and preserves a rollback directory.
-
-Configure the Hermes process environment—not `plugin.yaml` or `config.json`:
-
-```text
-HERMES_API_URL=https://your-substrate-server.example
-HERMES_API_KEY=your-profile-scoped-bearer-key
-```
-
-Then select `substrate_wiki` as the Hermes memory provider. See [configuration and operation](docs/operation.md).
+The installer validates the archive checksum, provenance, target-Hermes metadata, and packaged source digests, installs beneath `$HERMES_HOME/plugins/substrate_wiki`, activates the provider, and starts hosted device onboarding. Desktop browsers open automatically; headless users receive a hosted URL and one-time code. Tenant credentials are stored in native credential custody (with an owner-private fallback), never in ordinary configuration or logs. Historical upload is the sole consent choice; declining it leaves future capture enabled. See [configuration and operation](docs/operation.md).
 
 ## What it does
 
@@ -76,7 +66,7 @@ Read [SECURITY.md](SECURITY.md), [the threat model](docs/threat-model.md), [the 
 
 ## Open and paid boundary
 
-The open side is permissively licensed and includes the Hermes plugin/client, local runtime, memory extraction and entity model, credential containment, privacy deletion, policy compiler, and a single-user local self-hosted path that remains free forever. Some of those components are not built yet; [BOUNDARY.md](BOUNDARY.md) distinguishes the permanent commitment from the current `v1.5.0` implementation.
+The open side is permissively licensed and includes the Hermes plugin/client, memory extraction and entity model, credential containment, privacy deletion, and policy compiler. This Hermes integration itself is hosted-only. [BOUNDARY.md](BOUNDARY.md) distinguishes the permanent commitment from the current `v2.0.0` implementation.
 
 The paid hosted tier covers hosted brokerage, multi-user operation, cross-organizational graph services, audit/attestation, and insurance-backed decisions. Its meter is per authorized action, never seats. This repository does not contain or license those held services.
 
@@ -98,7 +88,7 @@ HERMES_PLUGIN_SOURCE_COMMIT="$(git rev-parse HEAD)" python scripts/build_plugin.
 python scripts/build_plugin.py --check
 ```
 
-Version `1.4.1` remains an imported immutable release with its original Substrate-v2 provenance. Repository-native releases begin at `1.5.0` and use standalone provenance.
+Version `1.4.1` remains an imported immutable release with its original Substrate-v2 provenance. Repository-native releases begin at `2.0.0` and use standalone provenance.
 
 ## Repository map
 

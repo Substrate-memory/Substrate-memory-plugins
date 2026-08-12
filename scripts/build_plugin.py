@@ -23,7 +23,7 @@ LICENSE_PATH = REPOSITORY_ROOT / "LICENSE"
 RELEASES_PATH = REPOSITORY_ROOT / "release-assets"
 PROVENANCE_FILENAME = "PROVENANCE.json"
 LICENSE_FILENAME = "LICENSE"
-TARGET_HERMES_VERSION = "0.18.2"
+TARGET_HERMES_VERSION = "0.20.0"
 BUILD_FORMAT_VERSION = 3
 SOURCE_COMMIT_ENVIRONMENT_VARIABLE = "HERMES_PLUGIN_SOURCE_COMMIT"
 PLUGIN_REDACTION_FILENAME = "redaction.py"
@@ -34,9 +34,11 @@ REQUIRED_FILES = (
     "__init__.py",
     "cli.py",
     "client.py",
+    "credentials.py",
     "checkpoint.py",
     "events.py",
     "history.py",
+    "onboarding.py",
     "plugin.yaml",
     "py.typed",
     "redaction.py",
