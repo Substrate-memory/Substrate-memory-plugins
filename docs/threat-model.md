@@ -2,26 +2,28 @@
 
 | Threat | Primary controls |
 |---|---|
-| Credential disclosure | Environment-only secrets; redaction before persistence/network; content-free errors; release scanning |
-| Private-history disclosure | Explicit capture/replay; configured-server trust decision; no history in logs or receipts |
-| Local spool exposure | Profile-rooted owner-private files; bounded bytes/age; explicit deletion |
-| Server impersonation or redirect | Configured HTTPS origin; redirect rejection; capability/provider validation |
-| Replay duplication or loss | Deterministic IDs; idempotency keys; durable acknowledgements; exact resume |
-| Resource exhaustion | Event/response/spool bounds; backpressure; capped retries; importer memory tests |
-| Build or release tampering | Release-clean allowlist; deterministic ZIP; source commit and per-file hashes; immutable checksums |
-| Cross-profile leakage | State rooted in active Hermes home; no shared writable profile state |
-| Prompt/content injection in recalled memory | Bounded cited memory cards treated as untrusted context; no tool authority granted by memory |
+| Credential disclosure | Native/profile-private custody; no config/log/argument secrets; pre-persistence redaction |
+| Origin substitution | Fixed hosted HTTPS origin; unsafe environment override rejection; redirect rejection |
+| Private-history disclosure | Explicit historical consent; source eligibility filters; redaction before spool/network |
+| Local spool exposure | Profile-rooted owner-private files; bounded bytes; explicit deletion |
+| Tenant crossover | Tenant-scoped revocable server keys; live account/tenant checks; tenant-bound API resolution |
+| Replay duplication or loss | Stable batch/event IDs; idempotency keys; durable acknowledgements and exact resume |
+| Resource exhaustion | Bounded bodies/events/responses/spool; poll throttling; capped retry backoff |
+| Build or release tampering | Allowlisted deterministic ZIP; commit and file hashes; immutable checksums |
+| Cross-profile leakage | Profile-derived credential slots and state; no shared writable profile state |
+| PID reuse during import | Content-free runtime nonce and process-identity verification |
+| Prompt injection in recall | Bounded cited memory cards treated as untrusted context; no authority from memory |
 
 ## Trust assumptions
 
-- The operator chooses and authenticates a trusted Substrate server.
-- Hermes 0.18.2 invokes the documented provider lifecycle correctly.
+- Hosted account authentication and tenant isolation are operated at `app.trysubstrate.co`.
+- Hermes 0.20.x invokes current user-plugin discovery and provider lifecycle hooks.
 - The operating-system user and `$HERMES_HOME` permissions protect local state.
-- Published checksums and GitHub release custody are verified before installation.
+- Published checksums and release custody are verified before installation.
 
 ## Explicit limitations
 
-- Pattern-based redaction cannot prove arbitrary sensitive prose is absent.
-- The plugin cannot make a malicious configured server safe.
-- Memory content does not grant send, action, or authorization authority by itself.
-- Hermes versions outside the contract-tested matrix may change lifecycle behavior; full host-lifecycle certification is pending even for 0.18.2.
+- Pattern redaction cannot prove arbitrary sensitive prose is absent.
+- Compromise of the hosted service is outside the plugin's local security boundary.
+- Memory content does not grant send, action, or authorization authority.
+- Portable workers are restarted when Hermes next initializes the provider; systemd units can restart independently.

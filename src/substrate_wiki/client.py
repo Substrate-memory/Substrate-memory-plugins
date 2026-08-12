@@ -26,8 +26,8 @@ _MAX_CITATION_ITEMS = 50
 _MAX_SHORT_FIELD_CHARS = 2048
 _MAX_TEXT_FIELD_CHARS = 65536
 _MAX_MEMORY_CARD_CHARS = 8192
-_USER_AGENT = "substrate_wiki-hermes-plugin/1.5.0"
-_PLUGIN_VERSION = (1, 5, 0)
+_USER_AGENT = "substrate_wiki-hermes-plugin/2.0.0"
+_PLUGIN_VERSION = (2, 0, 0)
 
 
 class SubstrateAPIError(RuntimeError):
@@ -60,6 +60,50 @@ def _strict_semver(value: Any) -> tuple[int, int, int] | None:
     if any(part > 1_000_000 for part in version):
         return None
     return version  # type: ignore[return-value]
+
+
+def validate_capabilities(
+    capabilities: dict[str, Any], *, require_replay: bool = True, require_entity: bool = True
+) -> None:
+    """Validate the hosted connection without admitting partial/legacy contracts."""
+    if capabilities.get("provider") != "substrate_wiki":
+        raise SubstrateAPIError("server_upgrade_required")
+    if require_replay:
+        replay = capabilities.get("history_replay")
+        minimum = _strict_semver(replay.get("min_plugin_version")) if isinstance(replay, dict) else None
+        valid_replay = (
+            isinstance(replay, dict)
+            and 2 in capabilities.get("capture_schema_versions", [])
+            and replay.get("protocol") == "stream-v2"
+            and minimum is not None
+            and _PLUGIN_VERSION >= minimum
+            and replay.get("content_free_completion") is True
+            and replay.get("incremental_windows") is True
+            and int(replay.get("status_version", 0)) == 2
+            and int(capabilities.get("max_event_bytes", 0)) == 262_144
+        )
+        if not valid_replay:
+            raise SubstrateAPIError("server_upgrade_required")
+    if require_entity:
+        entity = capabilities.get("entity_memory")
+        quality = capabilities.get("entity_quality")
+        entity_min = _strict_semver(entity.get("min_plugin_version")) if isinstance(entity, dict) else None
+        quality_min = _strict_semver(quality.get("min_plugin_version")) if isinstance(quality, dict) else None
+        valid_entity = (
+            isinstance(entity, dict) and isinstance(quality, dict)
+            and entity.get("protocol") == "entity-wiki-v1"
+            and entity_min is not None and _PLUGIN_VERSION >= entity_min
+            and entity.get("search_endpoint") == "/api/v1/hermes/memory/search"
+            and entity.get("canonical_wiki_pages") is True
+            and entity.get("entity_page_type") == "entity"
+            and quality.get("protocol") == "entity-quality-v2"
+            and quality_min is not None and _PLUGIN_VERSION >= quality_min
+            and quality.get("memory_card") is True
+            and quality.get("quality_version") == 2
+            and quality.get("canonical_redirects") is True
+        )
+        if not valid_entity:
+            raise SubstrateAPIError("server_upgrade_required")
 
 
 class _NoRedirectHandler(HTTPRedirectHandler):
@@ -155,12 +199,29 @@ class SubstrateClient:
             return False
 
     @classmethod
-    def from_env(cls, *, timeout: float = 10.0, fallback_url: str = "") -> SubstrateClient:
-        return cls(
-            os.environ.get("HERMES_API_URL", "") or fallback_url,
-            os.environ.get("HERMES_API_KEY", ""),
-            timeout,
-        )
+    def from_env(
+        cls,
+        *,
+        timeout: float = 10.0,
+        fallback_url: str = "",
+        hermes_home: Any = None,
+        hosted_default: bool = False,
+    ) -> SubstrateClient:
+        """Resolve explicit legacy env configuration, then hosted onboarding custody."""
+        hosted_origin = "https://app.trysubstrate.co"
+        base_url = os.environ.get("HERMES_API_URL", "") or fallback_url
+        api_key = os.environ.get("HERMES_API_KEY", "")
+        if hosted_default:
+            if base_url and base_url.rstrip("/") != hosted_origin:
+                raise SubstrateAPIError("unsafe_hosted_origin_override")
+            base_url = hosted_origin
+        if not api_key and hermes_home is not None and base_url.rstrip("/") == hosted_origin:
+            from pathlib import Path
+
+            from .credentials import credential_store
+
+            api_key = credential_store(Path(hermes_home)).get()
+        return cls(base_url, api_key, timeout)
 
     def request(
         self,

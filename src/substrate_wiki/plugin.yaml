@@ -1,5 +1,5 @@
 name: substrate_wiki
-version: 1.5.0
+version: 2.0.0
 description: "Unified entity-centric Substrate Markdown wiki memory with durable asynchronous capture."
 hooks:
   - on_pre_compress

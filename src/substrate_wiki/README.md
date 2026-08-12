@@ -1,108 +1,68 @@
 # Substrate Wiki memory provider
 
-This external memory plugin connects Hermes Agent v0.18.2 to one Substrate cited Markdown wiki. Published conversation memory is materialized as canonical entity wiki pages; there is no separate representation search store. Its manifest identity is `substrate_wiki`, matching the Python package and installation directory.
+`substrate_wiki` connects Hermes Agent 0.20.x to the hosted Substrate service at
+`https://app.trysubstrate.co`. It provides cited recall, automatic future capture, and an
+optional, resumable import of eligible prior conversations and explicitly saved memories.
 
-## Installation for Hermes v0.18.2
+## Install and connect
 
-Hermes v0.18.2 discovers plugins directly beneath `$HERMES_HOME/plugins`. Install the complete package at exactly:
-
-```text
-$HERMES_HOME/plugins/substrate_wiki/
-```
-
-The installed directory contains the provider, streaming adapters, content-free checkpoint store, managed worker, service supervisor, manifest, and this README. Archive installations also include generated `PROVENANCE.json` release metadata. Do not add another `substrate_wiki` directory level, and do not install it under `plugins/memory`.
-
-Use the release installer rather than replacing this directory manually:
-
-After downloading the authenticated release archive and standalone installer into a
-private temporary directory, run:
+Use the verified release installer. It installs beneath
+`$HERMES_HOME/plugins/substrate_wiki`, activates `memory.provider: substrate_wiki`, and
+starts browser/device onboarding automatically:
 
 ```bash
 python3 install_hermes_plugin.py \
   --archive substrate_wiki.zip \
   --sha256 <published-sha256> \
-  --install-import-service \
   --yes --json
 ```
 
-The installer validates the archive checksum, provenance, declared target Hermes version, and every packaged file hash. Confirm separately that the running Hermes version is exactly 0.18.2 before installation. It upgrades the existing direct plugin atomically and retains a rollback copy; if the plugin is unexpectedly absent it installs the same package. Hermes discovers the module-level `register(ctx)` function and `plugin.yaml` metadata. If Hermes presents a provider selector, choose `substrate_wiki`.
+Hermes 0.20.x discovers user plugins directly beneath `$HERMES_HOME/plugins`; do not add
+another directory level or install under `plugins/memory`. The plugin has no third-party
+runtime dependencies.
 
-When upgrading while a durable import is active, first record its content-free `job_id` and `batch_id` with `import-status`. Stop the exact `substrate-wiki-import-<home-hash>@<job-id>.service` unit and wait until it is inactive; SIGTERM makes the worker pause after the current acknowledgement is durably checkpointed. Do not use `import-cancel`, which changes job state, and do not run a fresh `import-history` after the upgrade. Install v1.4, then continue exactly the recorded job:
+On a desktop the verification page opens automatically. In a headless environment the
+installer prints the hosted URL and one-time user code. Sign in with the hosted magic-link
+flow and approve the device. The resulting tenant-scoped, revocable credential is stored in
+the OS credential store when available, with an owner-private profile file as the fallback.
+It is never written to `plugin.yaml`, `config.json`, command arguments, or logs.
+
+The hosted origin is fixed. `HERMES_API_URL` and `HERMES_API_KEY` are not normal setup
+options. Legacy shared bearer configuration exists only on the server as a temporary
+migration path.
+
+## History consent
+
+After connection, Substrate asks whether to upload eligible history. This is the only
+optional step. Declining history upload leaves future capture and recall enabled. Approval
+starts exactly one durable profile-scoped job. Its content-free status reports discovered,
+uploaded, processed, duplicate, retry, and error counts; disconnects and restarts resume the
+same checkpoint and stable batch/event IDs.
+
+Eligible history includes direct/one-to-one conversations and explicit saved memories.
+Group chats, cron/webhook sessions, unrelated files, hidden reasoning, secrets, and binary
+bodies are excluded. Content is bounded and redacted before local spooling or network
+transfer.
+
+Management commands include:
 
 ```bash
-hermes substrate_wiki import-resume --job-id <same-job-id> --yes --wait --json
-```
-
-Stopping this separate import unit does not stop or restart the Hermes gateway.
-
-Version 1.5.0 keeps the OOM-safe v1.2 replay protocol and the same v2 durable checkpoint. It targets Hermes 0.18.2 exactly and adds no protocol, event-envelope, checkpoint, service-unit, or server-capability requirement beyond v1.4.0. Automatic recall requires both the server's backward-compatible `entity-wiki-v1` surface and its `entity-quality-v2` canonical-quality capability, and consumes only bounded `memory_card` results. It does not create a second import job, retransmit acknowledged history, install Honcho, or use another memory provider:
-
-```bash
-hermes substrate_wiki import-history --yes --wait --json
-```
-
-The command creates or attaches to the existing durable job, starts the profile-scoped import service, and monitors it when `--wait` is present. Disconnecting the monitor does not stop the worker. The worker streams the active profile's canonical `state.db` through read-only cursors, checkpoints every acknowledged event, resumes after crashes or reboots, and sends a content-free completion boundary instead of duplicating each transcript. It refuses to run unless Azure advertises `stream-v2`; there is no unsafe legacy fallback. No gateway restart is required.
-
-The v1.5.0 worker handles a systemd stop as a graceful pause: it finishes and checkpoints the current acknowledgement before exiting, without cancelling the job or changing its batch ID. Starting the same unit or using `import-resume` continues that checkpoint. Deterministic server deduplication remains the safety net if an older worker is interrupted during the one-time upgrade.
-
-Content-free management commands are:
-
-```bash
+hermes substrate_wiki onboarding-status --json
 hermes substrate_wiki import-status --json
 hermes substrate_wiki import-resume --yes --wait --json
 hermes substrate_wiki import-cancel --job-id <job-id> --yes --json
 ```
 
-## Configuration
+## Operation and privacy
 
-Set these variables in the environment of the Hermes process before it starts:
+Live completed turns and explicit memory writes are delivered asynchronously. Failed
+transient deliveries stay in a bounded owner-private spool and retry with capped backoff.
+Authentication failures trigger automatic reconnect onboarding rather than exposing or
+logging credentials. Status, receipts, checkpoints, and diagnostics are content-free.
 
-- `HERMES_API_URL`: Substrate service base URL, without `/api/v1`.
-- `HERMES_API_KEY`: bearer key accepted by the service's Hermes endpoints.
+Visible prompts, assistant output, tool calls, and tool results can be sent after redaction.
+Redaction is defense in depth, not proof that arbitrary sensitive prose is absent. Raw capture
+events declare a 90-day retention policy; curated wiki pages have their own lifecycle.
 
-Keep these variables in the environment source already used to launch Hermes. Do not install Honcho or another memory provider, and do not put the API key in `plugin.yaml` or the plugin's `config.json`.
-
-The key remains environment-backed and is never copied to the provider's JSON state. Provider state is created only beneath the `hermes_home` supplied by Hermes, in `substrate_wiki/`. Optional non-secret tuning in `config.json` supports:
-
-- `spool_max_items`: maximum number of locally spooled events.
-- `spool_max_bytes`: maximum total size of the local spool.
-- `prefetch_ttl_seconds`: lifetime of prefetched search results. Hermes receives an exact-query hit when available, otherwise the latest cited result warmed for the same session is used on the next turn.
-
-## Tools
-
-- `wiki_search`: lexical search over maintained pages. Results include a canonical repository-relative `path` and a legacy `slug`.
-- `wiki_read`: read one page using the returned repository-relative path (for example `notes/hermes.md`); legacy slugs such as `notes/hermes` remain accepted.
-- `wiki_query`: request a cited synthesis, optionally saved by the service.
-- `wiki_ingest`: submit text or a public URL to the service's validated ingestion workflow.
-- `wiki_job_status`: inspect an asynchronous job.
-
-No arbitrary filesystem-write tool is exposed.
-
-Automatic memory prefetch requires `entity-wiki-v1` plus `entity-quality-v2` and searches only published canonical entity pages through `/api/v1/hermes/memory/search`. The plugin admits the server's bounded memory card rather than full page bodies or provenance ledgers. The legacy representation-context API is only a server compatibility alias over those same pages. Explicit wiki tools continue to access all permitted entity, topic, source, and synthesis pages. Neither path can search raw events, transcript chunks, private stubs, temporary summaries, or unpublished claims.
-
-## Session data and privacy
-
-The plugin asynchronously sends bounded completed-turn chunks, including optional OpenAI-style `messages` supplied by Hermes. Those messages can contain prompts, assistant output, tool calls, and tool results. Session completion is content-free in v1.2; pre-compression and built-in memory-write capture remain supported. Treat the configured Substrate service as a recipient of visible content and review its access and retention controls before enabling the plugin.
-
-Authorization-like fields, configured environment secret values, common tokens, passwords, and private keys are redacted before an event is queued, persisted, or transmitted. Redaction is a defense in depth measure, not a guarantee that arbitrary sensitive prose will be detected. Do not place secrets in prompts or tool output when avoidable.
-
-Captured and failed deliveries are written to a bounded durable spool beneath `hermes_home/substrate_wiki/spool` and replayed oldest-first with an idempotency key. Transient transport and server failures use capped exponential backoff with jitter; rate limits honor bounded `Retry-After` hints, and authentication failures open a longer retry delay rather than hammering the endpoint. A successful delivery resets the backoff. Protect `$HERMES_HOME` with user-only filesystem permissions and include the spool in local data-handling and deletion procedures. Events declare a 90-day raw-event retention policy; the Substrate service enforces deletion. Curated wiki pages are not automatically deleted.
-
-Events declare a 90-day raw-event retention policy. The configured Substrate server owns enforcement, publication, review, and durable-page retention; verify that server's policy before enabling capture.
-
-`sync_turn` durably admits the redacted event before waking the asynchronous sender and does not wait for network I/O. Shutdown waits at most five seconds, interrupts retry cooldowns, and leaves unfinished events durable for the next initialization.
-
-## Rollback
-
-The installer reports the exact `substrate_wiki.rollback-<timestamp>` directory and prior service-unit rollback it created. Rolling back plugin code does not delete queued events, content-free checkpoints, or configuration under `$HERMES_HOME/substrate_wiki`. Never resume history import with a rolled-back v1.1 plugin because that importer is OOM-unsafe.
-
-## Building and verifying the release archive
-
-From the repository root:
-
-```bash
-python scripts/build_plugin.py
-python scripts/build_plugin.py --check
-```
-
-The builder accepts only the documented release files, excludes generated Python bytecode, rejects unknown release files, and writes a deterministic `dist/substrate_wiki.zip`. It generates `PROVENANCE.json` with the provider and version identities, target Hermes version, build-format version, source commit, and a SHA-256 digest for every packaged source file. Freeze and commit the plugin source first, then set `HERMES_PLUGIN_SOURCE_COMMIT` to that full 40-character commit SHA for the release build. The release command deliberately refuses the `unknown` marker; only direct test helpers may use it for local canonical-byte tests. Working-tree dirty state is deliberately not embedded, while the builder proves that every packaged plugin byte matches the pinned commit. The check command takes its expected source commit from the archive's validated provenance rather than the environment, so a SHA-stamped release verifies deterministically without release environment variables.
+The provider exposes bounded cited wiki search/read/query/ingest/job tools and automatic
+memory-card prefetch. It exposes no arbitrary filesystem-write tool.

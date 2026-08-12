@@ -1,4 +1,4 @@
-"""Substrate Wiki external memory provider for Hermes Agent v0.18.2."""
+"""Substrate Wiki external memory provider for Hermes Agent v0.20.0."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import sys
 import queue
 import random
 import re
@@ -84,7 +85,7 @@ _CONTEXT_SCOPE_FIELDS = (
 )
 _NON_PRIMARY_ROLES = {"cron", "subagent", "child", "secondary", "worker", "flush", "gateway"}
 
-# Hermes v0.18.2 consumes direct function schemas, not OpenAI's {type,function} envelope.
+# Hermes v0.20.0 consumes direct function schemas, not OpenAI's {type,function} envelope.
 _TOOL_SCHEMAS = [
     {
         "name": "wiki_search",
@@ -233,6 +234,7 @@ class SubstrateWikiProvider(MemoryProvider):
         self._wake = threading.Event()
         self._worker: threading.Thread | None = None
         self._prefetch_worker: threading.Thread | None = None
+        self._onboarding_worker: threading.Thread | None = None
         self._prefetch_cache: dict[str, tuple[float, str]] = {}
         self._latest_prefetch_cache: OrderedDict[str, tuple[float, str]] = OrderedDict()
         self._cache_lock = threading.Lock()
@@ -263,24 +265,36 @@ class SubstrateWikiProvider(MemoryProvider):
         self._last_delivery_category = "none"
         self._last_prefetch_category = "none"
         self._settings: dict[str, Any] = {
-            "api_url": "",
+            "api_url": "https://app.trysubstrate.co",
             "spool_max_items": 1000,
             "spool_max_bytes": 10 * 1024 * 1024,
             "prefetch_ttl_seconds": 60,
         }
 
     def is_available(self) -> bool:
-        """Check local configuration only; activation never performs network I/O."""
-        api_url = os.environ.get("HERMES_API_URL", "") or str(self._settings.get("api_url", ""))
-        if not api_url:
-            hermes_home = os.environ.get("HERMES_HOME", "")
-            if hermes_home:
-                api_url = self._read_persisted_api_url(Path(hermes_home) / _PROVIDER_ID)
-        return bool(
-            api_url
-            and os.environ.get("HERMES_API_KEY")
-            and SubstrateClient.is_allowed_base_url(api_url)
-        )
+        """The hosted provider activates before sign-in; still reject unsafe overrides."""
+        override = os.environ.get("HERMES_API_URL", "")
+        return not override or override.rstrip("/") == "https://app.trysubstrate.co"
+
+    def post_setup(self, hermes_home: str, config: dict[str, Any]) -> None:
+        """Hermes v0.20 setup hook: activate, sign in, then ask history consent."""
+        from .onboarding import main as onboarding_main
+
+        memory = config.setdefault("memory", {})
+        if not isinstance(memory, dict):
+            memory = {}
+            config["memory"] = memory
+        memory["provider"] = _PROVIDER_ID
+        try:
+            from hermes_cli.config import save_config
+
+            save_config(config)
+        except ImportError:
+            pass
+        mode = "auto" if sys.stdin.isatty() else "device"
+        onboarding_main([
+            "--hermes-home", hermes_home, "--mode", mode, "--wait", "--history", "ask"
+        ])
 
     def initialize(self, session_id: str, **kwargs: Any) -> None:
         hermes_home = kwargs.get("hermes_home")
@@ -307,8 +321,13 @@ class SubstrateWikiProvider(MemoryProvider):
             if value:
                 self._scope[field] = value
         self._load_settings()
-        api_url = os.environ.get("HERMES_API_URL", "") or str(self._settings.get("api_url", ""))
-        self._client = SubstrateClient.from_env(fallback_url=api_url)
+        # Hosted onboarding is pinned; no local discovery/start or arbitrary origin.
+        self._settings["api_url"] = "https://app.trysubstrate.co"
+        self._client = SubstrateClient.from_env(
+            fallback_url="https://app.trysubstrate.co",
+            hermes_home=Path(hermes_home),
+            hosted_default=True,
+        )
         self._settings["spool_max_bytes"] = max(
             _MIN_SPOOL_BYTES, int(self._settings["spool_max_bytes"])
         )
@@ -317,7 +336,12 @@ class SubstrateWikiProvider(MemoryProvider):
             max_items=int(self._settings["spool_max_items"]),
             max_bytes=int(self._settings["spool_max_bytes"]),
         )
-        self._secrets = configured_secret_values()
+        client_key = str(getattr(self._client, "api_key", "") or "")
+        self._secrets = (
+            tuple(dict.fromkeys((*configured_secret_values(), client_key)))
+            if client_key
+            else configured_secret_values()
+        )
         self._event_builder = CaptureEventBuilder(self._scope, secrets=self._secrets)
         self._stop.clear()
         self._wake.clear()
@@ -329,6 +353,17 @@ class SubstrateWikiProvider(MemoryProvider):
         )
         self._worker.start()
         self._prefetch_worker.start()
+        if self._initialized_primary:
+            self._onboarding_worker = threading.Thread(
+                target=(self._repair_onboarding if client_key else self._begin_onboarding),
+                name=(
+                    "substrate_wiki_onboarding_repair"
+                    if client_key
+                    else "substrate_wiki_onboarding"
+                ),
+                daemon=True,
+            )
+            self._onboarding_worker.start()
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
         return list(_TOOL_SCHEMAS)
@@ -367,51 +402,77 @@ class SubstrateWikiProvider(MemoryProvider):
         return _bounded_json(result)
 
     def get_config_schema(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "key": "api_url",
-                "description": "Base URL of the Substrate service, for example https://wiki.example.com.",
-                "required": True,
-                "secret": False,
-                "env_var": "HERMES_API_URL",
-                "url": True,
-            },
-            {
-                "key": "api_key",
-                "description": "Bearer key accepted by the Substrate Hermes API.",
-                "required": True,
-                "secret": True,
-                "env_var": "HERMES_API_KEY",
-            },
-        ]
+        """Hosted sign-in owns credentials; Hermes must not prompt for API keys."""
+        return []
 
     def save_config(self, values: dict[str, Any], hermes_home: str) -> None:
-        """Persist the URL and tuning; the API key is environment-only."""
+        """Persist only the immutable hosted origin and non-secret tuning."""
         root = Path(hermes_home) / _PROVIDER_ID
         if root.exists() and root.is_symlink():
             raise ValueError("plugin state directory must not be a symlink")
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        config_path = root / "config.json"
-        if config_path.is_symlink():
-            raise ValueError("config file must not be a symlink")
-        api_url = str(values.get("api_url", self._settings["api_url"])).strip().rstrip("/")
-        if api_url and not SubstrateClient.is_allowed_base_url(api_url):
-            raise ValueError("api_url must use HTTPS or loopback HTTP")
-        allowed = {
-            "api_url": api_url,
-            "spool_max_items": max(
-                1, int(values.get("spool_max_items", self._settings["spool_max_items"]))
-            ),
-            "spool_max_bytes": max(
-                _MIN_SPOOL_BYTES,
-                int(values.get("spool_max_bytes", self._settings["spool_max_bytes"])),
-            ),
-            "prefetch_ttl_seconds": max(
-                1, int(values.get("prefetch_ttl_seconds", self._settings["prefetch_ttl_seconds"]))
-            ),
-        }
-        secure_atomic_json_write(root / "config.json", allowed)
-        self._settings.update(allowed)
+        secure_atomic_json_write(root / "config.json", {
+            "api_url": "https://app.trysubstrate.co",
+            "hosted": True,
+            "spool_max_items": max(1, int(values.get("spool_max_items", self._settings["spool_max_items"]))),
+            "spool_max_bytes": max(_MIN_SPOOL_BYTES, int(values.get("spool_max_bytes", self._settings["spool_max_bytes"]))),
+            "prefetch_ttl_seconds": max(1, int(values.get("prefetch_ttl_seconds", self._settings["prefetch_ttl_seconds"]))),
+        })
+        self._settings["api_url"] = "https://app.trysubstrate.co"
+
+    def _repair_onboarding(self) -> None:
+        try:
+            from .onboarding import OnboardingManager
+
+            assert self._home is not None
+            OnboardingManager(self._home.parent).repair(wait=False)
+        except Exception:  # noqa: BLE001 - status remains content-free and resumable
+            return
+
+    def _request_reconnect(self) -> None:
+        if self._home is None or not self._initialized_primary:
+            return
+        worker = self._onboarding_worker
+        if worker is not None and worker.is_alive():
+            return
+        try:
+            from .credentials import credential_store
+
+            credential_store(self._home.parent).delete()
+        except (OSError, ValueError):
+            return
+        self._onboarding_worker = threading.Thread(
+            target=self._begin_onboarding,
+            name="substrate_wiki_reconnect",
+            daemon=True,
+        )
+        self._onboarding_worker.start()
+
+    def _begin_onboarding(self) -> None:
+        """Complete hosted sign-in in the background, then wake durable delivery."""
+        try:
+            from .onboarding import OnboardingManager
+
+            assert self._home is not None
+            result = OnboardingManager(self._home.parent).run(mode="auto", wait=True)
+            if not result.get("authenticated"):
+                return
+            client = SubstrateClient.from_env(
+                fallback_url="https://app.trysubstrate.co",
+                hermes_home=self._home.parent,
+                hosted_default=True,
+            )
+            if not client.api_key:
+                return
+            with self._capture_lock:
+                self._client = client
+                self._secrets = tuple(
+                    dict.fromkeys((*configured_secret_values(), client.api_key))
+                )
+                self._event_builder = CaptureEventBuilder(self._scope, secrets=self._secrets)
+            self._wake.set()
+        except Exception:  # noqa: BLE001 - surfaced by content-free onboarding status
+            return
 
     def system_prompt_block(self) -> str:
         return (
@@ -732,6 +793,8 @@ class SubstrateWikiProvider(MemoryProvider):
             except SubstrateAPIError as exc:
                 self._counters["delivery_failed"] += 1
                 self._last_delivery_category = exc.category
+                if exc.category in {"http_401", "http_403"}:
+                    self._request_reconnect()
                 if not self._is_transient_error(exc.category):
                     self._reset_delivery_backoff()
                     self._discard_spooled(spool_path, quarantine=True)

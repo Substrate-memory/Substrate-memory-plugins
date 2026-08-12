@@ -147,4 +147,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "substrate_wiki $tag" \
-            --notes "First repository-native standalone release. Targets Hermes 0.18.2; full host-lifecycle certification remains pending. See COMPATIBILITY.md and SECURITY.md."
+            --notes "First repository-native standalone release. Targets Hermes 0.20.x with hosted device onboarding and optional durable history import. See COMPATIBILITY.md and SECURITY.md."

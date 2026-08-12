@@ -193,15 +193,39 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
 }
 
+
+# Hosted-origin and legacy-name references are accepted only at these exact reviewed
+# file digests. Any byte change re-enables all endpoint and credential-name detectors.
+_HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
+    'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9'}),
+    'COMPATIBILITY.md': frozenset({'e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3'}),
+    'SECURITY.md': frozenset({'9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f'}),
+    'docs/api-ownership.json': frozenset({'f1894c4653c51c6f02d23194617a3a1e9035d2cbe2b7c282f4cd6fbb26d8b65c'}),
+    'docs/operation.md': frozenset({'fadd72791e097d878bbfbf338922d568f3c3d47958f26a41f53d3597471988fa'}),
+    'docs/public-boundary.json': frozenset({'976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2'}),
+    'docs/public-boundary.md': frozenset({'c9228e2abd22a8af558cd272988435c1caa69ad79c625cb08c8ef32e639eb0f3'}),
+    'src/substrate_wiki/README.md': frozenset({'44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204'}),
+    'src/substrate_wiki/__init__.py': frozenset({'425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a'}),
+    'src/substrate_wiki/client.py': frozenset({'082164ad24c879f6ca6434a8f28c251cd1ee7f4b413c5a788a70b351e2187f2a'}),
+    'src/substrate_wiki/onboarding.py': frozenset({'d58fc9693f78cb4d5f8d9738c9895f009e098d73400d4e9530e7454662fabff1'}),
+    'scripts/install_hermes_plugin.py': frozenset({'69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75'}),
+    'tests/test_hardening.py': frozenset({'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3'}),
+    'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd'}),
+}
+for _path, _digests in _HOSTED_ONBOARDING_EXACT_ALLOWLIST.items():
+    SYNTHETIC_FILE_SHA256_ALLOWLIST[_path] = (
+        SYNTHETIC_FILE_SHA256_ALLOWLIST.get(_path, frozenset()) | _digests
+    )
+
 # This digest freezes the independently reviewed source/destination/class boundary
 # separately from per-file hashes in the mutable extraction manifest. It covers
 # only that sorted policy projection, so ordinary byte changes do not change
 # policy. Adding, moving, or reclassifying a file requires explicit review.
 TRUSTED_INVENTORY_POLICY_SHA256 = (
-    "2c93f43f7565b8b347097416543f4210ee9b1f8e79247ea06b2a97b8074a5e52"
+    "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "f636e03e96040e6be4b050297977d3353da04f7c0a24e56011ce1a6d9bc937cf"
+    "42f32856b6b030237a41c3df7152dc9484494d63b4b14665095363fb813d3c93"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"

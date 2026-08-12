@@ -131,16 +131,12 @@ def test_config_persists_url_but_not_key_and_environment_url_wins(
     )
     config = tmp_path / "substrate_wiki" / "config.json"
     raw = config.read_text(encoding="utf-8")
-    assert "https://config.example.test" in raw
+    assert "https://app.trysubstrate.co" in raw
     assert "must-not-persist" not in raw
     monkeypatch.setenv("HERMES_API_URL", "https://env.example.test")
     monkeypatch.setenv("HERMES_API_KEY", "environment-only")
-    instance.initialize("s", hermes_home=str(tmp_path))
-    try:
-        assert instance._client.base_url == "https://env.example.test"
-        assert instance._client.api_key == "environment-only"
-    finally:
-        instance.shutdown()
+    with pytest.raises(SubstrateAPIError, match="unsafe_hosted_origin_override"):
+        instance.initialize("s", hermes_home=str(tmp_path))
 
 
 def test_prefetch_is_cache_only_and_queue_uses_one_worker(

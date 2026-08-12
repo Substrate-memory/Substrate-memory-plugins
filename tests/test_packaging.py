@@ -29,22 +29,24 @@ LEGACY_140_INSTALLER_SHA256 = "13a05be49a83fab4c75171356d575dd85e00b27b8e09ce160
 LEGACY_141_ARCHIVE_SHA256 = "877ccf9b0212792b699d9c98912a26980675a6050df3bd319e927639e3d901f1"
 LEGACY_141_INSTALLER_SHA256 = "7600b2681c3aebcb1b1492b0a04be38bbbec637089cbbcfb1cc26e8c10865b8d"
 EXPECTED_MEMBERS = [
-    "substrate_wiki/",
-    "substrate_wiki/PROVENANCE.json",
-    "substrate_wiki/LICENSE",
-    "substrate_wiki/README.md",
-    "substrate_wiki/__init__.py",
-    "substrate_wiki/checkpoint.py",
-    "substrate_wiki/cli.py",
-    "substrate_wiki/client.py",
-    "substrate_wiki/events.py",
-    "substrate_wiki/history.py",
-    "substrate_wiki/plugin.yaml",
-    "substrate_wiki/py.typed",
-    "substrate_wiki/redaction.py",
-    "substrate_wiki/spool.py",
-    "substrate_wiki/supervisor.py",
-    "substrate_wiki/worker.py",
+    'substrate_wiki/',
+    'substrate_wiki/PROVENANCE.json',
+    'substrate_wiki/LICENSE',
+    'substrate_wiki/README.md',
+    'substrate_wiki/__init__.py',
+    'substrate_wiki/checkpoint.py',
+    'substrate_wiki/cli.py',
+    'substrate_wiki/client.py',
+    'substrate_wiki/credentials.py',
+    'substrate_wiki/events.py',
+    'substrate_wiki/history.py',
+    'substrate_wiki/onboarding.py',
+    'substrate_wiki/plugin.yaml',
+    'substrate_wiki/py.typed',
+    'substrate_wiki/redaction.py',
+    'substrate_wiki/spool.py',
+    'substrate_wiki/supervisor.py',
+    'substrate_wiki/worker.py',
 ]
 
 
@@ -87,7 +89,7 @@ def test_root_readme_keeps_candidate_and_release_state_truthful() -> None:
     assert boundary["repository"]["candidate_source_of_truth"] is True
     assert boundary["repository"]["source_of_truth"] is False
     assert "publication-approved source candidate" in readme
-    assert "`v1.5.0` is not published yet" in readme
+    assert "`v2.0.0` is not published yet" in readme
     assert "This repository is the source of truth" not in readme
     assert "Install the verified release" not in readme
 
@@ -145,14 +147,14 @@ def test_archive_provenance_identifies_version_and_source_hashes(tmp_path: Path)
     assert provenance == {
         "build_format_version": 3,
         "license_sha256": hashlib.sha256((REPOSITORY_ROOT / "LICENSE").read_bytes()).hexdigest(),
-        "plugin_version": "1.5.0",
+        "plugin_version": "2.0.0",
         "provider_id": "substrate_wiki",
         "source_commit": "unknown",
         "source_files": {
             filename: hashlib.sha256((PLUGIN_SOURCE / filename).read_bytes()).hexdigest()
             for filename in builder.REQUIRED_FILES
         },
-        "target_hermes_version": "0.18.2",
+        "target_hermes_version": "0.20.0",
     }
 
 
@@ -210,24 +212,6 @@ def test_v141_release_artifacts_remain_byte_pinned() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "filename",
-    [
-        "checkpoint.py",
-        "cli.py",
-        "history.py",
-        "spool.py",
-        "supervisor.py",
-        "worker.py",
-    ],
-)
-def test_v141_keeps_the_v130_durable_import_protocol_bytes(filename: str) -> None:
-    with zipfile.ZipFile(LEGACY_RELEASE_130 / "substrate_wiki.zip") as archive:
-        legacy = archive.read(f"substrate_wiki/{filename}")
-
-    assert (PLUGIN_SOURCE / filename).read_bytes() == legacy
-
-
 def test_v140_event_envelope_constants_remain_stream_v2() -> None:
     # events.py now contains the mandatory stateful cross-chunk redactor, so it
     # cannot remain byte-identical. The public capture/retention limits remain
@@ -238,19 +222,6 @@ def test_v140_event_envelope_constants_remain_stream_v2() -> None:
     assert "RETENTION_DAYS = 90" in source
     assert "MAX_CAPTURE_BYTES = 256 * 1024" in source
     assert "capture_chunk" in source
-
-
-def test_v140_keeps_the_v130_import_service_unit_template() -> None:
-    def unit_template(path: Path) -> str:
-        source = path.read_text(encoding="utf-8")
-        start = source.index('    unit = "\\n".join(')
-        end_marker = '    ).encode("utf-8")'
-        end = source.index(end_marker, start) + len(end_marker)
-        return source[start:end]
-
-    assert unit_template(INSTALLER_PATH) == unit_template(
-        LEGACY_RELEASE_130 / "install_hermes_plugin.py"
-    )
 
 
 def test_publish_release_creates_exact_current_and_immutable_aliases(tmp_path: Path) -> None:
@@ -265,8 +236,8 @@ def test_publish_release_creates_exact_current_and_immutable_aliases(tmp_path: P
         releases_path=releases_path,
     )
 
-    assert release_archive == releases_path / "1.5.0" / "substrate_wiki.zip"
-    assert release_installer == releases_path / "1.5.0" / "install_hermes_plugin.py"
+    assert release_archive == releases_path / "2.0.0" / "substrate_wiki.zip"
+    assert release_installer == releases_path / "2.0.0" / "install_hermes_plugin.py"
     assert archive_path.read_bytes() == release_archive.read_bytes() == archive
     assert release_installer.read_bytes() == INSTALLER_PATH.read_bytes()
     assert builder.check_release(
@@ -278,7 +249,7 @@ def test_publish_release_creates_exact_current_and_immutable_aliases(tmp_path: P
 def test_publish_release_refuses_to_replace_versioned_bytes(tmp_path: Path) -> None:
     builder = load_builder()
     releases_path = tmp_path / "releases"
-    versioned = releases_path / "1.5.0" / "substrate_wiki.zip"
+    versioned = releases_path / "2.0.0" / "substrate_wiki.zip"
     versioned.parent.mkdir(parents=True)
     versioned.write_bytes(b"different immutable bytes")
     archive_path = tmp_path / "current" / "substrate_wiki.zip"
@@ -297,7 +268,7 @@ def test_publish_release_refuses_to_replace_versioned_bytes(tmp_path: Path) -> N
 def test_publish_release_preflights_both_immutable_artifacts(tmp_path: Path) -> None:
     builder = load_builder()
     releases_path = tmp_path / "releases"
-    versioned_installer = releases_path / "1.5.0" / "install_hermes_plugin.py"
+    versioned_installer = releases_path / "2.0.0" / "install_hermes_plugin.py"
     versioned_installer.parent.mkdir(parents=True)
     versioned_installer.write_bytes(b"conflicting immutable installer")
     archive_path = tmp_path / "current" / "substrate_wiki.zip"
@@ -309,14 +280,14 @@ def test_publish_release_preflights_both_immutable_artifacts(tmp_path: Path) -> 
             releases_path=releases_path,
         )
 
-    assert not (releases_path / "1.5.0" / "substrate_wiki.zip").exists()
+    assert not (releases_path / "2.0.0" / "substrate_wiki.zip").exists()
     assert not archive_path.exists()
 
 
 def test_publish_release_rejects_symlinked_immutable_artifact(tmp_path: Path) -> None:
     builder = load_builder()
     releases_path = tmp_path / "releases"
-    release_directory = releases_path / "1.5.0"
+    release_directory = releases_path / "2.0.0"
     release_directory.mkdir(parents=True)
     target = tmp_path / "elsewhere.zip"
     archive = builder.build_archive_bytes(source_commit="a" * 40)
@@ -356,7 +327,7 @@ def test_installer_verifies_and_atomically_upgrades_with_rollback(tmp_path: Path
 
     assert result["action"] == "upgraded"
     assert result["source_commit"] == "a" * 40
-    assert "version: 1.5.0" in (existing / "plugin.yaml").read_text(encoding="utf-8")
+    assert "version: 2.0.0" in (existing / "plugin.yaml").read_text(encoding="utf-8")
     rollback = Path(result["rollback"])
     assert "version: 1.0.0" in (rollback / "plugin.yaml").read_text(encoding="utf-8")
     assert checkpoint.read_bytes() == b"content-free-checkpoint"
@@ -414,7 +385,7 @@ def test_plugin_swap_restores_previous_version_when_hardening_fails(
     )
 
     def fail_hardening(target: Path) -> None:
-        assert "version: 1.5.0" in (target / "plugin.yaml").read_text(encoding="utf-8")
+        assert "version: 2.0.0" in (target / "plugin.yaml").read_text(encoding="utf-8")
         raise OSError("permission hardening failed")
 
     monkeypatch.setattr(installer, "_harden_plugin_permissions", fail_hardening)
@@ -424,7 +395,7 @@ def test_plugin_swap_restores_previous_version_when_hardening_fails(
     assert "version: 1.3.0" in (existing / "plugin.yaml").read_text(encoding="utf-8")
     failed = list((hermes_home / "plugins").glob("substrate_wiki.failed-*"))
     assert len(failed) == 1
-    assert "version: 1.5.0" in (failed[0] / "plugin.yaml").read_text(encoding="utf-8")
+    assert "version: 2.0.0" in (failed[0] / "plugin.yaml").read_text(encoding="utf-8")
 
 
 def test_check_archive_preserves_sha_provenance_without_environment(
@@ -620,7 +591,7 @@ def test_upgrade_restores_plugin_and_unit_when_service_reload_fails(
         systemctl_calls.append((command, kwargs))
         if kwargs.get("check") is True:
             assert command == ("systemctl", "--user", "daemon-reload")
-            assert "version: 1.5.0" in (existing / "plugin.yaml").read_text(
+            assert "version: 2.0.0" in (existing / "plugin.yaml").read_text(
                 encoding="utf-8"
             )
             plugin_rollbacks = list(
@@ -652,7 +623,7 @@ def test_upgrade_restores_plugin_and_unit_when_service_reload_fails(
     assert (existing / "v13-sentinel.txt").read_text(encoding="utf-8") == "prior plugin"
     failed_plugins = list((hermes_home / "plugins").glob("substrate_wiki.failed-*"))
     assert len(failed_plugins) == 1
-    assert "version: 1.5.0" in (failed_plugins[0] / "plugin.yaml").read_text(
+    assert "version: 2.0.0" in (failed_plugins[0] / "plugin.yaml").read_text(
         encoding="utf-8"
     )
     assert not list((hermes_home / "plugins").glob("substrate_wiki.rollback-*"))

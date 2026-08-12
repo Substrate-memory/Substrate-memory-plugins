@@ -1,37 +1,41 @@
 # Public plugin boundary
 
-This repository is the publication-approved, MIT-licensed source-of-truth candidate for the Hermes `substrate_wiki` plugin. Public/release status becomes factual only after GitHub readback. The permanent product/commercial line is in [`BOUNDARY.md`](../BOUNDARY.md).
+This repository is the publication-approved MIT-licensed source candidate for the Hermes
+`substrate_wiki` plugin. Public/release status becomes factual only after GitHub readback.
 
-## Identity preserved
+## Identity
 
 - package/provider: `substrate_wiki`;
 - Hermes configuration: `memory.provider: substrate_wiki`;
-- environment: `HERMES_API_URL`, `HERMES_API_KEY`;
+- hosted origin: `https://app.trysubstrate.co`;
+- credential source: hosted device onboarding and profile-scoped secure custody;
 - profile state: `$HERMES_HOME/substrate_wiki`;
+- user-plugin directory: `$HERMES_HOME/plugins/substrate_wiki`;
 - assets: `substrate_wiki.zip`, `install_hermes_plugin.py`.
 
 ## Ownership
 
-This repository owns Hermes lifecycle integration, client transport, local spool/checkpoints, client-side redaction, history replay, build/install tooling, tests, documentation, and releases.
+This repository owns Hermes lifecycle integration, transport, credential custody, local
+spool/checkpoints, redaction, history consent/replay, build/install tooling, tests,
+documentation, and releases. `Substrate-v2` owns hosted OAuth/account routes, tenant
+credentials, content APIs, idempotency, persistence, queues, deletion, projection,
+indexing/search, infrastructure, and deployment. Neither repository imports the other's
+runtime source.
 
-`Substrate-v2` owns server endpoints/authentication, capability behavior, idempotency, limits, persistence, queues, deletion, triage, projection, indexing/search, infrastructure, and deployment. The server must not import plugin Python. This repository must not import server source.
+## Compatibility and data boundary
 
-The integration boundary is immutable plugin release assets plus a versioned HTTP capability contract.
+Hermes 0.20.x is the target. The plugin connects only to hosted Substrate and fails closed on
+origin or capability mismatch. Credentials may not enter source, artifacts, normal config,
+logs, errors, receipts, or support material.
 
-## Compatibility
-
-Hermes 0.18.2 is the contract-tested target; full host-lifecycle certification remains pending. Hermes 0.19.0 remains unsupported until the full lifecycle matrix passes. A breaking server change requires a new protocol/schema identifier and concurrent old-version support. No silent auto-update or state rewrite is allowed.
-
-## Secret and data boundary
-
-Secrets come only from the two documented environment variables. Real values may not enter source, artifacts, fixtures, logs, errors, receipts, or support material. Production credentials and private history may never be copied into this repository.
-
-Raw Hermes history stays profile-local until explicit capture or replay. The plugin emits only bounded versioned redacted events to the configured server. Status and receipts remain content-free.
+Future capture begins after account connection. Past direct conversations and explicit saved
+memories remain local until the user approves historical upload. Group sessions,
+cron/webhooks, hidden reasoning, unrelated files, secrets, and binary bodies are excluded.
+Status and receipts remain content-free.
 
 ## Legal
 
 - license: MIT;
 - copyright: Sightline Technologies Inc;
 - scope: this plugin repository only;
-- publication: authorized; public only after GitHub readback;
-- private Substrate server: not licensed by this repository.
+- publication: authorized; public only after GitHub readback.

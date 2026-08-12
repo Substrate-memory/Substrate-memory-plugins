@@ -149,7 +149,7 @@ def test_client_rejects_server_without_entity_quality_v2(
     ("field", "value"),
     [
         ("protocol", "entity-quality-v1"),
-        ("min_plugin_version", "1.5.1"),
+        ("min_plugin_version", "2.0.1"),
         ("memory_card", False),
         ("quality_version", 1),
         ("canonical_redirects", False),
@@ -251,6 +251,6 @@ def test_semantic_gate_rejects_non_strict_versions(
 def test_v141_manifest_and_prompt_describe_one_published_memory() -> None:
     manifest = (PLUGIN_ROOT / "substrate_wiki" / "plugin.yaml").read_text(encoding="utf-8")
     prompt = SubstrateWikiProvider().system_prompt_block()
-    assert "version: 1.5.0" in manifest
+    assert "version: 2.0.0" in manifest
     assert "single published memory" in prompt
     assert "canonical published entity" in prompt

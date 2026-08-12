@@ -5,22 +5,23 @@
       "Substrate server capability contract",
       "plugin semver"
     ],
-    "breaking_change_rule": "new schema or protocol identifier with concurrent server support",
+    "breaking_change_rule": "new schema or protocol identifier",
     "candidate_hermes_versions": [
-      "0.19.0"
+      "0.20.x"
     ],
     "candidate_requires": [
-      "provider discovery",
-      "plugin lifecycle",
+      "user plugin discovery",
+      "provider lifecycle",
+      "post_setup",
       "tool schemas",
       "profile isolation",
-      "import service",
-      "configuration"
+      "portable import supervision",
+      "hosted device onboarding"
     ],
+    "certified_hermes_versions": [],
     "contract_tested_hermes_versions": [
-      "0.18.2"
-    ],
-    "certified_hermes_versions": []
+      "0.20.x"
+    ]
   },
   "data": {
     "bounded_private_spool": true,
@@ -32,7 +33,7 @@
   "deprecation": {
     "breaking_changes_require_new_contract_version": true,
     "no_silent_auto_update": true,
-    "old_protocol_remains_supported_during_migration": true,
+    "old_protocol_remains_supported_during_migration": false,
     "rollback_preserves_configuration_and_state": true
   },
   "legal": {
@@ -48,11 +49,9 @@
     "status": "publication_approved_candidate"
   },
   "non_goals": [
+    "local or self-hosted Substrate operation",
     "publishing the private server",
     "moving server authority into the plugin",
-    "changing runtime behavior during extraction",
-    "supporting Hermes 0.19.0 before its full matrix passes",
-    "auto-updating plugins or rewriting user configuration",
     "granting production access or copying production credentials"
   ],
   "ownership": {
@@ -72,31 +71,29 @@
     ]
   },
   "preserved_identity": {
-    "api_key_env": "HERMES_API_KEY",
-    "api_url_env": "HERMES_API_URL",
     "archive": "substrate_wiki.zip",
+    "credential_custody": "profile-scoped native vault or owner-private fallback",
+    "hosted_origin": "https://app.trysubstrate.co",
     "installer": "install_hermes_plugin.py",
     "package": "substrate_wiki",
+    "plugin_directory": "$HERMES_HOME/plugins/substrate_wiki",
     "provider": "substrate_wiki",
     "provider_config": "memory.provider",
     "state_directory": "$HERMES_HOME/substrate_wiki"
   },
   "repository": {
+    "candidate_source_of_truth": true,
     "name": "hermes-substrate-wiki",
     "organization": "Substrate-memory",
-    "candidate_source_of_truth": true,
     "source_of_truth": false,
     "url": "https://github.com/Substrate-memory/hermes-substrate-wiki",
     "visibility": "public"
   },
   "schema_version": 1,
   "secrets": {
-    "allowed_names": [
-      "HERMES_API_URL",
-      "HERMES_API_KEY"
-    ],
+    "allowed_names": [],
     "production_credentials_may_be_copied": false,
-    "source": "environment only",
+    "source": "hosted device onboarding credential custody",
     "synthetic_sentinels_in_exact_adversarial_fixtures": [
       "tests/fixtures/public-plugin-secret-sentinels.json"
     ],
@@ -106,8 +103,8 @@
   "threat_model": [
     {
       "controls": [
-        "environment-only secret injection",
-        "no secret values in source, package, logs, errors, tests, or receipts",
+        "profile-scoped native credential vault with owner-private fallback",
+        "no secret values in config, source, package, logs, arguments, errors, tests, or receipts",
         "redaction and secret scanning before release"
       ],
       "id": "credential-disclosure"
@@ -130,8 +127,8 @@
     },
     {
       "controls": [
-        "configured HTTPS origin",
-        "redirect rejection",
+        "fixed https://app.trysubstrate.co origin",
+        "unsafe override and redirect rejection",
         "capability and provider identity verification"
       ],
       "id": "server-impersonation-or-redirect"
@@ -162,9 +159,9 @@
     },
     {
       "controls": [
-        "state rooted in the active Hermes profile",
+        "state and credential slots rooted in the active Hermes profile",
         "no shared writable profile state",
-        "environment-bound server identity and lifecycle tests"
+        "fixed hosted server identity and lifecycle tests"
       ],
       "id": "cross-profile-or-cross-environment-leakage"
     }
