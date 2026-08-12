@@ -35,7 +35,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": ".github/workflows/ci.yml",
       "reason": "Required only by the independent public repository.",
-      "sha256": "19a70284956cfcee95faa604d1338e30933951f38b41c9dc6dfa4061c91f4d54"
+      "sha256": "a4a80e646d81f3b3b58a1d1c374bbbc8dbfb6dfc86ed6d36e2feaacfc8f8b325"
     },
     {
       "class": "standalone_repository_policy_or_test",

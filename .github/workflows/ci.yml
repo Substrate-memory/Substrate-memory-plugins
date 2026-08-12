@@ -103,12 +103,14 @@ jobs:
             --archive dist/substrate_wiki.zip \
             --hermes-home "$RUNNER_TEMP/hermes" \
             --sha256 "$archive_sha" \
+            --no-activate --no-onboard \
             --yes --json
           test -f "$RUNNER_TEMP/hermes/plugins/substrate_wiki/plugin.yaml"
           if uv run --frozen --extra dev python scripts/install_hermes_plugin.py \
             --archive dist/substrate_wiki.zip \
             --hermes-home "$RUNNER_TEMP/tamper-canary" \
             --sha256 "$(printf '0%.0s' {1..64})" \
+            --no-activate --no-onboard \
             --yes --json; then
             echo "installer accepted a wrong digest" >&2
             exit 1
