@@ -1,13 +1,10 @@
 # Hermes Substrate Wiki
 
-`substrate_wiki` is the official Hermes integration for Substrate: **the memory that decides what your agents are allowed to do**. The pending `v2.0.0` candidate connects one Hermes profile to hosted Substrate at `https://app.trysubstrate.co` through a bounded, cited memory interface and durable, redacted history capture.
+`substrate_wiki` is the official Hermes integration for Substrate: **the memory that decides what your agents are allowed to do**. Version `2.0.0` connects one Hermes profile to hosted Substrate at `https://app.trysubstrate.co` through a bounded, cited memory interface and durable, redacted history capture.
 
 The broader product uses memory to ground deterministic agent permissions. **Version 2.0.0 is the memory-provider integration only:** it does not authorize actions, include the local runtime or policy compiler, or support a no-server mode. Those gaps are explicit rather than silently presented as hosted-only features.
 
-**This repository is the publication-approved source candidate for the plugin.** It becomes
-the sole editable source only after the protected default branch, first immutable release,
-and companion `Substrate-v2` retirement change are complete. `Substrate-v2` owns the server
-and HTTP contract; its embedded plugin copy remains frozen during that transition.
+**This repository is the canonical editable source for the plugin.** `Substrate-v2` owns the server and HTTP contract; immutable plugin releases and their checksums are published from this repository.
 
 ## Status
 
@@ -21,29 +18,150 @@ and HTTP contract; its embedded plugin copy remains frozen during that transitio
 
 Hermes 0.20.x provider discovery and setup hooks are targeted. The hosted origin is fixed; there is no local/self-hosted discovery path.
 
-## Release availability
+## Install with an agent
 
-`v2.0.0` is not published yet. Do not treat candidate archives or CI artifacts as an
-installable release. After the immutable release exists, download its three assets from
-[release v2.0.0](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v2.0.0),
-then verify and install using the SHA-256 values published with that release:
+Give your local coding agent the URL of this README and the following instruction:
+
+```text
+Install the official Substrate plugin for my existing Hermes installation by following the
+"Install with an agent" section of this README exactly.
+
+Security and consent rules:
+- Install only immutable release v2.0.0 from Substrate-memory/hermes-substrate-wiki.
+- Before executing downloaded code, independently verify the installer and plugin archive
+  against the exact SHA-256 values in the README. Never substitute a branch archive, CI
+  artifact, newer release, or checksum obtained only from the same download response.
+- Require `hermes --version` to report 0.20.x. If Hermes is absent or a different version,
+  stop and tell me; do not install or upgrade Hermes yourself.
+- Use the active HERMES_HOME/profile. Do not configure HERMES_API_URL or HERMES_API_KEY.
+- Do not print, store, or request access tokens. The plugin's credential-custody flow owns them.
+- Run the installer with `--yes --json`; add `--headless` if a browser cannot be opened.
+- Immediately show me the hosted verification URL and one-time code, then wait while I approve
+  access in my browser. Never approve access on my behalf.
+- Historical upload is the only consent choice. Ask me whether to approve or decline it; do not
+  infer consent. Declining history must leave future capture enabled.
+- After onboarding, run the content-free onboarding-status command. Report only version,
+  installation path, provider activation, connection phase, and import counts/status. Never
+  expose conversation content or credentials.
+- If installation or onboarding is interrupted, rerun the same verified installer or the
+  documented repair command; do not create replacement credentials or import jobs unnecessarily.
+
+Select the Bash or PowerShell procedure below for this machine. Clean up only the downloaded
+installer/archive/checksum files when finished; do not remove plugin state, credentials, spool,
+or checkpoints.
+```
+
+The instruction deliberately leaves browser approval and history consent with the human. The agent may install and verify the plugin, but it must not make either decision.
+
+### Bash: Linux, macOS, or WSL
 
 ```bash
-curl --fail --location --remote-name \
-  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0/substrate_wiki.zip
-curl --fail --location --remote-name \
-  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0/install_hermes_plugin.py
-curl --fail --location --remote-name \
-  https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0/SHA256SUMS
-sha256sum -c SHA256SUMS
+set -euo pipefail
+
+hermes_version="$(hermes --version)"
+case "$hermes_version" in
+  *0.20.*) ;;
+  *) printf 'Hermes 0.20.x is required; found: %s\n' "$hermes_version" >&2; exit 1 ;;
+esac
+
+install_dir="$(mktemp -d)"
+chmod 700 "$install_dir"
+cd "$install_dir"
+
+base='https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0'
+curl --fail --location --proto '=https' --tlsv1.2 --remote-name "$base/install_hermes_plugin.py"
+curl --fail --location --proto '=https' --tlsv1.2 --remote-name "$base/substrate_wiki.zip"
+curl --fail --location --proto '=https' --tlsv1.2 --remote-name "$base/SHA256SUMS"
+
+python3 - <<'PY'
+import hashlib
+from pathlib import Path
+
+expected = {
+    "install_hermes_plugin.py": "69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75",
+    "substrate_wiki.zip": "dbfa59a582e806472b9388cd6fd9e339c50461f87ec20d7f05d33c5a653bdb13",
+}
+for name, digest in expected.items():
+    actual = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+    if actual != digest:
+        raise SystemExit(f"{name}: checksum mismatch")
+published = Path("SHA256SUMS").read_text(encoding="utf-8")
+for name, digest in expected.items():
+    if f"{digest}  {name}" not in published.splitlines():
+        raise SystemExit(f"{name}: published SHA256SUMS mismatch")
+print("Release checksums verified")
+PY
 
 python3 install_hermes_plugin.py \
   --archive substrate_wiki.zip \
-  --sha256 "$(sha256sum substrate_wiki.zip | cut -d ' ' -f1)" \
+  --sha256 dbfa59a582e806472b9388cd6fd9e339c50461f87ec20d7f05d33c5a653bdb13 \
   --yes --json
 ```
 
-The installer validates the archive checksum, provenance, target-Hermes metadata, and packaged source digests, installs beneath `$HERMES_HOME/plugins/substrate_wiki`, activates the provider, and starts hosted device onboarding. Desktop browsers open automatically; headless users receive a hosted URL and one-time code. Tenant credentials are stored in native credential custody (with an owner-private fallback), never in ordinary configuration or logs. Historical upload is the sole consent choice; declining it leaves future capture enabled. See [configuration and operation](docs/operation.md).
+Add `--headless` to the final command on a machine that cannot open a browser.
+
+### PowerShell: Windows
+
+```powershell
+$ErrorActionPreference = 'Stop'
+
+$hermesVersion = (& hermes --version | Out-String).Trim()
+if ($hermesVersion -notmatch '0\.20\.') {
+    throw "Hermes 0.20.x is required; found: $hermesVersion"
+}
+
+$installDir = Join-Path ([IO.Path]::GetTempPath()) ("substrate-wiki-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $installDir | Out-Null
+Set-Location $installDir
+
+$base = 'https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.0'
+Invoke-WebRequest "$base/install_hermes_plugin.py" -OutFile 'install_hermes_plugin.py'
+Invoke-WebRequest "$base/substrate_wiki.zip" -OutFile 'substrate_wiki.zip'
+Invoke-WebRequest "$base/SHA256SUMS" -OutFile 'SHA256SUMS'
+
+$installerSha = (Get-FileHash -Algorithm SHA256 'install_hermes_plugin.py').Hash.ToLowerInvariant()
+$archiveSha = (Get-FileHash -Algorithm SHA256 'substrate_wiki.zip').Hash.ToLowerInvariant()
+if ($installerSha -ne '69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75') {
+    throw 'Installer checksum mismatch'
+}
+if ($archiveSha -ne 'dbfa59a582e806472b9388cd6fd9e339c50461f87ec20d7f05d33c5a653bdb13') {
+    throw 'Plugin archive checksum mismatch'
+}
+$published = Get-Content 'SHA256SUMS' -Raw
+if (($published -notmatch [regex]::Escape($installerSha)) -or
+    ($published -notmatch [regex]::Escape($archiveSha))) {
+    throw 'Published SHA256SUMS does not match the independently pinned checksums'
+}
+
+py -3 install_hermes_plugin.py `
+  --archive substrate_wiki.zip `
+  --sha256 dbfa59a582e806472b9388cd6fd9e339c50461f87ec20d7f05d33c5a653bdb13 `
+  --yes --json
+```
+
+Use `python` instead of `py -3` if that is the installed Python 3 launcher. Add `--headless` to the final command on a machine that cannot open a browser.
+
+### Finish onboarding
+
+The installer validates archive provenance, target-Hermes metadata, and packaged source digests; installs beneath `$HERMES_HOME/plugins/substrate_wiki`; activates `memory.provider: substrate_wiki`; and starts hosted device onboarding. After browser approval, answer the history prompt yourself:
+
+- **Approve**: upload eligible direct conversations and explicit saved memories using durable checkpoints.
+- **Decline**: do not upload past history; automatic future capture remains enabled.
+
+If a non-interactive agent cannot present the consent prompt, have it ask you first and then run exactly one of:
+
+```bash
+hermes substrate_wiki onboard --mode device --wait --history approve --json
+hermes substrate_wiki onboard --mode device --wait --history decline --json
+```
+
+Then verify the content-free state:
+
+```bash
+hermes substrate_wiki onboarding-status --json
+```
+
+Tenant credentials are stored in native credential custody, with an owner-private profile fallback; they never belong in ordinary configuration, logs, arguments, or diagnostics. See [configuration and operation](docs/operation.md) and the immutable [v2.0.0 release](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v2.0.0).
 
 ## What it does
 

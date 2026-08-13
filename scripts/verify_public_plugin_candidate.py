@@ -197,12 +197,12 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
 # Hosted-origin and legacy-name references are accepted only at these exact reviewed
 # file digests. Any byte change re-enables all endpoint and credential-name detectors.
 _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
-    'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9'}),
+    'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9', '6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a'}),
     'COMPATIBILITY.md': frozenset({'e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3'}),
     'SECURITY.md': frozenset({'9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f'}),
     'docs/api-ownership.json': frozenset({'f1894c4653c51c6f02d23194617a3a1e9035d2cbe2b7c282f4cd6fbb26d8b65c'}),
     'docs/operation.md': frozenset({'fadd72791e097d878bbfbf338922d568f3c3d47958f26a41f53d3597471988fa'}),
-    'docs/public-boundary.json': frozenset({'976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2'}),
+    'docs/public-boundary.json': frozenset({'976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2', '648904170d6c66de6f15cfe51fb494225467730ff5167225d6fd427a6eac3571'}),
     'docs/public-boundary.md': frozenset({'c9228e2abd22a8af558cd272988435c1caa69ad79c625cb08c8ef32e639eb0f3'}),
     'src/substrate_wiki/README.md': frozenset({'44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204'}),
     'src/substrate_wiki/__init__.py': frozenset({'425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a'}),
@@ -225,7 +225,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "4b32b7ec73ce13752bc354c37a428bf6ff0d5d735b870b38d60f7dc6b1aa5d79"
+    "dcd67b0310f3ee68d38dca52248d40e928a385e43a64c500728ca34ca5c78d4a"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
