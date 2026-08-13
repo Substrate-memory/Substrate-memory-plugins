@@ -77,7 +77,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9"
+      "sha256": "6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -107,7 +107,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "docs/source-of-truth.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "5aa8200e852f090dc0f8444429f2b705464121fb65dcdf4b709ecbdfdd83b8e4"
+      "sha256": "72f6d2a085bf50ccf673124527c37dde08e906421a85668e154610bf2b6dfde9"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -225,7 +225,7 @@
     {
       "class": "boundary",
       "destination": "docs/public-boundary.json",
-      "destination_sha256": "976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2",
+      "destination_sha256": "648904170d6c66de6f15cfe51fb494225467730ff5167225d6fd427a6eac3571",
       "source": "docs/plugin/public-boundary.json",
       "source_sha256": "5f4b5a663dd6590480ed432b22ae68a88a0fd5ab4704b705f60617332edc75bc",
       "transformation": "modified_for_standalone"
@@ -353,7 +353,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "d86e031a851c64440e5b70f29c195c029c925064549f2b91d4a692ca74631c59",
+      "destination_sha256": "7a47e73425bf86700f0a665285fecded303686454d50eb995ad2946dc7cefd35",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -537,7 +537,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_packaging.py",
-      "destination_sha256": "be324b7d024a5ab17f006a9d2e6c49d1c853b739083e4a445f0a8108c1dfccef",
+      "destination_sha256": "cd609610b49b3e81acbb2895e798b901bb32cd48a781844a4c400b6242df1297",
       "source": "tests/contract/test_hermes_plugin_packaging.py",
       "source_sha256": "c54967830788555b8d7bd5d2f871baeb6b98d7804a2bc7410ab297078bc20ee7",
       "transformation": "modified_for_standalone"

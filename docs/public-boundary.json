@@ -46,7 +46,7 @@
     "maintainer_approved": true,
     "publication_allowed": true,
     "publication_authority": "Pavel instruction, 2026-08-03",
-    "status": "publication_approved_candidate"
+    "status": "published"
   },
   "non_goals": [
     "local or self-hosted Substrate operation",
@@ -82,10 +82,10 @@
     "state_directory": "$HERMES_HOME/substrate_wiki"
   },
   "repository": {
-    "candidate_source_of_truth": true,
+    "candidate_source_of_truth": false,
     "name": "hermes-substrate-wiki",
     "organization": "Substrate-memory",
-    "source_of_truth": false,
+    "source_of_truth": true,
     "url": "https://github.com/Substrate-memory/hermes-substrate-wiki",
     "visibility": "public"
   },
