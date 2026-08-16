@@ -77,13 +77,13 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a"
+      "sha256": "cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "SECURITY.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645"
+      "sha256": "99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -107,7 +107,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "docs/source-of-truth.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "72f6d2a085bf50ccf673124527c37dde08e906421a85668e154610bf2b6dfde9"
+      "sha256": "52b02a52dce092e6e5d93c82ce2c152b8d1f62c1c9433a753884c98371a6b3a9"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -353,7 +353,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "f10c3e2eeb069723546fe13d59c6698c80f6eeb20b4076b0eda6868327216d46",
+      "destination_sha256": "c0da19814d44f8ba9e944f963d4058633fe3bd1cffd5baa2c3171de15f6cdfa8",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -537,7 +537,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_packaging.py",
-      "destination_sha256": "649193d5c2eda192d280fc8548b89aeb327c3e5ec961704eeb0c764356a6f135",
+      "destination_sha256": "be96c56ccf4ef63f25c4c9a1fff162fc5950631d99ddb19e7f798c78c8b598d7",
       "source": "tests/contract/test_hermes_plugin_packaging.py",
       "source_sha256": "c54967830788555b8d7bd5d2f871baeb6b98d7804a2bc7410ab297078bc20ee7",
       "transformation": "modified_for_standalone"
