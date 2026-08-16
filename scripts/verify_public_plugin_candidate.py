@@ -127,6 +127,7 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
             "34a9cd6cd747589e1ff34fe412d29a04ecc076df19871eaea8a6a078d0b17e06",
             "bb4ba0542582cf3a89a37906651074c52bd1c28754b079bd67fd856c7fe24362",
             "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645",
+            "99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c"
         }
     ),
     "docs/api-ownership.json": frozenset(
@@ -200,9 +201,9 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
 # Hosted-origin and legacy-name references are accepted only at these exact reviewed
 # file digests. Any byte change re-enables all endpoint and credential-name detectors.
 _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
-    'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9', '6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a'}),
+    'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9', '6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a', 'f139b1328c7884dfa664aa59b47d5d707b2a72894747911b8f99d5e89f6c7eca', 'cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b'}),
     'COMPATIBILITY.md': frozenset({'e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3', '1f8fc410a88c7b410c4e72f4210226629b573a3c7f0cc410bc35939cd2317cfc'}),
-    'SECURITY.md': frozenset({'9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f', '85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645'}),
+    'SECURITY.md': frozenset({'9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f', '85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645', '99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c'}),
     'docs/api-ownership.json': frozenset({'f1894c4653c51c6f02d23194617a3a1e9035d2cbe2b7c282f4cd6fbb26d8b65c'}),
     'docs/operation.md': frozenset({'fadd72791e097d878bbfbf338922d568f3c3d47958f26a41f53d3597471988fa'}),
     'docs/public-boundary.json': frozenset({'976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2', '648904170d6c66de6f15cfe51fb494225467730ff5167225d6fd427a6eac3571'}),
@@ -228,7 +229,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "78175fe17de92aacf2afbe11cc254329dcddd5f4a59db5d2e05a41443d66038c"
+    "69aaaaf57361c71540a05ecb9625db585ac70c6680677ee65ba3710269bf76c9"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
