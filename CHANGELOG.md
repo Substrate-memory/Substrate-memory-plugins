@@ -1,6 +1,11 @@
 # Changelog
 
-## 2.0.0 — pending hosted-onboarding candidate
+## 2.0.1
+
+- Present the complete one-click device authorization URL in agent and headless prompts.
+- Require a server-supplied complete URL to carry the issued one-time code; construct the correct hosted URL when that optional field is absent.
+
+## 2.0.0
 
 - Targets Hermes 0.20.x user-plugin discovery and native setup hooks.
 - Installs and activates under `$HERMES_HOME/plugins/substrate_wiki`.

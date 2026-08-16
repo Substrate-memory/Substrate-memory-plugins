@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .client import SubstrateAPIError, SubstrateClient, validate_capabilities
@@ -29,7 +29,7 @@ CLIENT_ID = "substrate-hermes"
 SCOPES = "capture retrieve"
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 _STATE_VERSION = 1
-_PLUGIN_VERSION = "2.0.0"
+_PLUGIN_VERSION = "2.0.1"
 _MAX_RESPONSE = 64 * 1024
 _TERMINAL = {"ready", "declined", "failed", "repair_required"}
 
@@ -119,12 +119,26 @@ class HostedOAuthClient:
         if not isinstance(user_code, str) or not user_code or len(user_code) > 64:
             raise OnboardingError("invalid_response")
         verification_uri = _hosted_url(value["verification_uri"])
-        complete = value.get("verification_uri_complete") or verification_uri
+        supplied_complete = value.get("verification_uri_complete")
+        if supplied_complete:
+            complete = _hosted_url(supplied_complete)
+            complete_query = dict(parse_qsl(urlsplit(complete).query, keep_blank_values=True))
+            if complete_query.get("user_code") != user_code:
+                raise OnboardingError("invalid_response")
+        else:
+            parsed = urlsplit(verification_uri)
+            query = [
+                (key, item)
+                for key, item in parse_qsl(parsed.query, keep_blank_values=True)
+                if key != "user_code"
+            ]
+            query.append(("user_code", user_code))
+            complete = urlunsplit(parsed._replace(query=urlencode(query)))
         return {
             "device_code": device_code,
             "user_code": user_code,
             "verification_uri": verification_uri,
-            "verification_uri_complete": _hosted_url(complete),
+            "verification_uri_complete": complete,
             "expires_in": max(1, min(int(value["expires_in"]), 3600)),
             "interval": max(1, min(int(value.get("interval", 5)), 60)),
         }
@@ -394,7 +408,8 @@ class OnboardingManager:
             mode == "device" or not open_browser
         ):
             print(
-                f"Open {result.get('verification_uri')} and enter {result.get('user_code')}",
+                f"Open {result.get('verification_uri_complete')} to sign in by email "
+                f"and connect Hermes. One-time code: {result.get('user_code')}",
                 file=sys.stderr,
                 flush=True,
             )

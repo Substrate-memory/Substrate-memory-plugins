@@ -126,6 +126,7 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
         {
             "34a9cd6cd747589e1ff34fe412d29a04ecc076df19871eaea8a6a078d0b17e06",
             "bb4ba0542582cf3a89a37906651074c52bd1c28754b079bd67fd856c7fe24362",
+            "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645",
         }
     ),
     "docs/api-ownership.json": frozenset(
@@ -168,6 +169,7 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
         {
             "21ee987d4136187f020ce33ded442a9b20e97e380a2f77d4e01f6b6f1fb95617",
             "95de10e9c4e9c37c7bd3bcce1f8b507de977682e869ec4d44386f197a910554f",
+            "33adb95c93f478a91991a97f0b9b6a1c9d2cee77e7894ed37fe331a4403b0bb8",
         }
     ),
     "scripts/verify_public_plugin_candidate.py": frozenset(
@@ -186,7 +188,8 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
         {"a4143022e05a7b93d3aa5799f4319601292e67069ad85d172770c3effe0e5e9d"}
     ),
     "src/substrate_wiki/client.py": frozenset(
-        {"c711b64e496214de3acf5639075bd6bada19b687cd30426058e1b0bb443dce0b"}
+        {"c711b64e496214de3acf5639075bd6bada19b687cd30426058e1b0bb443dce0b",
+            "f98518e2eea1d57e813130822ea95de1fcc5b550adf9b65164347468eadc6818"}
     ),
     "src/substrate_wiki/redaction.py": frozenset(
         {"e9bec198aa7ad018da359d2e9aa6df1dab717881bb41b1001348911b23e6439b"}
@@ -198,17 +201,17 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
 # file digests. Any byte change re-enables all endpoint and credential-name detectors.
 _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
     'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9', '6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a'}),
-    'COMPATIBILITY.md': frozenset({'e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3'}),
-    'SECURITY.md': frozenset({'9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f'}),
+    'COMPATIBILITY.md': frozenset({'e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3', '1f8fc410a88c7b410c4e72f4210226629b573a3c7f0cc410bc35939cd2317cfc'}),
+    'SECURITY.md': frozenset({'9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f', '85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645'}),
     'docs/api-ownership.json': frozenset({'f1894c4653c51c6f02d23194617a3a1e9035d2cbe2b7c282f4cd6fbb26d8b65c'}),
     'docs/operation.md': frozenset({'fadd72791e097d878bbfbf338922d568f3c3d47958f26a41f53d3597471988fa'}),
     'docs/public-boundary.json': frozenset({'976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2', '648904170d6c66de6f15cfe51fb494225467730ff5167225d6fd427a6eac3571'}),
     'docs/public-boundary.md': frozenset({'c9228e2abd22a8af558cd272988435c1caa69ad79c625cb08c8ef32e639eb0f3'}),
     'src/substrate_wiki/README.md': frozenset({'44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204'}),
     'src/substrate_wiki/__init__.py': frozenset({'425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a'}),
-    'src/substrate_wiki/client.py': frozenset({'082164ad24c879f6ca6434a8f28c251cd1ee7f4b413c5a788a70b351e2187f2a'}),
-    'src/substrate_wiki/onboarding.py': frozenset({'d58fc9693f78cb4d5f8d9738c9895f009e098d73400d4e9530e7454662fabff1'}),
-    'scripts/install_hermes_plugin.py': frozenset({'69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75'}),
+    'src/substrate_wiki/client.py': frozenset({'082164ad24c879f6ca6434a8f28c251cd1ee7f4b413c5a788a70b351e2187f2a', 'f98518e2eea1d57e813130822ea95de1fcc5b550adf9b65164347468eadc6818'}),
+    'src/substrate_wiki/onboarding.py': frozenset({'d58fc9693f78cb4d5f8d9738c9895f009e098d73400d4e9530e7454662fabff1', 'da01090b5f007d9741a06d7ff4a9c8140036e4ef26512665b4802800e0b543a3'}),
+    'scripts/install_hermes_plugin.py': frozenset({'69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75', '33adb95c93f478a91991a97f0b9b6a1c9d2cee77e7894ed37fe331a4403b0bb8'}),
     'tests/test_hardening.py': frozenset({'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3'}),
     'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd'}),
 }
@@ -225,7 +228,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "dcd67b0310f3ee68d38dca52248d40e928a385e43a64c500728ca34ca5c78d4a"
+    "78175fe17de92aacf2afbe11cc254329dcddd5f4a59db5d2e05a41443d66038c"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"

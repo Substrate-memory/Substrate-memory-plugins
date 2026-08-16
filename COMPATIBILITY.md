@@ -6,10 +6,11 @@ Compatibility has three independent axes: Hermes host, hosted Substrate capabili
 
 | Plugin | Hermes | Required hosted capabilities | Status |
 |---|---|---|---|
+| 2.0.1 | 0.20.x | Same as 2.0.0; complete email authorization URL in agent/headless prompts | Contract and lifecycle integration tested |
 | 2.0.0 | 0.20.x | `stream-v2`, `entity-wiki-v1`, `entity-quality-v2`, hosted device authorization | Contract and lifecycle integration tested |
 | 1.4.1 | 0.18.2 | Imported immutable historical release | Historical compatibility record only |
 
-Hermes 2.0.0 uses the current 0.20 user-plugin discovery path and native `post_setup` hook.
+Plugin 2.0.x uses the current 0.20 user-plugin discovery path and native `post_setup` hook.
 Older Hermes lifecycle conventions are not supported by this release.
 
 ## Failure behavior

@@ -154,7 +154,8 @@ def _onboarding(args: argparse.Namespace, home: Path) -> dict[str, Any]:
     result = manager.begin(mode=args.mode, open_browser=not args.no_browser)
     if result.get("phase") == "authorization_pending":
         print(
-            f"Open {result.get('verification_uri')} and enter {result.get('user_code')}",
+            f"Open {result.get('verification_uri_complete')} to sign in by email "
+            f"and connect Hermes. One-time code: {result.get('user_code')}",
             file=sys.stderr,
             flush=True,
         )

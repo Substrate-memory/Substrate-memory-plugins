@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import json
+
+import pytest
 from pathlib import Path
 
-from substrate_wiki.onboarding import HOSTED_ORIGIN, OnboardingManager
+from substrate_wiki.onboarding import (
+    HOSTED_ORIGIN,
+    HostedOAuthClient,
+    OnboardingError,
+    OnboardingManager,
+)
 
 
 class Store:
@@ -76,3 +83,64 @@ def test_history_consent_is_durable_before_import_launch(tmp_path: Path):
     )
     manager.begin()
     assert manager.consent_history(True)["phase"] == "importing"
+
+
+def test_device_run_prints_complete_email_authorization_url(tmp_path: Path, capsys):
+    store = Store()
+    manager = OnboardingManager(
+        tmp_path,
+        api=API(),
+        store=store,
+        capability_check=lambda token: {"ok": token},
+        opener=lambda url: True,
+    )
+    result = manager.run(mode="device", wait=True, open_browser=False, timeout=5)
+    assert result["phase"] == "awaiting_history_consent"
+    output = capsys.readouterr().err
+    assert (
+        f"Open {HOSTED_ORIGIN}/oauth/device?user_code=ABCD-EFGH "
+        "to sign in by email and connect Hermes"
+    ) in output
+    assert f"Open {HOSTED_ORIGIN}/oauth/device and enter" not in output
+
+
+def test_device_response_constructs_complete_url_when_server_omits_it(monkeypatch):
+    client = HostedOAuthClient()
+    monkeypatch.setattr(
+        client,
+        "_post",
+        lambda path, values: (
+            200,
+            {
+                "device_code": "secret",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": HOSTED_ORIGIN + "/oauth/device",
+                "expires_in": 600,
+            },
+        ),
+    )
+    assert client.begin()["verification_uri_complete"] == (
+        HOSTED_ORIGIN + "/oauth/device?user_code=ABCD-EFGH"
+    )
+
+
+def test_device_response_rejects_complete_url_for_a_different_code(monkeypatch):
+    client = HostedOAuthClient()
+    monkeypatch.setattr(
+        client,
+        "_post",
+        lambda path, values: (
+            200,
+            {
+                "device_code": "secret",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": HOSTED_ORIGIN + "/oauth/device",
+                "verification_uri_complete": (
+                    HOSTED_ORIGIN + "/oauth/device?user_code=DIFFERENT"
+                ),
+                "expires_in": 600,
+            },
+        ),
+    )
+    with pytest.raises(OnboardingError, match="invalid_response"):
+        client.begin()
