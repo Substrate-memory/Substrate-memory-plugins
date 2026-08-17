@@ -12,6 +12,7 @@ from typing import Any
 
 from .checkpoint import ImportCheckpoint
 from .client import SubstrateClient
+from .onboarding import OnboardingError
 from .history import (
     HermesHistoryImporter,
     load_hermes_inventory,
@@ -214,6 +215,8 @@ def substrate_command(args: argparse.Namespace) -> None:
             raise ValueError("unknown command")
     except Exception as exc:  # noqa: BLE001 - content-free CLI failure contract
         result = {"error_class": type(exc).__name__, "complete": False}
+        if isinstance(exc, OnboardingError):
+            result["error_category"] = exc.category
         print(json.dumps(result, sort_keys=True) if args.json else f"Substrate command failed: {type(exc).__name__}")
         raise SystemExit(1) from None
     if args.json:

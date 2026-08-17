@@ -46,6 +46,19 @@ _TRANSIENT_CAPABILITY_FAILURES = frozenset(
         "http_504",
     }
 )
+_TRANSIENT_OAUTH_POLL_FAILURES = frozenset(
+    {
+        "transport_error",
+        "invalid_content_type",
+        "http_408",
+        "http_425",
+        "http_429",
+        "http_500",
+        "http_502",
+        "http_503",
+        "http_504",
+    }
+)
 _TERMINAL = {"ready", "declined", "failed", "repair_required"}
 
 
@@ -76,7 +89,7 @@ def _hosted_url(value: Any) -> str:
 class HostedOAuthClient:
     """Minimal no-redirect RFC 8628 client pinned to the hosted origin."""
 
-    def __init__(self, *, timeout: float = 15.0) -> None:
+    def __init__(self, *, timeout: float = 60.0) -> None:
         self.timeout = timeout
         self._opener = build_opener(_NoRedirect())
 
@@ -289,7 +302,8 @@ class OnboardingManager:
                 for key in (
                     "phase", "hosted_origin", "mode", "verification_uri",
                     "verification_uri_complete", "user_code", "expires_at",
-                    "history_consent", "error_class", "capability_failure", "import",
+                    "history_consent", "error_class", "capability_failure",
+                    "oauth_poll_failure", "import",
                     "connected_at", "completed_at",
                 )
                 if key in state
@@ -368,7 +382,15 @@ class OnboardingManager:
                 state.update(phase="repair_required", error_class="missing_device_credential")
                 self._save(state)
                 return self.status()
-            response = self.api.poll(device_code)
+            try:
+                response = self.api.poll(device_code)
+            except OnboardingError as exc:
+                if exc.category not in _TRANSIENT_OAUTH_POLL_FAILURES:
+                    raise
+                state["oauth_poll_failure"] = exc.category
+                self._save(state)
+                return self.status()
+            state.pop("oauth_poll_failure", None)
             poll_status = response["status"]
             if poll_status in {"authorization_pending", "slow_down"}:
                 if poll_status == "slow_down":
@@ -399,6 +421,7 @@ class OnboardingManager:
             state.update(phase="awaiting_history_consent", connected_at=time.time())
             state.pop("error_class", None)
             state.pop("capability_failure", None)
+            state.pop("oauth_poll_failure", None)
             self._save(state)
             return self.status()
 
