@@ -59,6 +59,20 @@ _TRANSIENT_OAUTH_POLL_FAILURES = frozenset(
         "http_504",
     }
 )
+_TRANSIENT_OAUTH_HTTP_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+_SAFE_OAUTH_ERRORS = frozenset(
+    {
+        "access_denied",
+        "authorization_pending",
+        "expired_token",
+        "invalid_client",
+        "invalid_grant",
+        "invalid_request",
+        "invalid_scope",
+        "slow_down",
+        "unsupported_grant_type",
+    }
+)
 _TERMINAL = {"ready", "declined", "failed", "repair_required"}
 
 
@@ -66,6 +80,15 @@ class OnboardingError(RuntimeError):
     def __init__(self, category: str) -> None:
         self.category = category
         super().__init__(category)
+
+
+def _oauth_failure_category(status: int, value: dict[str, Any]) -> str:
+    if status in _TRANSIENT_OAUTH_HTTP_STATUSES:
+        return f"http_{status}"
+    error = value.get("error")
+    if isinstance(error, str) and error in _SAFE_OAUTH_ERRORS:
+        return error
+    return "invalid_response"
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -136,7 +159,7 @@ class HostedOAuthClient:
             "/oauth/device_authorization", {"client_id": CLIENT_ID, "scope": SCOPES}
         )
         if status != 200:
-            raise OnboardingError(str(value.get("error") or f"http_{status}"))
+            raise OnboardingError(_oauth_failure_category(status, value))
         required = ("device_code", "user_code", "verification_uri", "expires_in")
         if not all(isinstance(value.get(key), (str, int)) for key in required):
             raise OnboardingError("invalid_response")
@@ -188,7 +211,7 @@ class HostedOAuthClient:
         error = value.get("error")
         if error in {"authorization_pending", "slow_down", "access_denied", "expired_token"}:
             return {"status": str(error)}
-        raise OnboardingError(str(error or f"http_{status}"))
+        raise OnboardingError(_oauth_failure_category(status, value))
 
 
 def _empty_state() -> dict[str, Any]:

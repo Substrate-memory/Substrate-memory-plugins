@@ -220,6 +220,25 @@ def _valid_hosted_capabilities() -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(503, "http_503"), (400, "invalid_response")],
+)
+def test_oauth_error_body_cannot_control_failure_category(
+    monkeypatch, status: int, expected: str
+):
+    client = HostedOAuthClient()
+    hostile = "server-controlled credential sk_live_must_not_escape"
+    monkeypatch.setattr(
+        client, "_post", lambda path, values: (status, {"error": hostile})
+    )
+
+    with pytest.raises(OnboardingError) as caught:
+        client.poll("device-secret")
+    assert caught.value.category == expected
+    assert hostile not in str(caught.value)
+
+
 def test_capability_check_retries_one_tenant_cold_start(tmp_path: Path, monkeypatch):
     from substrate_wiki.client import SubstrateAPIError, SubstrateClient
     from substrate_wiki import onboarding
