@@ -41,7 +41,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": ".github/workflows/release.yml",
       "reason": "Required only by the independent public repository.",
-      "sha256": "f28c1d1caf9f00c50fa51bc5cbccd1fb012ce7196a98f6863365fdab4ce1f50e"
+      "sha256": "65d10296c23e9a0a993fa674f509d25f7fc9dcc47b35eed51db0a954d1cc3b5b"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -353,7 +353,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "342076e02ac0d40620c859aa9f9af828110a0f818a862dd3bd75afff9222455c",
+      "destination_sha256": "7e0214bb8555fee72327a39f9874707b4eff75aec826916ac604cb904bddd144",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
