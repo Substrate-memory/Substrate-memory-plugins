@@ -537,7 +537,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_packaging.py",
-      "destination_sha256": "f10483d8ee1882c5aa45d88e7c97008e174e2367aaff439c1e61f54c69a0719e",
+      "destination_sha256": "a5d10ca8098d0bc2bcc38aee4a0e0aa752a9aec4e0bd9f0041c2c566d45e8ef6",
       "source": "tests/contract/test_hermes_plugin_packaging.py",
       "source_sha256": "c54967830788555b8d7bd5d2f871baeb6b98d7804a2bc7410ab297078bc20ee7",
       "transformation": "modified_for_standalone"
