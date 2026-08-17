@@ -215,7 +215,7 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
     'src/substrate_wiki/README.md': frozenset({'44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204'}),
     'src/substrate_wiki/__init__.py': frozenset({'425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a'}),
     'src/substrate_wiki/client.py': frozenset({'082164ad24c879f6ca6434a8f28c251cd1ee7f4b413c5a788a70b351e2187f2a', 'f98518e2eea1d57e813130822ea95de1fcc5b550adf9b65164347468eadc6818', 'a6e7c18e916057835e8cae9e3aa89bcc7357b397f014b8bc5bb71d995a5aa841'}),
-    'src/substrate_wiki/onboarding.py': frozenset({'d58fc9693f78cb4d5f8d9738c9895f009e098d73400d4e9530e7454662fabff1', 'da01090b5f007d9741a06d7ff4a9c8140036e4ef26512665b4802800e0b543a3', '52e11806e20017c920d4c0caef394570a8fdfb2cabff8a87cdbde3dc7e5a64fc'}),
+    'src/substrate_wiki/onboarding.py': frozenset({'2f1d35c0c568a6d817a3cfcb36b99a4447636ed8ab512d656a4c4411f4a48967', '4ae1938346a5af64b3936913c4b8438891d8170c6caa617b2eb3b5c816079ec0', '52e11806e20017c920d4c0caef394570a8fdfb2cabff8a87cdbde3dc7e5a64fc', 'd58fc9693f78cb4d5f8d9738c9895f009e098d73400d4e9530e7454662fabff1', 'da01090b5f007d9741a06d7ff4a9c8140036e4ef26512665b4802800e0b543a3'}),
     'scripts/install_hermes_plugin.py': frozenset({'69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75', '33adb95c93f478a91991a97f0b9b6a1c9d2cee77e7894ed37fe331a4403b0bb8', '4b34ee40d0d08ef24d03128e1cfc5ef73c69b39ca77b3fff59f4a4133cef76f2'}),
     'tests/test_hardening.py': frozenset({'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3'}),
     'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd'}),
@@ -233,7 +233,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "567036d3e914d8a3302589f978fe2482eeeff75a08b4e5aa631601d9ba0a5f1f"
+    "e9a0fe224ed8aefb458e9383ed86f1f90fdbb3c3a7445849f28530ebd0557a8d"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
