@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.3
+
+- Keep approved device polling active across transient hosted transport and edge failures.
+- Use a 60-second OAuth request timeout and fixed content-free failure categories.
+
 ## 2.0.2
 
 - Retry transient post-approval capability checks across one hosted tenant cold start.
