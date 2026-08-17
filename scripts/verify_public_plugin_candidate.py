@@ -233,7 +233,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "e9a0fe224ed8aefb458e9383ed86f1f90fdbb3c3a7445849f28530ebd0557a8d"
+    "52d7ecc6def648b5c1a0bb33e70f2cee55f5484be7487c35009ccc00cdb4a42b"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
