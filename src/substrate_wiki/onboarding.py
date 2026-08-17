@@ -46,6 +46,33 @@ _TRANSIENT_CAPABILITY_FAILURES = frozenset(
         "http_504",
     }
 )
+_TRANSIENT_OAUTH_POLL_FAILURES = frozenset(
+    {
+        "transport_error",
+        "invalid_content_type",
+        "http_408",
+        "http_425",
+        "http_429",
+        "http_500",
+        "http_502",
+        "http_503",
+        "http_504",
+    }
+)
+_TRANSIENT_OAUTH_HTTP_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+_SAFE_OAUTH_ERRORS = frozenset(
+    {
+        "access_denied",
+        "authorization_pending",
+        "expired_token",
+        "invalid_client",
+        "invalid_grant",
+        "invalid_request",
+        "invalid_scope",
+        "slow_down",
+        "unsupported_grant_type",
+    }
+)
 _TERMINAL = {"ready", "declined", "failed", "repair_required"}
 
 
@@ -53,6 +80,15 @@ class OnboardingError(RuntimeError):
     def __init__(self, category: str) -> None:
         self.category = category
         super().__init__(category)
+
+
+def _oauth_failure_category(status: int, value: dict[str, Any]) -> str:
+    if status in _TRANSIENT_OAUTH_HTTP_STATUSES:
+        return f"http_{status}"
+    error = value.get("error")
+    if isinstance(error, str) and error in _SAFE_OAUTH_ERRORS:
+        return error
+    return "invalid_response"
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -76,7 +112,7 @@ def _hosted_url(value: Any) -> str:
 class HostedOAuthClient:
     """Minimal no-redirect RFC 8628 client pinned to the hosted origin."""
 
-    def __init__(self, *, timeout: float = 15.0) -> None:
+    def __init__(self, *, timeout: float = 60.0) -> None:
         self.timeout = timeout
         self._opener = build_opener(_NoRedirect())
 
@@ -123,7 +159,7 @@ class HostedOAuthClient:
             "/oauth/device_authorization", {"client_id": CLIENT_ID, "scope": SCOPES}
         )
         if status != 200:
-            raise OnboardingError(str(value.get("error") or f"http_{status}"))
+            raise OnboardingError(_oauth_failure_category(status, value))
         required = ("device_code", "user_code", "verification_uri", "expires_in")
         if not all(isinstance(value.get(key), (str, int)) for key in required):
             raise OnboardingError("invalid_response")
@@ -175,7 +211,7 @@ class HostedOAuthClient:
         error = value.get("error")
         if error in {"authorization_pending", "slow_down", "access_denied", "expired_token"}:
             return {"status": str(error)}
-        raise OnboardingError(str(error or f"http_{status}"))
+        raise OnboardingError(_oauth_failure_category(status, value))
 
 
 def _empty_state() -> dict[str, Any]:
@@ -289,7 +325,8 @@ class OnboardingManager:
                 for key in (
                     "phase", "hosted_origin", "mode", "verification_uri",
                     "verification_uri_complete", "user_code", "expires_at",
-                    "history_consent", "error_class", "capability_failure", "import",
+                    "history_consent", "error_class", "capability_failure",
+                    "oauth_poll_failure", "import",
                     "connected_at", "completed_at",
                 )
                 if key in state
@@ -368,7 +405,15 @@ class OnboardingManager:
                 state.update(phase="repair_required", error_class="missing_device_credential")
                 self._save(state)
                 return self.status()
-            response = self.api.poll(device_code)
+            try:
+                response = self.api.poll(device_code)
+            except OnboardingError as exc:
+                if exc.category not in _TRANSIENT_OAUTH_POLL_FAILURES:
+                    raise
+                state["oauth_poll_failure"] = exc.category
+                self._save(state)
+                return self.status()
+            state.pop("oauth_poll_failure", None)
             poll_status = response["status"]
             if poll_status in {"authorization_pending", "slow_down"}:
                 if poll_status == "slow_down":
@@ -399,6 +444,7 @@ class OnboardingManager:
             state.update(phase="awaiting_history_consent", connected_at=time.time())
             state.pop("error_class", None)
             state.pop("capability_failure", None)
+            state.pop("oauth_poll_failure", None)
             self._save(state)
             return self.status()
 

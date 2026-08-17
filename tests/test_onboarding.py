@@ -53,6 +53,51 @@ def test_device_credentials_never_enter_state_and_consent_decline_keeps_connecti
     assert state["history_consent"]["decision"] == "declined"
 
 
+def test_transient_oauth_poll_failure_preserves_grant_and_retries(tmp_path: Path):
+    class TransientPollAPI(API):
+        def poll(self, device_code):
+            assert device_code == "device-secret"
+            self.poll_count += 1
+            if self.poll_count == 1:
+                raise OnboardingError("transport_error")
+            return {"status": "approved", "access_token": "tenant-secret"}
+
+    store = Store()
+    api = TransientPollAPI()
+    manager = OnboardingManager(
+        tmp_path, api=api, store=store, capability_check=lambda token: {"ok": token}
+    )
+    manager.begin(mode="device", open_browser=False)
+
+    pending = manager.advance()
+    assert pending["phase"] == "authorization_pending"
+    assert pending["oauth_poll_failure"] == "transport_error"
+    assert store.get("onboarding-device") == "device-secret"
+    assert store.get() == ""
+
+    connected = manager.advance()
+    assert api.poll_count == 2
+    assert connected["phase"] == "awaiting_history_consent"
+    assert "oauth_poll_failure" not in connected
+    assert store.get() == "tenant-secret"
+    assert store.get("onboarding-device") == ""
+
+
+def test_permanent_oauth_poll_failure_remains_fail_closed(tmp_path: Path):
+    class InvalidPollAPI(API):
+        def poll(self, device_code):
+            raise OnboardingError("invalid_response")
+
+    store = Store()
+    manager = OnboardingManager(tmp_path, api=InvalidPollAPI(), store=store)
+    manager.begin(mode="device", open_browser=False)
+
+    with pytest.raises(OnboardingError, match="invalid_response"):
+        manager.advance()
+    assert store.get("onboarding-device") == "device-secret"
+    assert store.get() == ""
+
+
 def test_history_approval_starts_exactly_one_durable_job(tmp_path: Path):
     store = Store()
     store.put("tenant-secret")
@@ -173,6 +218,25 @@ def _valid_hosted_capabilities() -> dict[str, object]:
             "canonical_redirects": True,
         },
     }
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(503, "http_503"), (400, "invalid_response")],
+)
+def test_oauth_error_body_cannot_control_failure_category(
+    monkeypatch, status: int, expected: str
+):
+    client = HostedOAuthClient()
+    hostile = "server-controlled credential sk_live_must_not_escape"
+    monkeypatch.setattr(
+        client, "_post", lambda path, values: (status, {"error": hostile})
+    )
+
+    with pytest.raises(OnboardingError) as caught:
+        client.poll("device-secret")
+    assert caught.value.category == expected
+    assert hostile not in str(caught.value)
 
 
 def test_capability_check_retries_one_tenant_cold_start(tmp_path: Path, monkeypatch):

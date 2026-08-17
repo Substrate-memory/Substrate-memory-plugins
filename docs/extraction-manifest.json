@@ -137,13 +137,13 @@
       "class": "standalone_plugin_implementation",
       "path": "src/substrate_wiki/onboarding.py",
       "reason": "Added for hosted Hermes 0.20 automatic onboarding.",
-      "sha256": "52e11806e20017c920d4c0caef394570a8fdfb2cabff8a87cdbde3dc7e5a64fc"
+      "sha256": "2f1d35c0c568a6d817a3cfcb36b99a4447636ed8ab512d656a4c4411f4a48967"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "tests/test_onboarding.py",
       "reason": "Added for hosted Hermes 0.20 automatic onboarding.",
-      "sha256": "03406c0caae1970d8e1b85021cafd3d560b293c60e54cd52afa5606be72a1b77"
+      "sha256": "a03dfc461c4cf920f1c297acac0cf7bddbbf59ac7685394a63caa67e43b78dad"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -353,7 +353,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "8de69ac64758975370bf149b27526170bc0f00c43b56d63f2d47f3f5f30c457f",
+      "destination_sha256": "78dee8e9765fd0bda094a8b3ec25b582680506cb0ea4f7229bcaf9d6499697be",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -385,7 +385,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/cli.py",
-      "destination_sha256": "4c500ce6348130fb097b8d3661bb883c4d4bf18eaee42773bf1d5cb9dd821f96",
+      "destination_sha256": "ba978f5f9f0d48eb2288c8d470182c0ef38a56106e5bc90445352bb90981c044",
       "source": "hermes-plugin/substrate_wiki/cli.py",
       "source_sha256": "454bffeb76fcde508b7a16cc7597b444611ecb0028e8d43796c57c500cf75d3c",
       "transformation": "copied"
