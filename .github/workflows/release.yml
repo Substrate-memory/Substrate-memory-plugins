@@ -147,4 +147,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "substrate_wiki $tag" \
-            --notes "Patch release for resilient post-approval capability validation across hosted tenant cold starts. Targets Hermes 0.20.x with hosted device onboarding and optional durable history import. See COMPATIBILITY.md and SECURITY.md."
+            --notes "Patch release for resilient OAuth device polling across transient hosted maintenance stalls. Targets Hermes 0.20.x with hosted device onboarding and optional durable history import. See COMPATIBILITY.md and SECURITY.md."

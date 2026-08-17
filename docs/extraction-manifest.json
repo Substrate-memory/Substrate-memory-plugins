@@ -41,7 +41,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": ".github/workflows/release.yml",
       "reason": "Required only by the independent public repository.",
-      "sha256": "f28c1d1caf9f00c50fa51bc5cbccd1fb012ce7196a98f6863365fdab4ce1f50e"
+      "sha256": "65d10296c23e9a0a993fa674f509d25f7fc9dcc47b35eed51db0a954d1cc3b5b"
     },
     {
       "class": "standalone_repository_policy_or_test",
