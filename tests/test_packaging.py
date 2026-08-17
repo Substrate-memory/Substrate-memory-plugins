@@ -91,8 +91,8 @@ def test_root_readme_keeps_published_release_state_truthful() -> None:
     assert boundary["legal"]["status"] == "published"
     assert "canonical editable source" in readme
     assert "`v2.0.3` is not published yet" not in readme
-    assert "releases/download/v2.0.2" in readme
-    assert "6140d4f9baa9601e4adc9f75ef96eaf75e031a40767d76795fb08c412344a296" in readme
+    assert "releases/download/v2.0.3" in readme
+    assert "dfaa786f68dd819e1313191bb26253caf6bc52fe4b0ab4f6f8c2e2ebcb62e1a3" in readme
 
 
 def test_release_workflow_keeps_dependency_execution_out_of_privileged_publisher() -> None:

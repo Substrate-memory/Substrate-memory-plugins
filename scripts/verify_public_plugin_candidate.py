@@ -106,6 +106,7 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     "tests/test_packaging.py": frozenset(
                                    {
+                                       "a3a24a5c987c939514866e72b70d01a32e34f5771089153e1fd12013829d8baf",
                                        "c4033e38f9e832779062381b0d0dcf71eecc25554d8df9af383a2d0c334dcd78",
                                        "c7a8e84d116319e62b0b7817c1a049225088c8b3baf59c42ad82cbefc3c172b5",
                                    }
@@ -133,6 +134,7 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
                            "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645",
                            "99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c",
                            "bb4ba0542582cf3a89a37906651074c52bd1c28754b079bd67fd856c7fe24362",
+                           "d07d0c65e39f0949f91f7a880a4b584b9b57d8ed3c70ca8fd95276d8d525b517",
                            "ef0cdf7a6c2fdc4ec7e781be15122f9b20331769929517a0f3c82ab15363480b",
                        }
                    ),
@@ -209,7 +211,16 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
 # Hosted-origin and legacy-name references are accepted only at these exact reviewed
 # file digests. Any byte change re-enables all endpoint and credential-name detectors.
 _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
-    'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9', '6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a', 'f139b1328c7884dfa664aa59b47d5d707b2a72894747911b8f99d5e89f6c7eca', 'cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b', '0d74ffbf410fe559478ee6a67e105f275d72d0477c71e86c81531798bc07e599'}),
+    'README.md': frozenset(
+                     {
+                         "0d74ffbf410fe559478ee6a67e105f275d72d0477c71e86c81531798bc07e599",
+                         "20ac49480369c8531e001466a6537a7dae310bbba7e6079bc217a6181e7d69d7",
+                         "6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a",
+                         "87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9",
+                         "cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b",
+                         "f139b1328c7884dfa664aa59b47d5d707b2a72894747911b8f99d5e89f6c7eca",
+                     }
+                 ),
     'COMPATIBILITY.md': frozenset(
                             {
                                 "1f18a49d552f2912872c10b0e41e93ff50ccd923d2fa9c108d35084dc5a5b22c",
@@ -225,6 +236,7 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
                            "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645",
                            "99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c",
                            "9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f",
+                           "d07d0c65e39f0949f91f7a880a4b584b9b57d8ed3c70ca8fd95276d8d525b517",
                            "ef0cdf7a6c2fdc4ec7e781be15122f9b20331769929517a0f3c82ab15363480b",
                        }
                    ),
@@ -276,7 +288,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "43ba7c7487a3c7168a96852052fa0fc3c4164c2b402abfde3cce97928d7abad3"
+    "d18f105fc482c28c9946f3f1bd21235821e9283ef76c48ce04cbfa756c20b09f"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"

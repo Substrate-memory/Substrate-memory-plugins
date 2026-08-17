@@ -27,7 +27,7 @@ Install the official Substrate plugin for my existing Hermes installation by fol
 "Install with an agent" section of this README exactly.
 
 Security and consent rules:
-- Install only immutable release v2.0.2 from Substrate-memory/hermes-substrate-wiki.
+- Install only immutable release v2.0.3 from Substrate-memory/hermes-substrate-wiki.
 - Before executing downloaded code, independently verify the installer and plugin archive
   against the exact SHA-256 values in the README. Never substitute a branch archive, CI
   artifact, newer release, or checksum obtained only from the same download response.
@@ -69,7 +69,7 @@ install_dir="$(mktemp -d)"
 chmod 700 "$install_dir"
 cd "$install_dir"
 
-base='https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.2'
+base='https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.3'
 curl --fail --location --proto '=https' --tlsv1.2 --remote-name "$base/install_hermes_plugin.py"
 curl --fail --location --proto '=https' --tlsv1.2 --remote-name "$base/substrate_wiki.zip"
 curl --fail --location --proto '=https' --tlsv1.2 --remote-name "$base/SHA256SUMS"
@@ -79,8 +79,8 @@ import hashlib
 from pathlib import Path
 
 expected = {
-    "install_hermes_plugin.py": "4b34ee40d0d08ef24d03128e1cfc5ef73c69b39ca77b3fff59f4a4133cef76f2",
-    "substrate_wiki.zip": "6140d4f9baa9601e4adc9f75ef96eaf75e031a40767d76795fb08c412344a296",
+    "install_hermes_plugin.py": "72247d3537140098365350020cce29658c0743fee1aa738d7143db82316acce4",
+    "substrate_wiki.zip": "dfaa786f68dd819e1313191bb26253caf6bc52fe4b0ab4f6f8c2e2ebcb62e1a3",
 }
 for name, digest in expected.items():
     actual = hashlib.sha256(Path(name).read_bytes()).hexdigest()
@@ -95,7 +95,7 @@ PY
 
 python3 install_hermes_plugin.py \
   --archive substrate_wiki.zip \
-  --sha256 6140d4f9baa9601e4adc9f75ef96eaf75e031a40767d76795fb08c412344a296 \
+  --sha256 dfaa786f68dd819e1313191bb26253caf6bc52fe4b0ab4f6f8c2e2ebcb62e1a3 \
   --yes --json
 ```
 
@@ -115,17 +115,17 @@ $installDir = Join-Path ([IO.Path]::GetTempPath()) ("substrate-wiki-" + [guid]::
 New-Item -ItemType Directory -Path $installDir | Out-Null
 Set-Location $installDir
 
-$base = 'https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.2'
+$base = 'https://github.com/Substrate-memory/hermes-substrate-wiki/releases/download/v2.0.3'
 Invoke-WebRequest "$base/install_hermes_plugin.py" -OutFile 'install_hermes_plugin.py'
 Invoke-WebRequest "$base/substrate_wiki.zip" -OutFile 'substrate_wiki.zip'
 Invoke-WebRequest "$base/SHA256SUMS" -OutFile 'SHA256SUMS'
 
 $installerSha = (Get-FileHash -Algorithm SHA256 'install_hermes_plugin.py').Hash.ToLowerInvariant()
 $archiveSha = (Get-FileHash -Algorithm SHA256 'substrate_wiki.zip').Hash.ToLowerInvariant()
-if ($installerSha -ne '4b34ee40d0d08ef24d03128e1cfc5ef73c69b39ca77b3fff59f4a4133cef76f2') {
+if ($installerSha -ne '72247d3537140098365350020cce29658c0743fee1aa738d7143db82316acce4') {
     throw 'Installer checksum mismatch'
 }
-if ($archiveSha -ne '6140d4f9baa9601e4adc9f75ef96eaf75e031a40767d76795fb08c412344a296') {
+if ($archiveSha -ne 'dfaa786f68dd819e1313191bb26253caf6bc52fe4b0ab4f6f8c2e2ebcb62e1a3') {
     throw 'Plugin archive checksum mismatch'
 }
 $published = Get-Content 'SHA256SUMS' -Raw
@@ -136,7 +136,7 @@ if (($published -notmatch [regex]::Escape($installerSha)) -or
 
 py -3 install_hermes_plugin.py `
   --archive substrate_wiki.zip `
-  --sha256 6140d4f9baa9601e4adc9f75ef96eaf75e031a40767d76795fb08c412344a296 `
+  --sha256 dfaa786f68dd819e1313191bb26253caf6bc52fe4b0ab4f6f8c2e2ebcb62e1a3 `
   --yes --json
 ```
 
@@ -166,7 +166,7 @@ Then verify the content-free state:
 hermes substrate_wiki onboarding-status --json
 ```
 
-Tenant credentials are stored in native credential custody, with an owner-private profile fallback; they never belong in ordinary configuration, logs, arguments, or diagnostics. See [configuration and operation](docs/operation.md) and the immutable [v2.0.2 release](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v2.0.2).
+Tenant credentials are stored in native credential custody, with an owner-private profile fallback; they never belong in ordinary configuration, logs, arguments, or diagnostics. See [configuration and operation](docs/operation.md) and the immutable [v2.0.3 release](https://github.com/Substrate-memory/hermes-substrate-wiki/releases/tag/v2.0.3).
 
 ## What it does
 
@@ -189,7 +189,7 @@ Read [SECURITY.md](SECURITY.md), [the threat model](docs/threat-model.md), [the 
 
 ## Open and paid boundary
 
-The open side is permissively licensed and includes the Hermes plugin/client, memory extraction and entity model, credential containment, privacy deletion, and policy compiler. This Hermes integration itself is hosted-only. [BOUNDARY.md](BOUNDARY.md) distinguishes the permanent commitment from the current `v2.0.2` implementation.
+The open side is permissively licensed and includes the Hermes plugin/client, memory extraction and entity model, credential containment, privacy deletion, and policy compiler. This Hermes integration itself is hosted-only. [BOUNDARY.md](BOUNDARY.md) distinguishes the permanent commitment from the current `v2.0.3` implementation.
 
 The paid hosted tier covers hosted brokerage, multi-user operation, cross-organizational graph services, audit/attestation, and insurance-backed decisions. Its meter is per authorized action, never seats. This repository does not contain or license those held services.
 
