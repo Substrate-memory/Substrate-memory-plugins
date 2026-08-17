@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The standalone `v2.0.0`, `v2.0.1`, and `v2.0.2` releases target Hermes 0.20.x and the hosted service at `https://app.trysubstrate.co`.
+The standalone `v2.0.0`, `v2.0.1`, and `v2.0.2` releases and pending `v2.0.3` patch target Hermes 0.20.x and the hosted service at `https://app.trysubstrate.co`.
 Candidate CI artifacts are not supported releases.
 
 ## Report a vulnerability

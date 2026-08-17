@@ -105,8 +105,11 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
         {"0a3c7af6a761a1b22c5b94f7e1738d5d420e5f085f775d792728ed9ca684ac13"}
     ),
     "tests/test_packaging.py": frozenset(
-        {"c7a8e84d116319e62b0b7817c1a049225088c8b3baf59c42ad82cbefc3c172b5"}
-    ),
+                                   {
+                                       "c4033e38f9e832779062381b0d0dcf71eecc25554d8df9af383a2d0c334dcd78",
+                                       "c7a8e84d116319e62b0b7817c1a049225088c8b3baf59c42ad82cbefc3c172b5",
+                                   }
+                               ),
     "tests/test_publication_scanner.py": frozenset(
         {
             "c2352cc593ab08d452479f9ed59651e95acdf0cd5511a94f3830e7910bf65a21",
@@ -123,15 +126,16 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
 # These are exact reviewed bytes only; any modification fails closed.
 EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     "SECURITY.md": frozenset(
-        {
-            "34a9cd6cd747589e1ff34fe412d29a04ecc076df19871eaea8a6a078d0b17e06",
-            "bb4ba0542582cf3a89a37906651074c52bd1c28754b079bd67fd856c7fe24362",
-            "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645",
-            "99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c",
-            "ef0cdf7a6c2fdc4ec7e781be15122f9b20331769929517a0f3c82ab15363480b",
-            "48509dbbefd182381675499ff5636df18073411db580b05a1430e5eec1714df7"
-        }
-    ),
+                       {
+                           "34a9cd6cd747589e1ff34fe412d29a04ecc076df19871eaea8a6a078d0b17e06",
+                           "48509dbbefd182381675499ff5636df18073411db580b05a1430e5eec1714df7",
+                           "756264bc4dbd9f9df5c6e4bc016545fc1ac0921b384346e40d557706c2137fc5",
+                           "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645",
+                           "99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c",
+                           "bb4ba0542582cf3a89a37906651074c52bd1c28754b079bd67fd856c7fe24362",
+                           "ef0cdf7a6c2fdc4ec7e781be15122f9b20331769929517a0f3c82ab15363480b",
+                       }
+                   ),
     "docs/api-ownership.json": frozenset(
         {"3112d0d252749b45c6e081c6d7987af2c7aa665936ee37eadab2ea7d01f4eb74"}
     ),
@@ -206,17 +210,56 @@ EXACT_PROTECTED_KEY_REFERENCE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
 # file digests. Any byte change re-enables all endpoint and credential-name detectors.
 _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
     'README.md': frozenset({'87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9', '6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a', 'f139b1328c7884dfa664aa59b47d5d707b2a72894747911b8f99d5e89f6c7eca', 'cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b', '0d74ffbf410fe559478ee6a67e105f275d72d0477c71e86c81531798bc07e599'}),
-    'COMPATIBILITY.md': frozenset({'e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3', '1f8fc410a88c7b410c4e72f4210226629b573a3c7f0cc410bc35939cd2317cfc', '1f18a49d552f2912872c10b0e41e93ff50ccd923d2fa9c108d35084dc5a5b22c'}),
-    'SECURITY.md': frozenset({'9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f', '85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645', '99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c', 'ef0cdf7a6c2fdc4ec7e781be15122f9b20331769929517a0f3c82ab15363480b', '48509dbbefd182381675499ff5636df18073411db580b05a1430e5eec1714df7'}),
+    'COMPATIBILITY.md': frozenset(
+                            {
+                                "1f18a49d552f2912872c10b0e41e93ff50ccd923d2fa9c108d35084dc5a5b22c",
+                                "1f8fc410a88c7b410c4e72f4210226629b573a3c7f0cc410bc35939cd2317cfc",
+                                "67bcb14e4988ed5b49379e93f93fa588e31a068b394a8787d1ea81ba8f6a6c70",
+                                "e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3",
+                            }
+                        ),
+    'SECURITY.md': frozenset(
+                       {
+                           "48509dbbefd182381675499ff5636df18073411db580b05a1430e5eec1714df7",
+                           "756264bc4dbd9f9df5c6e4bc016545fc1ac0921b384346e40d557706c2137fc5",
+                           "85320ec1e6a8c655b1f4e278b95c1087a6382bf3141366f1290c0933590f4645",
+                           "99aed8e5a9a712f0fd2d9caa5223f0b332220f98699351565a3bb35a23d2848c",
+                           "9cf9406266336996c57227413514cf97a04eb13264d80fa58c54d325fecf3d9f",
+                           "ef0cdf7a6c2fdc4ec7e781be15122f9b20331769929517a0f3c82ab15363480b",
+                       }
+                   ),
     'docs/api-ownership.json': frozenset({'f1894c4653c51c6f02d23194617a3a1e9035d2cbe2b7c282f4cd6fbb26d8b65c'}),
     'docs/operation.md': frozenset({'fadd72791e097d878bbfbf338922d568f3c3d47958f26a41f53d3597471988fa'}),
     'docs/public-boundary.json': frozenset({'976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2', '648904170d6c66de6f15cfe51fb494225467730ff5167225d6fd427a6eac3571'}),
     'docs/public-boundary.md': frozenset({'c9228e2abd22a8af558cd272988435c1caa69ad79c625cb08c8ef32e639eb0f3'}),
     'src/substrate_wiki/README.md': frozenset({'44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204'}),
     'src/substrate_wiki/__init__.py': frozenset({'425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a'}),
-    'src/substrate_wiki/client.py': frozenset({'082164ad24c879f6ca6434a8f28c251cd1ee7f4b413c5a788a70b351e2187f2a', 'f98518e2eea1d57e813130822ea95de1fcc5b550adf9b65164347468eadc6818', 'a6e7c18e916057835e8cae9e3aa89bcc7357b397f014b8bc5bb71d995a5aa841'}),
-    'src/substrate_wiki/onboarding.py': frozenset({'2f1d35c0c568a6d817a3cfcb36b99a4447636ed8ab512d656a4c4411f4a48967', '4ae1938346a5af64b3936913c4b8438891d8170c6caa617b2eb3b5c816079ec0', '52e11806e20017c920d4c0caef394570a8fdfb2cabff8a87cdbde3dc7e5a64fc', 'd58fc9693f78cb4d5f8d9738c9895f009e098d73400d4e9530e7454662fabff1', 'da01090b5f007d9741a06d7ff4a9c8140036e4ef26512665b4802800e0b543a3'}),
-    'scripts/install_hermes_plugin.py': frozenset({'69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75', '33adb95c93f478a91991a97f0b9b6a1c9d2cee77e7894ed37fe331a4403b0bb8', '4b34ee40d0d08ef24d03128e1cfc5ef73c69b39ca77b3fff59f4a4133cef76f2'}),
+    'src/substrate_wiki/client.py': frozenset(
+                                        {
+                                            "082164ad24c879f6ca6434a8f28c251cd1ee7f4b413c5a788a70b351e2187f2a",
+                                            "59413ab9fa2eef0d943a70a53e2b5d9d5163c0d9e154538735715e8f88585616",
+                                            "a6e7c18e916057835e8cae9e3aa89bcc7357b397f014b8bc5bb71d995a5aa841",
+                                            "f98518e2eea1d57e813130822ea95de1fcc5b550adf9b65164347468eadc6818",
+                                        }
+                                    ),
+    'src/substrate_wiki/onboarding.py': frozenset(
+                                            {
+                                                "2f1d35c0c568a6d817a3cfcb36b99a4447636ed8ab512d656a4c4411f4a48967",
+                                                "4ae1938346a5af64b3936913c4b8438891d8170c6caa617b2eb3b5c816079ec0",
+                                                "52e11806e20017c920d4c0caef394570a8fdfb2cabff8a87cdbde3dc7e5a64fc",
+                                                "a835092092bca7266978609763d36f5767ac363fe7180bda482d713df2ecc439",
+                                                "d58fc9693f78cb4d5f8d9738c9895f009e098d73400d4e9530e7454662fabff1",
+                                                "da01090b5f007d9741a06d7ff4a9c8140036e4ef26512665b4802800e0b543a3",
+                                            }
+                                        ),
+    'scripts/install_hermes_plugin.py': frozenset(
+                                            {
+                                                "33adb95c93f478a91991a97f0b9b6a1c9d2cee77e7894ed37fe331a4403b0bb8",
+                                                "4b34ee40d0d08ef24d03128e1cfc5ef73c69b39ca77b3fff59f4a4133cef76f2",
+                                                "69af75e4240166896031f3a396fd0b2bdc4d00adbc836d1a4f22019bc6713b75",
+                                                "72247d3537140098365350020cce29658c0743fee1aa738d7143db82316acce4",
+                                            }
+                                        ),
     'tests/test_hardening.py': frozenset({'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3'}),
     'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd'}),
 }
@@ -233,7 +276,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "2a94f0ce0443952df1c7be7eb1f12cf7aabad96a4e9ccf482acc0ae73d2606ae"
+    "7c56d7b749266ad9506b03d6ed5487efe6cc0b7a5bb7f38142348386b00a4968"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
