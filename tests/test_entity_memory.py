@@ -251,6 +251,6 @@ def test_semantic_gate_rejects_non_strict_versions(
 def test_v141_manifest_and_prompt_describe_one_published_memory() -> None:
     manifest = (PLUGIN_ROOT / "substrate_wiki" / "plugin.yaml").read_text(encoding="utf-8")
     prompt = SubstrateWikiProvider().system_prompt_block()
-    assert "version: 2.0.1" in manifest
+    assert "version: 2.0.2" in manifest
     assert "single published memory" in prompt
     assert "canonical published entity" in prompt

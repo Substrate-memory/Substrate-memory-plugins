@@ -29,8 +29,23 @@ CLIENT_ID = "substrate-hermes"
 SCOPES = "capture retrieve"
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 _STATE_VERSION = 1
-_PLUGIN_VERSION = "2.0.1"
+_PLUGIN_VERSION = "2.0.2"
 _MAX_RESPONSE = 64 * 1024
+_CAPABILITY_TIMEOUT_SECONDS = 60.0
+_CAPABILITY_ATTEMPTS = 2
+_TRANSIENT_CAPABILITY_FAILURES = frozenset(
+    {
+        "timeout",
+        "transport_error",
+        "http_408",
+        "http_425",
+        "http_429",
+        "http_500",
+        "http_502",
+        "http_503",
+        "http_504",
+    }
+)
 _TERMINAL = {"ready", "declined", "failed", "repair_required"}
 
 
@@ -274,8 +289,8 @@ class OnboardingManager:
                 for key in (
                     "phase", "hosted_origin", "mode", "verification_uri",
                     "verification_uri_complete", "user_code", "expires_at",
-                    "history_consent", "error_class", "import", "connected_at",
-                    "completed_at",
+                    "history_consent", "error_class", "capability_failure", "import",
+                    "connected_at", "completed_at",
                 )
                 if key in state
             }
@@ -285,10 +300,23 @@ class OnboardingManager:
             return result
 
     def _check_capabilities(self, token: str) -> dict[str, Any]:
-        client = SubstrateClient(HOSTED_ORIGIN, token, timeout=15.0)
-        capabilities = client.capabilities()
-        validate_capabilities(capabilities, require_replay=True, require_entity=True)
-        return {"provider": capabilities.get("provider"), "protocol": "stream-v2"}
+        """Validate the issued key, tolerating one hosted tenant cold start."""
+        for attempt in range(_CAPABILITY_ATTEMPTS):
+            client = SubstrateClient(
+                HOSTED_ORIGIN, token, timeout=_CAPABILITY_TIMEOUT_SECONDS
+            )
+            try:
+                capabilities = client.capabilities()
+                validate_capabilities(capabilities, require_replay=True, require_entity=True)
+                return {"provider": capabilities.get("provider"), "protocol": "stream-v2"}
+            except SubstrateAPIError as exc:
+                if (
+                    attempt + 1 >= _CAPABILITY_ATTEMPTS
+                    or exc.category not in _TRANSIENT_CAPABILITY_FAILURES
+                ):
+                    raise
+                time.sleep(1.0)
+        raise SubstrateAPIError("invalid_response")
 
     def begin(self, *, mode: str = "auto", open_browser: bool = True) -> dict[str, Any]:
         with self._mutex:
@@ -358,14 +386,19 @@ class OnboardingManager:
             token = response["access_token"]
             try:
                 self.capability_check(token)
-            except (SubstrateAPIError, OnboardingError):
-                state.update(phase="failed", error_class="capability_check_failed")
+            except (SubstrateAPIError, OnboardingError) as exc:
+                state.update(
+                    phase="failed",
+                    error_class="capability_check_failed",
+                    capability_failure=exc.category,
+                )
                 self._save(state)
                 return self.status()
             self.store.put(token)
             self.store.delete("onboarding-device")
             state.update(phase="awaiting_history_consent", connected_at=time.time())
             state.pop("error_class", None)
+            state.pop("capability_failure", None)
             self._save(state)
             return self.status()
 

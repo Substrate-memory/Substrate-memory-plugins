@@ -144,3 +144,85 @@ def test_device_response_rejects_complete_url_for_a_different_code(monkeypatch):
     )
     with pytest.raises(OnboardingError, match="invalid_response"):
         client.begin()
+
+
+def _valid_hosted_capabilities() -> dict[str, object]:
+    return {
+        "provider": "substrate_wiki",
+        "capture_schema_versions": [2],
+        "max_event_bytes": 262_144,
+        "history_replay": {
+            "protocol": "stream-v2",
+            "min_plugin_version": "1.2.0",
+            "content_free_completion": True,
+            "incremental_windows": True,
+            "status_version": 2,
+        },
+        "entity_memory": {
+            "protocol": "entity-wiki-v1",
+            "min_plugin_version": "1.3.0",
+            "search_endpoint": "/api/v1/hermes/memory/search",
+            "canonical_wiki_pages": True,
+            "entity_page_type": "entity",
+        },
+        "entity_quality": {
+            "protocol": "entity-quality-v2",
+            "min_plugin_version": "1.4.0",
+            "memory_card": True,
+            "quality_version": 2,
+            "canonical_redirects": True,
+        },
+    }
+
+
+def test_capability_check_retries_one_tenant_cold_start(tmp_path: Path, monkeypatch):
+    from substrate_wiki.client import SubstrateAPIError, SubstrateClient
+    from substrate_wiki import onboarding
+
+    calls = []
+
+    def capabilities(_client):
+        calls.append(True)
+        if len(calls) == 1:
+            raise SubstrateAPIError("timeout")
+        return _valid_hosted_capabilities()
+
+    monkeypatch.setattr(SubstrateClient, "capabilities", capabilities)
+    monkeypatch.setattr(onboarding.time, "sleep", lambda _seconds: None)
+    store = Store()
+    manager = OnboardingManager(tmp_path, api=API(), store=store, opener=lambda _url: True)
+
+    manager.begin(mode="device", open_browser=False)
+    result = manager.advance()
+
+    assert len(calls) == 2
+    assert result["phase"] == "awaiting_history_consent"
+    assert result["authenticated"] is True
+    assert store.get() == "tenant-secret"
+    assert store.get("onboarding-device") == ""
+
+
+def test_permanent_capability_failure_is_not_retried_and_is_diagnostic(
+    tmp_path: Path, monkeypatch
+):
+    from substrate_wiki.client import SubstrateAPIError, SubstrateClient
+
+    calls = []
+
+    def capabilities(_client):
+        calls.append(True)
+        raise SubstrateAPIError("server_upgrade_required")
+
+    monkeypatch.setattr(SubstrateClient, "capabilities", capabilities)
+    store = Store()
+    manager = OnboardingManager(tmp_path, api=API(), store=store, opener=lambda _url: True)
+
+    manager.begin(mode="device", open_browser=False)
+    result = manager.advance()
+
+    assert len(calls) == 1
+    assert result["phase"] == "failed"
+    assert result["error_class"] == "capability_check_failed"
+    assert result["capability_failure"] == "server_upgrade_required"
+    assert result["authenticated"] is False
+    assert store.get() == ""
