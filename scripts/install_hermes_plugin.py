@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 PLUGIN_NAME = "substrate_wiki"
-EXPECTED_VERSION = "2.0.1"
+EXPECTED_VERSION = "2.0.2"
 EXPECTED_HERMES_VERSION = "0.20.0"
 LICENSE_FILENAME = "LICENSE"
 REQUIRED_FILES = {

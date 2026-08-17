@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.2
+
+- Retry transient post-approval capability checks across one hosted tenant cold start.
+- Preserve a content-free capability failure category without storing an unvalidated credential.
+
 ## 2.0.1
 
 - Present the complete one-click device authorization URL in agent and headless prompts.
