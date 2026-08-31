@@ -27,17 +27,15 @@ except ModuleNotFoundError as exc:  # Allows contract tests without Hermes insta
 
 
 from .client import SubstrateAPIError, SubstrateClient
-from .events import MAX_CAPTURE_BYTES, CaptureEventBuilder
-from .redaction import configured_secret_values, redact
+from .events import CaptureEventBuilder
+from .redaction import configured_secret_values
 from .spool import DurableSpool, secure_atomic_json_write
 
 __all__ = ["SubstrateWikiProvider", "register"]
 
 _PROVIDER_ID = "substrate_wiki"
 _MAX_TOOL_RESULT_BYTES = 64 * 1024
-_MAX_CAPTURE_BYTES = MAX_CAPTURE_BYTES
 _MAX_SESSIONS = 32
-_MAX_MESSAGE_HASHES = 512
 _MAX_PREFETCH_BYTES = 16 * 1024
 _MAX_PREFETCH_ENTRIES = 128
 _MIN_SPOOL_BYTES = 16 * 1024
@@ -195,12 +193,6 @@ def _context_is_primary(context: Any, *, default: bool = True) -> bool:
     return not (isinstance(role, str) and role.lower() in _NON_PRIMARY_ROLES)
 
 
-def _is_primary_runtime(kwargs: dict[str, Any]) -> bool:
-    """Fail closed only when Hermes explicitly marks this as a non-primary runtime."""
-    context = kwargs.get("runtime_context") or kwargs.get("context")
-    return _context_is_primary(context, default=kwargs.get("is_primary", True) is not False)
-
-
 def _context_value(context: Any, key: str, default: Any = None) -> Any:
     if isinstance(context, dict):
         return context.get(key, default)
@@ -244,7 +236,7 @@ class SubstrateWikiProvider(MemoryProvider):
         self._current_persisted: Path | None = None
         self._delivery_failure_streak = 0
         self._retry_random = random.Random()
-        self._capture_state: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._message_offsets: OrderedDict[str, int] = OrderedDict()
         self._secrets: tuple[str, ...] = ()
         self._scope: dict[str, str] = {"provider_id": _PROVIDER_ID}
         self._initialized_primary = True
@@ -514,23 +506,31 @@ class SubstrateWikiProvider(MemoryProvider):
         assistant: Any,
         *,
         session_id: str = "",
-        messages: list[dict[str, Any]] | None = None,
-        **kwargs: Any,
+        runtime_context: Any = None,
     ) -> None:
-        if not self._capture_allowed(kwargs):
+        """Upload only the completed user/assistant pair.
+
+        Deliberately use Hermes's legacy signature so the host does not pass the
+        full transcript, tool calls, or tool results into this provider.
+        """
+        if not self._initialized_primary or not _context_is_primary(runtime_context):
+            self._counters["suppressed"] += 1
             return
         sid = str(session_id or self._session_id)
-        payload = {"user": user, "assistant": assistant}
-        self._capture("turn", sid, payload, messages=messages)
+        messages: list[dict[str, Any]] = []
+        if user is not None and user != "":
+            messages.append({"role": "user", "content": user})
+        if assistant is not None and assistant != "":
+            messages.append({"role": "assistant", "content": assistant})
+        if messages:
+            self._capture_turn(sid, messages)
 
     def on_pre_compress(self, messages: list[dict[str, Any]], **kwargs: Any) -> str:
-        if self._capture_allowed(kwargs):
-            self._capture("pre_compress", self._session_id, {}, messages=messages)
+        del messages, kwargs
         return ""
 
     def on_session_end(self, messages: list[dict[str, Any]], **kwargs: Any) -> None:
-        if self._capture_allowed(kwargs):
-            self._capture_snapshot("session_end", self._session_id, messages)
+        del messages, kwargs
 
     def on_memory_write(
         self,
@@ -540,25 +540,9 @@ class SubstrateWikiProvider(MemoryProvider):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        if not self._capture_allowed(kwargs):
-            return
-        safe_metadata = metadata if isinstance(metadata, dict) else {}
-        metadata_session = safe_metadata.get("session_id")
-        sid = (
-            str(metadata_session)[:512]
-            if isinstance(metadata_session, (str, int))
-            else self._session_id
-        )
-        selected_metadata: dict[str, Any] = {}
-        for key in ("source", "provenance"):
-            value = safe_metadata.get(key)
-            if isinstance(value, (str, int, float, bool)):
-                selected_metadata[key] = value
-        self._capture(
-            "memory_write",
-            sid,
-            {"action": action, "target": target, "content": content, "metadata": selected_metadata},
-        )
+        if not self._initialized_primary:
+            self._counters["suppressed"] += 1
+        del action, target, content, metadata, kwargs
 
     def on_session_switch(
         self,
@@ -569,24 +553,10 @@ class SubstrateWikiProvider(MemoryProvider):
         rewound: bool = False,
         **kwargs: Any,
     ) -> None:
-        """Emit the old session boundary before rebinding to prevent attribution races."""
-        if not self._capture_allowed(kwargs):
-            return
+        """Rebind future turn uploads without emitting a metadata event."""
+        del parent_session_id, reset, rewound, kwargs
         new_session = str(new_session_id or "")
         with self._capture_lock:
-            old_session = self._session_id
-            if old_session and (old_session != new_session or reset or rewound):
-                self._capture(
-                    "session_boundary",
-                    old_session,
-                    {
-                        "reason": "session_switch",
-                        "next_session_id": new_session,
-                        "parent_session_id": str(parent_session_id or "")[:512],
-                        "reset": bool(reset),
-                        "rewound": bool(rewound),
-                    },
-                )
             self._session_id = new_session
 
     def shutdown(self) -> None:
@@ -630,139 +600,28 @@ class SubstrateWikiProvider(MemoryProvider):
             except (TypeError, ValueError):
                 continue
 
-    def _capture(
-        self,
-        kind: str,
-        session_id: str,
-        payload: dict[str, Any],
-        *,
-        messages: list[dict[str, Any]] | None = None,
-    ) -> None:
+    def _capture_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None:
+        """Spool one compact dialogue turn with monotonically increasing indexes."""
         with self._capture_lock:
-            safe_payload = redact(payload, self._secrets)
-            hashes, boundary, delta, proposed_state = self._incremental_boundary(
-                session_id, messages
-            )
-            if messages is not None:
-                roles = {
-                    item.get("role")
-                    for item in delta
-                    if isinstance(item, dict) and isinstance(item.get("role"), str)
-                }
-                if "user" in roles:
-                    safe_payload.pop("user", None)
-                if "assistant" in roles:
-                    safe_payload.pop("assistant", None)
-            builder = self._require_event_builder()
-            if messages is None:
-                events = iter(
-                    (
-                        builder.payload_event(
-                            kind,
-                            session_id,
-                            safe_payload,
-                            boundary=boundary,
-                        ),
-                    )
-                )
-            else:
-                events = builder.iter_message_events(
-                    kind,
-                    session_id,
-                    delta,
-                    start_index=boundary["start"],
-                    payload=safe_payload,
-                )
-            captured = 0
-            delivered_to_spool = True
-            for event in events:
-                if hashes:
-                    event.setdefault("source_message_hashes", hashes)
-                if not self._enqueue(event):
-                    delivered_to_spool = False
-                    break
-                captured += 1
-            if captured and delivered_to_spool:
-                self._counters["captured"] += captured
-                if proposed_state is not None:
-                    self._commit_capture_state(session_id, proposed_state)
-
-    def _capture_snapshot(self, kind: str, session_id: str, messages: list[dict[str, Any]]) -> None:
-        with self._capture_lock:
-            event = self._require_event_builder().payload_event(
-                kind,
+            start = self._message_offsets.get(session_id, 0)
+            events = self._require_event_builder().iter_message_events(
+                "turn",
                 session_id,
-                {
-                    "session_complete": True,
-                    "total_message_boundary": {"start": 0, "end": len(messages)},
-                    "protocol": "stream-v2",
-                },
-                boundary={"start": 0, "end": len(messages)},
+                messages,
+                start_index=start,
             )
-            if self._enqueue(event):
-                self._counters["captured"] += 1
-
-    def _incremental_boundary(
-        self, session_id: str, messages: list[dict[str, Any]] | None
-    ) -> tuple[list[str], dict[str, int], list[Any], dict[str, Any] | None]:
-        state = self._capture_state.get(session_id, {"base": 0, "hashes": []})
-        previous_base = int(state["base"])
-        previous_hashes = list(state["hashes"])
-        previous_end = previous_base + len(previous_hashes)
-        if not messages:
-            return [], {"start": previous_end, "end": previous_end}, [], None
-        total = len(messages)
-        current_base = max(0, total - _MAX_MESSAGE_HASHES)
-        safe_messages = redact(messages[current_base:], self._secrets)
-        current_hashes = [
-            hashlib.sha256(
-                json.dumps(
-                    message, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                ).encode("utf-8")
-            ).hexdigest()
-            for message in safe_messages
-        ]
-        overlap_start = max(previous_base, current_base)
-        overlap_end = min(previous_end, total)
-        unchanged = overlap_end >= overlap_start
-        if unchanged:
-            for absolute in range(overlap_start, overlap_end):
-                if (
-                    previous_hashes[absolute - previous_base]
-                    != current_hashes[absolute - current_base]
-                ):
-                    unchanged = False
-                    break
-        delta_start = (
-            max(previous_end, current_base) if unchanged and total >= previous_end else current_base
-        )
-        delta_offset = max(0, delta_start - current_base)
-        return (
-            current_hashes[delta_offset:],
-            {"start": delta_start, "end": total},
-            safe_messages[delta_offset:],
-            {"base": current_base, "hashes": current_hashes},
-        )
-
-    def _commit_capture_state(self, session_id: str, state: dict[str, Any]) -> None:
-        self._capture_state[session_id] = state
-        self._capture_state.move_to_end(session_id)
-        while len(self._capture_state) > _MAX_SESSIONS:
-            self._capture_state.popitem(last=False)
-
-    def _bounded_capture(self, value: dict[str, Any]) -> dict[str, Any]:
-        encoded = json.dumps(
-            value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
-        spool_limit = int(self._settings.get("spool_max_bytes", _MAX_CAPTURE_BYTES))
-        limit = min(_MAX_CAPTURE_BYTES, max(1024, spool_limit // 2))
-        if len(encoded) <= limit:
-            return value
-        return {
-            "capture_truncated": True,
-            "original_bytes": len(encoded),
-            "sha256": hashlib.sha256(encoded).hexdigest(),
-        }
+            captured = 0
+            for event in events:
+                if not self._enqueue(event):
+                    return
+                captured += 1
+            if not captured:
+                return
+            self._counters["captured"] += captured
+            self._message_offsets[session_id] = start + len(messages)
+            self._message_offsets.move_to_end(session_id)
+            while len(self._message_offsets) > _MAX_SESSIONS:
+                self._message_offsets.popitem(last=False)
 
     def _require_event_builder(self) -> CaptureEventBuilder:
         if self._event_builder is None:
@@ -1055,12 +914,6 @@ class SubstrateWikiProvider(MemoryProvider):
             "last_delivery_category": self._last_delivery_category,
             "last_prefetch_category": self._last_prefetch_category,
         }
-
-    def _capture_allowed(self, kwargs: dict[str, Any]) -> bool:
-        allowed = self._initialized_primary and _is_primary_runtime(kwargs)
-        if not allowed:
-            self._counters["suppressed"] += 1
-        return allowed
 
     @staticmethod
     def _read_persisted_api_url(root: Path) -> str:

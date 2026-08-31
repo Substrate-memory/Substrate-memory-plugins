@@ -55,14 +55,14 @@ hermes substrate_wiki import-cancel --job-id <job-id> --yes --json
 
 ## Operation and privacy
 
-Live completed turns and explicit memory writes are delivered asynchronously. Failed
+Live completed user/assistant turns are delivered asynchronously. Failed
 transient deliveries stay in a bounded owner-private spool and retry with capped backoff.
 Authentication failures trigger automatic reconnect onboarding rather than exposing or
 logging credentials. Status, receipts, checkpoints, and diagnostics are content-free.
 
-Visible prompts, assistant output, tool calls, and tool results can be sent after redaction.
-Redaction is defense in depth, not proof that arbitrary sensitive prose is absent. Raw capture
-events declare a 90-day retention policy; curated wiki pages have their own lifecycle.
+Visible prompts and assistant output can be sent after redaction. Tool calls, tool results,
+system messages, memory-write events, and provider/session metadata are excluded. Redaction is
+defense in depth, not proof that arbitrary sensitive prose is absent.
 
 The provider exposes bounded cited wiki search/read/query/ingest/job tools and automatic
 memory-card prefetch. It exposes no arbitrary filesystem-write tool.

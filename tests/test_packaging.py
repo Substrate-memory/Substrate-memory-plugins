@@ -213,16 +213,12 @@ def test_v141_release_artifacts_remain_byte_pinned() -> None:
     )
 
 
-def test_v140_event_envelope_constants_remain_stream_v2() -> None:
-    # events.py now contains the mandatory stateful cross-chunk redactor, so it
-    # cannot remain byte-identical. The public capture/retention limits remain
-    # locked and the replay suite verifies deterministic v2 IDs and boundaries.
+def test_compact_event_envelope_constants_are_locked() -> None:
     source = (PLUGIN_SOURCE / "events.py").read_text(encoding="utf-8")
-    assert 'PROVIDER_ID = "substrate_wiki"' in source
     assert "SCHEMA_VERSION = 2" in source
-    assert "RETENTION_DAYS = 90" in source
     assert "MAX_CAPTURE_BYTES = 256 * 1024" in source
-    assert "capture_chunk" in source
+    assert '"tool_calls"' not in source
+    assert '"retention_days"' not in source
 
 
 def test_publish_release_creates_exact_current_and_immutable_aliases(tmp_path: Path) -> None:

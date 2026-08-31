@@ -2,7 +2,4 @@ name: substrate_wiki
 version: 2.0.3
 description: "Unified entity-centric Substrate Markdown wiki memory with durable asynchronous capture."
 hooks:
-  - on_pre_compress
-  - on_session_end
-  - on_memory_write
   - on_session_switch

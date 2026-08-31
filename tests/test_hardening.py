@@ -171,7 +171,7 @@ def test_prefetch_exact_query_precedes_latest_session_fallback(
     assert instance.prefetch("new", session_id="session-a") == "latest"
 
 
-def test_hooks_incremental_boundary_metadata_suppression_and_switch_attribution(
+def test_only_completed_dialogue_turns_are_uploaded(
     provider: tuple[SubstrateWikiProvider, FakeClient],
 ) -> None:
     instance, fake = provider
@@ -189,17 +189,16 @@ def test_hooks_incremental_boundary_metadata_suppression_and_switch_attribution(
         new_session_id="session-b", parent_session_id="parent", reset=True, rewound=False
     )
     instance.sync_turn("new", "answer")
-    wait_until(lambda: len(fake.delivered) == 5)
+    wait_until(lambda: len(fake.delivered) == 1)
     bodies = [call["body"] for call in fake.delivered]
-    assert bodies[0]["capture_boundary"] == {"start": 0, "end": 1}
-    assert bodies[1]["capture_boundary"] == {"start": 1, "end": 1}
-    assert bodies[1]["payload"]["messages"] == []
-    assert bodies[2]["payload"]["metadata"] == {"provenance": "native"}
-    assert bodies[2]["payload"]["session_id"] == "memory-session"
-    assert bodies[3]["kind"] == "session_boundary"
-    assert bodies[3]["payload"]["session_id"] == "session-a"
-    assert bodies[4]["payload"]["session_id"] == "session-b"
-    assert all(body["provider_id"] == "substrate_wiki" for body in bodies)
+    assert bodies[0]["session_id"] == "session-b"
+    assert bodies[0]["messages"] == [
+        {"index": 0, "role": "user", "content": "new"},
+        {"index": 1, "role": "assistant", "content": "answer"},
+    ]
+    assert set(bodies[0]) == {
+        "schema_version", "event_id", "kind", "session_id", "created_at", "messages"
+    }
 
 
 def test_sender_marks_each_in_memory_item_done_once_on_success_and_failure(
@@ -326,12 +325,9 @@ def test_agent_context_scope_and_initialized_non_primary_suppression(
     )
     primary.sync_turn("u", "a")
     wait_until(lambda: len(fake.delivered) == 1)
-    scope = fake.delivered[0]["body"]["scope"]
-    assert scope["agent_id"] == "agent-1"
-    assert scope["agent_identity"] == "Main"
-    assert scope["agent_workspace"] == "workspace"
-    assert scope["user_id"] == "user"
-    assert scope["platform"] == "cli"
+    body = fake.delivered[0]["body"]
+    assert body["session_id"] == "s"
+    assert not ({"scope", "agent_id", "agent_identity", "agent_workspace", "user_id", "platform"} & set(body))
     snapshot = primary.status_snapshot()
     assert "session" not in json.dumps(snapshot).lower()
     assert "https://" not in json.dumps(snapshot)
@@ -346,26 +342,20 @@ def test_agent_context_scope_and_initialized_non_primary_suppression(
     suppressed.shutdown()
 
 
-def test_sync_turn_messages_are_delta_only_and_rolling_window_does_not_duplicate(
+def test_sync_turn_uses_only_user_and_assistant_arguments(
     provider: tuple[SubstrateWikiProvider, FakeClient],
 ) -> None:
     instance, fake = provider
-    messages = [{"role": "user", "content": str(index)} for index in range(513)]
-    instance.sync_turn("repeat-user", "repeat-assistant", messages=messages)
+    instance.sync_turn("repeat-user", "repeat-assistant")
     wait_until(lambda: len(fake.delivered) == 1)
     first = fake.delivered[0]["body"]
-    assert "user" not in first["payload"]
-    assert first["payload"]["assistant"] == "repeat-assistant"
-    assert first["capture_boundary"] == {"start": 1, "end": 513}
-    instance.sync_turn("repeat-user", "repeat-assistant", messages=messages)
+    assert first["messages"] == [
+        {"index": 0, "role": "user", "content": "repeat-user"},
+        {"index": 1, "role": "assistant", "content": "repeat-assistant"},
+    ]
+    instance.sync_turn("next-user", "next-assistant")
     wait_until(lambda: len(fake.delivered) == 2)
-    assert fake.delivered[1]["body"]["capture_boundary"] == {"start": 513, "end": 513}
-    assert fake.delivered[1]["body"]["payload"]["messages"] == []
-    messages.append({"role": "assistant", "content": "new"})
-    instance.sync_turn("repeat-user", "repeat-assistant", messages=messages)
-    wait_until(lambda: len(fake.delivered) == 3)
-    assert fake.delivered[2]["body"]["capture_boundary"] == {"start": 513, "end": 514}
-    assert len(fake.delivered[2]["body"]["payload"]["messages"]) == 1
+    assert [message["index"] for message in fake.delivered[1]["body"]["messages"]] == [2, 3]
 
 
 def test_late_prefetch_from_old_session_is_not_published(
@@ -414,8 +404,7 @@ def test_capture_is_json_safe_and_does_not_use_custom_repr(
     wait_until(lambda: len(fake.delivered) == 1)
     rendered = json.dumps(fake.delivered[0]["body"])
     assert "leaked-secret-repr" not in rendered
-    assert "[BINARY]" in rendered
-    assert "[UNSUPPORTED:SecretObject]" in rendered
+    assert "[NON_TEXT_CONTENT_OMITTED]" in rendered
 
 
 def test_strict_boolean_and_safe_url_prefix(
@@ -440,42 +429,37 @@ def test_capture_state_commits_only_after_durable_admission(
     fake.fail = True
     fake.should_block = True
     fake.block_timeout = 30.0
-    messages = [{"role": "user", "content": "must retry"}]
     original_append = instance._spool.append
     monkeypatch.setattr(
         instance._spool, "append", lambda event: (_ for _ in ()).throw(OSError("full"))
     )
-    instance.sync_turn("must retry", "answer", messages=messages)
+    instance.sync_turn("must retry", "answer")
     assert instance.status_snapshot()["counters"]["dropped"] >= 1
     monkeypatch.setattr(instance._spool, "append", original_append)
-    instance.sync_turn("must retry", "answer", messages=messages)
+    instance.sync_turn("must retry", "answer")
     try:
         assert fake.request_started.wait(3.0)
         paths = list(instance._spool.root.glob("*.json"))
         assert len(paths) == 1
         event = instance._spool.load(paths[0])
-        assert event["capture_boundary"] == {"start": 0, "end": 1}
-        assert event["payload"]["messages"] == messages
+        assert event["messages"] == [
+            {"index": 0, "role": "user", "content": "must retry"},
+            {"index": 1, "role": "assistant", "content": "answer"},
+        ]
     finally:
         fake.block.set()
     wait_until(lambda: instance.status_snapshot()["counters"]["delivery_failed"] >= 1)
 
 
-def test_session_end_is_content_free_after_turn_delta(
+def test_session_end_does_not_emit_a_second_payload(
     provider: tuple[SubstrateWikiProvider, FakeClient],
 ) -> None:
     instance, fake = provider
     messages = [{"role": "user", "content": "one"}, {"role": "assistant", "content": "two"}]
-    instance.sync_turn("one", "two", messages=messages)
+    instance.sync_turn("one", "two")
     instance.on_session_end(messages)
-    wait_until(lambda: len(fake.delivered) == 2)
-    completed = next(
-        call["body"] for call in fake.delivered if call["body"]["kind"] == "session_end"
-    )
-    assert completed["capture_boundary"] == {"start": 0, "end": 2}
-    assert "messages" not in completed["payload"]
-    assert completed["payload"]["session_complete"] is True
-    assert completed["payload"]["protocol"] == "stream-v2"
+    wait_until(lambda: len(fake.delivered) == 1)
+    assert fake.delivered[0]["body"]["kind"] == "turn"
 
 
 def test_spool_claim_protects_inflight_oldest_from_trim(tmp_path: Path) -> None:

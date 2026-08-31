@@ -396,7 +396,6 @@ def test_sync_turn_returns_without_waiting_for_network_and_redacts(
         lambda: provider.sync_turn(
             authorization_header,
             "api_key=plain-secret and very-secret-hermes-key",
-            messages=[{"role": "tool", "authorization": "Bearer hidden", "content": "ok"}],
         ),
         fake.block,
     )
@@ -428,7 +427,7 @@ def test_lifecycle_hooks_return_without_waiting_for_network(
             fake.block,
         )
         fake.block.set()
-        wait_until(lambda: len(fake.delivered) == 3)
+        assert fake.delivered == []
     finally:
         fake.block.set()
         provider.shutdown()
@@ -446,7 +445,7 @@ def test_offline_events_spool_and_replay_oldest_first(
     fake.fail = False
     provider._wake.set()
     wait_until(lambda: len(fake.delivered) == 2, timeout=4)
-    assert [call["body"]["payload"]["user"] for call in fake.delivered] == ["first", "second"]
+    assert [call["body"]["messages"][0]["content"] for call in fake.delivered] == ["first", "second"]
     assert len({call["idempotency_key"] for call in fake.delivered}) == 2
     wait_until(lambda: not list(spool_dir.glob("*.json")))
     provider.shutdown()
@@ -476,12 +475,7 @@ def test_prefetch_is_cached_and_lifecycle_hooks_are_delivered(
         provider.on_pre_compress([{"role": "user", "content": "x"}])
         provider.on_session_end([{"role": "assistant", "content": "y"}])
         provider.on_memory_write("write", "MEMORY.md", "candidate")
-        wait_until(lambda: len(fake.delivered) == 3)
-        assert [call["path"] for call in fake.delivered] == [
-            "/api/v1/hermes/turns",
-            "/api/v1/hermes/completed-sessions",
-            "/api/v1/hermes/memory-write-events",
-        ]
+        assert fake.delivered == []
     finally:
         provider.shutdown()
 
