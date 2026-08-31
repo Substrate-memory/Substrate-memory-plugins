@@ -172,7 +172,7 @@ Tenant credentials are stored in native credential custody, with an owner-privat
 
 - Implements Hermes provider lifecycle hooks and tools.
 - Prefetches bounded cited `memory_card` results for automatic recall.
-- Captures completed turns, memory writes, and session boundaries.
+- Captures only completed user/assistant dialogue turns.
 - Redacts credential-shaped values before durable local spooling or network transfer.
 - Replays Hermes history with deterministic event IDs and durable checkpoints.
 - Keeps spool/checkpoint state beneath the active `$HERMES_HOME/substrate_wiki` profile.
@@ -181,7 +181,7 @@ It does **not** expose arbitrary filesystem writes, include Substrate server cod
 
 ## Privacy boundary
 
-Visible prompts, assistant output, tool calls, and tool results may be sent to the configured Substrate server after redaction. Redaction is defense in depth, not proof arbitrary sensitive prose is absent. Review the server's access and retention policy before enabling capture.
+Visible prompts and assistant output may be sent to the configured Substrate server after redaction. Tool calls, tool results, system messages, memory-write events, session metadata, and provider scope are not uploaded. Redaction is defense in depth, not proof arbitrary sensitive prose is absent.
 
 Local failed deliveries remain in a bounded owner-private spool until delivered or explicitly removed. Status, progress, and receipts are content-free.
 

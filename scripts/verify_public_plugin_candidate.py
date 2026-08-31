@@ -81,6 +81,7 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
             "8510e5bbf41a3e79a6d5fee1f7816db734307fe7e2a7786b6a61c1ba280520a5",
             "8793ef3bbab749be6e1089034ba627d24c8b733ffd4311951b590dae01d2ca02",
             "c8eb7c5157ac7027dbf6ae86235e63dea6a2dd1faab46f0cbcbd536fbdd21ecf",
+            "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b",
         }
     ),
     "scripts/benchmark_migration.py": frozenset(
@@ -90,16 +91,28 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
         {"0cf55fa5cf91acdc164f2eb6936eb49af19ed9c432d060c475db4a9090cd169b"}
     ),
     "tests/test_history.py": frozenset(
-        {"3997fc5c3b538df4ded9e994781fd8384b6b3b42ac695e1f1450ac24f6a92e7c"}
+        {
+            "3997fc5c3b538df4ded9e994781fd8384b6b3b42ac695e1f1450ac24f6a92e7c",
+            "15a6e7778a92e0d826ba1af61032f222dbf926b5ec2e189c48d7985a70824f19",
+        }
     ),
     "tests/test_history_replay.py": frozenset(
-        {"87272a47ab814803a77a39cafeb1b193b48678bc889b49712b11bace8b7d8c87"}
+        {
+            "87272a47ab814803a77a39cafeb1b193b48678bc889b49712b11bace8b7d8c87",
+            "226d30b1ad98ba7603bf3d8f7c86ac0857bf596bb75453d0dd57d677ec1405bd",
+        }
     ),
     "tests/test_hardening.py": frozenset(
-        {"91e53ca9b16ed43ebd49e7196bd6613f24c03cbf356f2bfc0ea03798cb065753"}
+        {
+            "91e53ca9b16ed43ebd49e7196bd6613f24c03cbf356f2bfc0ea03798cb065753",
+            "bb9825c1889d919e29a90e43c2be48b84d846fcad813fa3896d194491cc8f386",
+        }
     ),
     "tests/test_memory_provider.py": frozenset(
-        {"c2edfbbe5a6320088f58db89b1880200b3e844ed3780885a02ef62d3218ab2b1"}
+        {
+            "c2edfbbe5a6320088f58db89b1880200b3e844ed3780885a02ef62d3218ab2b1",
+            "cc967199b8e877a8088937a0c951e80f188ad4c7f29a98067bf649a2f8500b72",
+        }
     ),
     "tests/test_migration_baseline.py": frozenset(
         {"0a3c7af6a761a1b22c5b94f7e1738d5d420e5f085f775d792728ed9ca684ac13"}
@@ -219,6 +232,7 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
                          "87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9",
                          "cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b",
                          "f139b1328c7884dfa664aa59b47d5d707b2a72894747911b8f99d5e89f6c7eca",
+                         "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b",
                      }
                  ),
     'COMPATIBILITY.md': frozenset(
@@ -244,8 +258,8 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
     'docs/operation.md': frozenset({'fadd72791e097d878bbfbf338922d568f3c3d47958f26a41f53d3597471988fa'}),
     'docs/public-boundary.json': frozenset({'976403a6a802832adddd5ab1ff56fdc2e4e4847a1fe37ea5e6a2d5f106bbbbe2', '648904170d6c66de6f15cfe51fb494225467730ff5167225d6fd427a6eac3571'}),
     'docs/public-boundary.md': frozenset({'c9228e2abd22a8af558cd272988435c1caa69ad79c625cb08c8ef32e639eb0f3'}),
-    'src/substrate_wiki/README.md': frozenset({'44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204'}),
-    'src/substrate_wiki/__init__.py': frozenset({'425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a'}),
+    'src/substrate_wiki/README.md': frozenset({'44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204', '88d492b33ee537567bf85b63dcc7a470319212ac377f4857e27e504a3a1a05a3'}),
+    'src/substrate_wiki/__init__.py': frozenset({'425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a', '71c0c19d366759e67c7b999029777295cc8c25503d35fe9cfddc9460bcb34d5a'}),
     'src/substrate_wiki/client.py': frozenset(
                                         {
                                             "082164ad24c879f6ca6434a8f28c251cd1ee7f4b413c5a788a70b351e2187f2a",
@@ -272,8 +286,8 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
                                                 "72247d3537140098365350020cce29658c0743fee1aa738d7143db82316acce4",
                                             }
                                         ),
-    'tests/test_hardening.py': frozenset({'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3'}),
-    'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd'}),
+    'tests/test_hardening.py': frozenset({'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3', 'bb9825c1889d919e29a90e43c2be48b84d846fcad813fa3896d194491cc8f386'}),
+    'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd', 'cc967199b8e877a8088937a0c951e80f188ad4c7f29a98067bf649a2f8500b72'}),
 }
 for _path, _digests in _HOSTED_ONBOARDING_EXACT_ALLOWLIST.items():
     SYNTHETIC_FILE_SHA256_ALLOWLIST[_path] = (
@@ -288,7 +302,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "d18f105fc482c28c9946f3f1bd21235821e9283ef76c48ce04cbfa756c20b09f"
+    "ec3a29f27ebe29ce65b7a70ac65311bfb4a31e54095709a7c69d2687e12d50e1"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"

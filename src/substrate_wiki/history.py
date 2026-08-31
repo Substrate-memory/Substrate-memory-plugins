@@ -1371,7 +1371,6 @@ class HermesHistoryImporter:
         try:
             if self.stop_requested():
                 return checkpoint.status()
-            self._deliver_manifest(checkpoint)
             for session in checkpoint.sessions():
                 if self.stop_requested() or checkpoint.job()["state"] == "cancelled":
                     return checkpoint.status()
@@ -1398,48 +1397,6 @@ class HermesHistoryImporter:
             checkpoint.set_state("failed", error_class=type(exc).__name__)
             raise
 
-    def _deliver_manifest(self, checkpoint: ImportCheckpoint) -> None:
-        status = checkpoint.status()
-        builder = CaptureEventBuilder(
-            {"provider_id": "substrate_wiki", "agent_id": self.agent_id},
-            secrets=tuple(
-                secret
-                for secret in dict.fromkeys(
-                    (*configured_secret_values(), str(getattr(self.client, "api_key", "") or ""))
-                )
-                if secret
-            ),
-        )
-        event = builder.payload_event(
-            "session_boundary",
-            f"import:{self.batch_id}",
-            {
-                "batch_manifest": {
-                    key: status[key]
-                    for key in ("discovered", "eligible", "skipped", "quarantined")
-                },
-                "protocol": "stream-v2",
-                "legacy_batch_ids": status["legacy_batch_ids"],
-            },
-            capture_origin="history_replay",
-            batch_id=self.batch_id,
-            deterministic=True,
-        )
-        if checkpoint.acknowledged(str(event["event_id"])):
-            return
-        result, retries = _deliver_with_retry_meta(
-            self.client, event, stop_requested=self.stop_requested
-        )
-        checkpoint.acknowledge(
-            event_id=str(event["event_id"]),
-            external_id=f"import:{self.batch_id}",
-            boundary_start=0,
-            boundary_end=0,
-            phase="manifest",
-            duplicate=bool(result.get("duplicate")),
-            retry_count=retries,
-        )
-
     def _deliver_session(
         self, checkpoint: ImportCheckpoint, session: SessionDescriptor
     ) -> bool:
@@ -1459,40 +1416,58 @@ class HermesHistoryImporter:
                 if secret
             ),
         )
-        for message in self.source.iter_messages(session, start=start):
+        messages = self.source.iter_messages(session, start=start)
+        for event in builder.iter_message_events(
+            "turn",
+            session.external_id,
+            messages,
+            start_index=start,
+            capture_origin="history_replay",
+            batch_id=self.batch_id,
+            deterministic=True,
+        ):
             if self.stop_requested():
                 return False
-            index = int(message.get("_capture_index", start))
-            for event in builder.iter_message_events(
-                "turn",
-                session.external_id,
-                (message,),
-                start_index=index,
-                capture_origin="history_replay",
-                batch_id=self.batch_id,
-                deterministic=True,
-            ):
-                if self.stop_requested() or checkpoint.job()["state"] == "cancelled":
-                    return False
-                event_id = str(event["event_id"])
-                if checkpoint.acknowledged(event_id):
+            if checkpoint.job()["state"] == "cancelled":
+                return False
+            event_messages = event.get("messages", [])
+            if not isinstance(event_messages, list) or not event_messages:
+                continue
+            indexes = [
+                int(message["index"])
+                for message in event_messages
+                if isinstance(message, dict) and isinstance(message.get("index"), int)
+            ]
+            if not indexes:
+                continue
+            event_id = str(event["event_id"])
+            if checkpoint.acknowledged(event_id):
+                continue
+            result, retries = _deliver_with_retry_meta(
+                self.client, event, stop_requested=self.stop_requested
+            )
+            completed_indexes = []
+            for message in event_messages:
+                if not isinstance(message, dict):
                     continue
-                result, retries = _deliver_with_retry_meta(
-                    self.client, event, stop_requested=self.stop_requested
-                )
-                chunk = event.get("payload", {}).get("capture_chunk", {})
-                final = bool(chunk.get("final", True))
-                rolling = content_digest({"previous": rolling, "event": event["content_sha256"]})
-                checkpoint.acknowledge(
-                    event_id=event_id,
-                    external_id=session.external_id,
-                    boundary_start=index,
-                    boundary_end=index + 1 if final else index,
-                    phase="message",
-                    duplicate=bool(result.get("duplicate")),
-                    retry_count=retries,
-                    session_digest=rolling,
-                )
+                fragment = message.get("fragment")
+                if not isinstance(fragment, dict) or int(fragment.get("index", 0)) + 1 >= int(
+                    fragment.get("count", 1)
+                ):
+                    completed_indexes.append(int(message["index"]))
+            boundary_start = min(indexes)
+            boundary_end = max(completed_indexes) + 1 if completed_indexes else boundary_start
+            rolling = content_digest({"previous": rolling, "event": event})
+            checkpoint.acknowledge(
+                event_id=event_id,
+                external_id=session.external_id,
+                boundary_start=boundary_start,
+                boundary_end=boundary_end,
+                phase="message",
+                duplicate=bool(result.get("duplicate")),
+                retry_count=retries,
+                session_digest=rolling,
+            )
         completion = builder.payload_event(
             "session_end",
             session.external_id,

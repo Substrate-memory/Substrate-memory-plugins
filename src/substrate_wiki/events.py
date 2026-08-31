@@ -12,20 +12,13 @@ from typing import Any, Protocol, runtime_checkable
 
 from .redaction import iter_redacted_text_chunks, redact
 
-PROVIDER_ID = "substrate_wiki"
 SCHEMA_VERSION = 2
-RETENTION_DAYS = 90
 MAX_CAPTURE_BYTES = 256 * 1024
 _EVENT_NAMESPACE = uuid.UUID("837bd8c2-df25-4a42-bdc1-d38f0c00a8bc")
 _MESSAGE_FIELDS = (
     "role",
     "content",
-    "tool_call_id",
-    "tool_calls",
-    "tool_name",
     "timestamp",
-    "platform_message_id",
-    "name",
 )
 _TEXT_BLOCK_TYPES = {"text", "input_text", "output_text"}
 _BINARY_KEYS = {
@@ -115,9 +108,9 @@ def normalize_message(
 ) -> dict[str, Any] | None:
     """Return a redacted, inference-safe message or ``None`` for system data."""
     role = str(message.get("role") or "").strip().lower()
-    if role not in {"user", "assistant", "tool"}:
+    if role not in {"user", "assistant"}:
         return None
-    selected: dict[str, Any] = {"role": role, "message_index": int(index)}
+    selected: dict[str, Any] = {"index": int(index), "role": role}
     for field in _MESSAGE_FIELDS[1:]:
         if field not in message or message[field] is None:
             continue
@@ -188,7 +181,7 @@ def _fragment_message(message: dict[str, Any], maximum: int) -> Iterator[dict[st
         ):
             yield {
                 "role": message["role"],
-                "message_index": message["message_index"],
+                "index": message["index"],
                 "content": encoded[start:end],
                 "fragment": {
                     "encoding": "canonical-json",
@@ -320,7 +313,7 @@ def _iter_streamed_utf8_fragments(
 
 
 class CaptureEventBuilder:
-    """Build v2 events without allowing one request to exceed the capture cap."""
+    """Build bounded events containing only session identity and raw dialogue."""
 
     def __init__(
         self,
@@ -329,26 +322,9 @@ class CaptureEventBuilder:
         secrets: Sequence[str] = (),
         max_capture_bytes: int = MAX_CAPTURE_BYTES,
     ) -> None:
-        self.scope = {
-            str(key): str(value)[:512]
-            for key, value in scope.items()
-            if value is not None and str(value)
-        }
-        self.scope.setdefault("provider_id", PROVIDER_ID)
-        platform = self.scope.setdefault("platform", "cli").casefold()
-        self.scope["platform"] = platform
-        self.scope.setdefault(
-            "agent_id",
-            self.scope.get("profile") or self.scope.get("agent_identity") or "default",
-        )
-        if "subject_id" not in self.scope:
-            user_id = self.scope.get("user_id") or self.scope.get("user") or ""
-            if platform == "cli":
-                self.scope["subject_id"] = "owner"
-            elif user_id:
-                self.scope["subject_id"] = hashlib.sha256(
-                    f"{platform}\0{user_id}".encode()
-                ).hexdigest()[:24]
+        # ``scope`` remains accepted so older callers do not need an adapter,
+        # but none of it is duplicated into the upload envelope.
+        del scope
         self.secrets = tuple(secrets)
         self.max_capture_bytes = max(16 * 1024, min(max_capture_bytes, MAX_CAPTURE_BYTES))
 
@@ -390,7 +366,7 @@ class CaptureEventBuilder:
         batch_id: str = "",
         deterministic: bool = False,
     ) -> Iterator[dict[str, Any]]:
-        """Yield one bounded v2 event while retaining only one fragment."""
+        """Yield bounded user/assistant events while retaining only one fragment."""
 
         def fragments() -> Iterator[dict[str, Any]]:
             for offset, raw in enumerate(messages):
@@ -454,8 +430,6 @@ class CaptureEventBuilder:
                 {
                     **(payload or {}),
                     "messages": [],
-                    "message_indexes": [],
-                    "capture_chunk": {"index": 0, "final": True},
                 },
                 boundary={"start": start_index, "end": start_index},
                 capture_origin=capture_origin,
@@ -511,16 +485,11 @@ class CaptureEventBuilder:
             session_id,
             {
                 **(payload or {}),
-                "messages": [
-                    {key: value for key, value in message.items() if key != "message_index"}
-                    for message in messages
-                ],
-                "message_indexes": [int(message["message_index"]) for message in messages],
-                "capture_chunk": {"index": chunk_index, "final": final},
+                "messages": messages,
             },
             boundary={
-                "start": min(int(message["message_index"]) for message in messages),
-                "end": max(int(message["message_index"]) for message in messages) + 1,
+                "start": min(int(message["index"]) for message in messages),
+                "end": max(int(message["index"]) for message in messages) + 1,
             },
             capture_origin=capture_origin,
             batch_id=batch_id,
@@ -571,7 +540,7 @@ class CaptureEventBuilder:
 
     @staticmethod
     def _boundary(messages: Sequence[dict[str, Any]]) -> dict[str, int]:
-        indexes = [int(message["message_index"]) for message in messages]
+        indexes = [int(message["index"]) for message in messages]
         return {"start": min(indexes), "end": max(indexes) + 1}
 
     def _event(
@@ -587,15 +556,11 @@ class CaptureEventBuilder:
         event_id: str | None = None,
     ) -> dict[str, Any]:
         safe_session = str(session_id)[:512]
-        safe_payload = {"session_id": safe_session, **payload}
+        safe_payload = dict(payload)
         identity = {
-            "provider_id": PROVIDER_ID,
             "kind": kind,
-            "scope": {**self.scope, "session_id": safe_session},
-            "session_lineage": {"session_id": safe_session},
-            "capture_boundary": boundary,
-            "capture_origin": capture_origin,
-            "batch_id": batch_id,
+            "session_id": safe_session,
+            "boundary": boundary,
             "payload": safe_payload,
         }
         resolved_id = event_id
@@ -608,21 +573,13 @@ class CaptureEventBuilder:
         event: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "event_id": resolved_id,
-            "provider_id": PROVIDER_ID,
             "kind": kind,
-            "capture_kind": kind,
-            "capture_boundary": boundary,
-            "session_lineage": {"session_id": safe_session},
-            "scope": {**self.scope, "session_id": safe_session},
-            "capture_origin": str(capture_origin)[:64],
+            "session_id": safe_session,
             "created_at": 0 if deterministic else time.time(),
-            "retention_days": RETENTION_DAYS,
-            "content_sha256": content_digest(safe_payload),
-            "payload": safe_payload,
         }
-        if batch_id:
-            event["batch_id"] = str(batch_id)[:128]
-        messages = safe_payload.get("messages")
+        messages = safe_payload.pop("messages", None)
         if isinstance(messages, list):
-            event["message_hashes"] = [content_digest(message) for message in messages]
+            event["messages"] = messages
+        if safe_payload:
+            event["data"] = safe_payload
         return event

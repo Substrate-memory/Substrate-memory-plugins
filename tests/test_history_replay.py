@@ -72,7 +72,7 @@ def _streamed_capture(
     rendered = "".join(
         str(message["content"])
         for event in events
-        for message in event["payload"]["messages"]
+        for message in event["messages"]
     )
     assert sum(len(chunk) for chunk in chunks) == len(text)
     return rendered, events
@@ -193,8 +193,10 @@ def test_shared_builder_is_deterministic_bounded_and_content_safe() -> None:
     assert "never copy this" not in encoded
     assert "hidden" not in encoded
     assert "[BINARY_CONTENT_OMITTED]" in encoded
-    assert all(event["retention_days"] == 90 for event in first)
-    assert all(event["scope"]["subject_id"] == "owner" for event in first)
+    assert all(
+        set(event) == {"schema_version", "event_id", "kind", "session_id", "created_at", "messages"}
+        for event in first
+    )
 
 
 @pytest.mark.parametrize(
@@ -309,7 +311,7 @@ def test_streamed_redactor_and_capture_memory_are_bounded_for_large_message() ->
         event_count += 1
         captured_chars += sum(
             len(str(message["content"]))
-            for message in event["payload"]["messages"]
+            for message in event["messages"]
         )
 
     assert captured_chars == len(chunk) * capture_repetitions
@@ -391,7 +393,7 @@ def test_sqlite_large_message_is_read_and_emitted_in_bounded_slices(tmp_path: Pa
     fragments = [
         item
         for event in events
-        for item in event["payload"]["messages"]
+        for item in event["messages"]
     ]
     assert "".join(str(item["content"]) for item in fragments) == content
     assert {item["fragment"]["encoding"] for item in fragments} == {"utf8-content"}
@@ -761,7 +763,7 @@ def test_oversized_jsonl_record_streams_message_without_materializing_record(
             "turn", "large-jsonl", (message,), deterministic=True
         )
     )
-    fragments = [item for event in events for item in event["payload"]["messages"]]
+    fragments = [item for event in events for item in event["messages"]]
     assert "".join(str(item["content"]) for item in fragments) == decoded_piece * repetitions
     assert all(len(canonical_bytes(event)) <= 256 * 1024 for event in events)
     iterator.close()
@@ -828,19 +830,12 @@ def test_importer_resumes_from_checkpoint_and_uses_standard_endpoints(tmp_path: 
     assert status["complete"] is True
     assert [path for path, _ in first_client.requests] == [
         "/api/v1/hermes/turns",
-        "/api/v1/hermes/turns",
-        "/api/v1/hermes/turns",
         "/api/v1/hermes/completed-sessions",
     ]
     event_ids = [request["body"]["event_id"] for _, request in first_client.requests]
     assert len(event_ids) == len(set(event_ids))
     assert all(
-        request["body"].get("capture_origin") == "history_replay"
-        for _, request in first_client.requests
-    )
-
-    assert all(
-        not request["body"]["payload"].get("messages")
+        not request["body"].get("messages")
         for path, request in first_client.requests
         if path == "/api/v1/hermes/completed-sessions"
     )

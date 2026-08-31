@@ -59,7 +59,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "CHANGELOG.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "57f9eb855dc41b263892d8229fa9fed046420da8a67d65fc34bd93f02c9eaa9c"
+      "sha256": "d20f1839056fdc49b98ed686a9a6747267bc62026eb13603577d90a6fbba4f9b"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -77,7 +77,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "20ac49480369c8531e001466a6537a7dae310bbba7e6079bc217a6181e7d69d7"
+      "sha256": "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -125,7 +125,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "scripts/verify_fresh_migration_run.py",
       "reason": "Required only by the independent public repository.",
-      "sha256": "49fc5a2ee61eea6bd5d3d4f83ffd6b261bee10450ccbe8b2fde7c9873f89926d"
+      "sha256": "e185b0328bb7d684a53a57ce1029d8f2a845a608395b087ecff36d372a3ef210"
     },
     {
       "class": "standalone_plugin_implementation",
@@ -353,7 +353,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "bcb89f657bc719e76f7873f71bf5bd302c06fbedd53a3162e6de64337e01b8db",
+      "destination_sha256": "e0241e4cc230dd50f88a01d23f4c22dac3aff54343e9f3b34ce2ca0906d57e92",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -361,7 +361,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/README.md",
-      "destination_sha256": "44a11fda85d6d8170d772beadba2149bd114624479344b69a69cd49634309204",
+      "destination_sha256": "88d492b33ee537567bf85b63dcc7a470319212ac377f4857e27e504a3a1a05a3",
       "source": "hermes-plugin/substrate_wiki/README.md",
       "source_sha256": "21b6e60ef34e408fd87570334ba6d2811d2a9ea3c95d512e4d625f958b1cb0dc",
       "transformation": "modified_for_standalone"
@@ -369,7 +369,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/__init__.py",
-      "destination_sha256": "425cd191f723805bed85d965d2d74daeac272dd0660eadf6bac92f1fa02d6f4a",
+      "destination_sha256": "71c0c19d366759e67c7b999029777295cc8c25503d35fe9cfddc9460bcb34d5a",
       "source": "hermes-plugin/substrate_wiki/__init__.py",
       "source_sha256": "a4143022e05a7b93d3aa5799f4319601292e67069ad85d172770c3effe0e5e9d",
       "transformation": "copied"
@@ -401,7 +401,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/events.py",
-      "destination_sha256": "675ba567a391f6b86688876ae26d1cfd9b567fe3312d9ddc03620775596c88e9",
+      "destination_sha256": "f70c743866c88e3aa9add5746ae558adab175175c31918109fb3ea90dd52c662",
       "source": "hermes-plugin/substrate_wiki/events.py",
       "source_sha256": "675ba567a391f6b86688876ae26d1cfd9b567fe3312d9ddc03620775596c88e9",
       "transformation": "copied"
@@ -409,7 +409,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/history.py",
-      "destination_sha256": "7b2065ab5d7b3176b82d18d0a25b8c726c6d6311f9adf2fb2486bfdf8678df8f",
+      "destination_sha256": "aa4216c382ecd6816aa6b5633e7143a71fb8af66a218a0fafba9837a6d6da28d",
       "source": "hermes-plugin/substrate_wiki/history.py",
       "source_sha256": "d758d1b89dad334fc8c352b4e30f6e8e3c0788821c82ecc11bc7e7fcefdef16c",
       "transformation": "copied"
@@ -417,7 +417,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/plugin.yaml",
-      "destination_sha256": "0e1c680eb2822ca6c58315bd91a058468d107065fde0881ab39aafe54bd13690",
+      "destination_sha256": "e76721f0d7ba3d37958d15fa398ea47bb7c457388e0ad181df5471a1b2ede61c",
       "source": "hermes-plugin/substrate_wiki/plugin.yaml",
       "source_sha256": "5bfc8b20bfe99b8dd4fcb35616724e9a4a93bdfd1f3b270cfea1ccff18eaa116",
       "transformation": "modified_for_standalone"
@@ -489,7 +489,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_hardening.py",
-      "destination_sha256": "f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3",
+      "destination_sha256": "bb9825c1889d919e29a90e43c2be48b84d846fcad813fa3896d194491cc8f386",
       "source": "tests/contract/test_hermes_plugin_hardening.py",
       "source_sha256": "6066ff88351167647dc6ffd368fcb2ad666ee722fcd16d2fc04600f274151b17",
       "transformation": "modified_for_standalone"
@@ -497,7 +497,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_history.py",
-      "destination_sha256": "3997fc5c3b538df4ded9e994781fd8384b6b3b42ac695e1f1450ac24f6a92e7c",
+      "destination_sha256": "15a6e7778a92e0d826ba1af61032f222dbf926b5ec2e189c48d7985a70824f19",
       "source": "tests/contract/test_hermes_history_v12.py",
       "source_sha256": "dc5cf0ceca8b8c0156bba330f51cc2186fdd2c409861752a7465f1b625228d69",
       "transformation": "modified_for_standalone"
@@ -505,7 +505,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_history_replay.py",
-      "destination_sha256": "87272a47ab814803a77a39cafeb1b193b48678bc889b49712b11bace8b7d8c87",
+      "destination_sha256": "226d30b1ad98ba7603bf3d8f7c86ac0857bf596bb75453d0dd57d677ec1405bd",
       "source": "tests/contract/test_hermes_history_replay.py",
       "source_sha256": "ef7636f612cc2d1023856fb8ff39dd7de2cca13336d20b86db5d25d944a3a212",
       "transformation": "modified_for_standalone"
@@ -521,7 +521,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_memory_provider.py",
-      "destination_sha256": "2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd",
+      "destination_sha256": "cc967199b8e877a8088937a0c951e80f188ad4c7f29a98067bf649a2f8500b72",
       "source": "tests/contract/test_hermes_memory_provider.py",
       "source_sha256": "d95c3c68592e7c45d4eab3c96c8a23726e8ba54116b205b33f78c66239a4ba6e",
       "transformation": "modified_for_standalone"
@@ -537,7 +537,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_packaging.py",
-      "destination_sha256": "a3a24a5c987c939514866e72b70d01a32e34f5771089153e1fd12013829d8baf",
+      "destination_sha256": "9336c62a8011bf4b469574a27dfdee0abe3b1037a7d78baaf95f2840a16c6b51",
       "source": "tests/contract/test_hermes_plugin_packaging.py",
       "source_sha256": "c54967830788555b8d7bd5d2f871baeb6b98d7804a2bc7410ab297078bc20ee7",
       "transformation": "modified_for_standalone"

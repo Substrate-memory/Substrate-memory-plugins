@@ -133,7 +133,7 @@ def test_resume_skips_every_acknowledged_event(tmp_path: Path) -> None:
     home.mkdir()
     database = home / "state.db"
     _database(database, messages=3)
-    first_client = Client(fail_after=2)
+    first_client = Client(fail_after=1)
     first = HermesHistoryImporter(
         hermes_home=home,
         client=first_client,  # type: ignore[arg-type]
@@ -142,7 +142,7 @@ def test_resume_skips_every_acknowledged_event(tmp_path: Path) -> None:
     with pytest.raises(SubstrateAPIError):
         first.run(wait=True)
     first_ids = {str(item["event_id"]) for item in first_client.requests}
-    assert len(first_ids) == 2
+    assert len(first_ids) == 1
     if first.checkpoint is not None:
         first.checkpoint.close()
 

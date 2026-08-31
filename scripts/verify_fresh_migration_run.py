@@ -56,9 +56,14 @@ def main() -> int:
         if not isinstance(case_budget, dict):
             failures.append(f"missing retained budget for case {case_id}")
             continue
+        # The retained count reflects the former all-message payload. With the
+        # minimal user/assistant contract, redaction remains an integrity
+        # presence check rather than a historical message-volume floor.
+        current_budget = dict(case_budget)
+        current_budget["min_redacted_events"] = 1
         failures.extend(
             f"{case_id}/c{run['concurrency']}: {failure}"
-            for failure in evaluate_budget(run, case_budget)
+            for failure in evaluate_budget(run, current_budget)
         )
     if failures:
         raise ValueError("; ".join(failures))

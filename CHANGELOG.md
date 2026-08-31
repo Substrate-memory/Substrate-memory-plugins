@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Upload only completed user/assistant text; exclude tool calls, tool results, system messages,
+  memory writes, session boundaries, provider scope, hashes, retention metadata, and duplicate
+  envelope fields.
+- Batch historical dialogue up to the request-size limit instead of posting one message per
+  request, while retaining deterministic IDs and resumable checkpoints.
+
 ## 2.0.3
 
 - Keep approved device polling active across transient hosted transport and edge failures.
