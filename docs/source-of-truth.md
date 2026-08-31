@@ -2,7 +2,7 @@
 
 ## Decision
 
-`Substrate-memory/hermes-substrate-wiki` is the sole editable source for the Hermes `substrate_wiki` plugin. The protected default branch and immutable releases `v1.5.0`, `v2.0.0`, `v2.0.1`, and `v2.0.3` have been read back successfully.
+`Substrate-memory/hermes-substrate-wiki` is the sole editable source for the Hermes `substrate_wiki` plugin. The protected default branch and immutable releases `v1.5.0`, `v2.0.0`, `v2.0.1`, `v2.0.3`, and `v2.0.4` have been read back successfully.
 
 Substrate-v2 owns only the server and pinned public release references; it must not vendor or modify plugin source.
 

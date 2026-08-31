@@ -77,7 +77,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b"
+      "sha256": "ac62cbf3799a35bbb239a0b951411491aab8ee0f2f2c33e66b8a3380a8c20e88"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -107,7 +107,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "docs/source-of-truth.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "73d848fd11aff7667f8bdc332ec1b1a872de9998039de0809cf07bd67c7a26e0"
+      "sha256": "91e0d6884025a9387b0c25cd02ecd1253e3bef00b5546fe7562f11924775c018"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -353,7 +353,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "116652c7d6a675d9b140b655b03d9a095603350dbbe99b1f45a13e1c76fc50a1",
+      "destination_sha256": "169151e6ca769184881da61a823ff4f1d2b1c3df35f2e91049a9c800d173bb98",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -537,7 +537,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_packaging.py",
-      "destination_sha256": "5793b5b96793d08060dc7faf3c39d3ee4b0717272a297f865968e84d595f4023",
+      "destination_sha256": "e90c78ea6b182c558079c59752be07af1bc7937b69e06b66ee96a74bc8f7f0db",
       "source": "tests/contract/test_hermes_plugin_packaging.py",
       "source_sha256": "c54967830788555b8d7bd5d2f871baeb6b98d7804a2bc7410ab297078bc20ee7",
       "transformation": "modified_for_standalone"
