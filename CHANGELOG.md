@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.4
 
 - Upload only completed user/assistant text; exclude tool calls, tool results, system messages,
   memory writes, session boundaries, provider scope, hashes, retention metadata, and duplicate

@@ -41,7 +41,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": ".github/workflows/release.yml",
       "reason": "Required only by the independent public repository.",
-      "sha256": "65d10296c23e9a0a993fa674f509d25f7fc9dcc47b35eed51db0a954d1cc3b5b"
+      "sha256": "73e6a80b853f009f96f1fbc104315f9c4e5561a3f3678ed6836cc684ac971b23"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -59,13 +59,13 @@
       "class": "standalone_repository_policy_or_test",
       "path": "CHANGELOG.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "d20f1839056fdc49b98ed686a9a6747267bc62026eb13603577d90a6fbba4f9b"
+      "sha256": "67642ca88a4d821e32c531c3512c4f3dc4d3e65ae091eea5e7efb1bf6851a8d2"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "COMPATIBILITY.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "67bcb14e4988ed5b49379e93f93fa588e31a068b394a8787d1ea81ba8f6a6c70"
+      "sha256": "53d4873064a5d5b1748950c08c0aeaa76a6c00c435e4a8f534a844e4f90aca87"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -83,7 +83,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "SECURITY.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "d07d0c65e39f0949f91f7a880a4b584b9b57d8ed3c70ca8fd95276d8d525b517"
+      "sha256": "7ef28d44f7b82b765e870434542b5b67facc703e2105a40a233de2e12783852e"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -119,7 +119,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "pyproject.toml",
       "reason": "Required only by the independent public repository.",
-      "sha256": "3187d3621ddb1c227c0db74ee1180ed99c28200f738e02b17e2857f4c9a82e47"
+      "sha256": "9dc5e75c2aea5a982a6657e3d17b3f39a343ae5d2fe1e9dd5a8a09ebca00ef36"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -137,7 +137,7 @@
       "class": "standalone_plugin_implementation",
       "path": "src/substrate_wiki/onboarding.py",
       "reason": "Added for hosted Hermes 0.20 automatic onboarding.",
-      "sha256": "a835092092bca7266978609763d36f5767ac363fe7180bda482d713df2ecc439"
+      "sha256": "73c8c6669b3c052578ce4818cd336b2f871794bcdb28a42131a856174de660b7"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -337,7 +337,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/install_hermes_plugin.py",
-      "destination_sha256": "72247d3537140098365350020cce29658c0743fee1aa738d7143db82316acce4",
+      "destination_sha256": "8e37991db874b306045623c5cba39ef995b53b7b6a1a6c6f0253e2ff12c0ebb8",
       "source": "scripts/install_hermes_plugin.py",
       "source_sha256": "7600b2681c3aebcb1b1492b0a04be38bbbec637089cbbcfb1cc26e8c10865b8d",
       "transformation": "modified_for_standalone"
@@ -353,7 +353,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "e0241e4cc230dd50f88a01d23f4c22dac3aff54343e9f3b34ce2ca0906d57e92",
+      "destination_sha256": "116652c7d6a675d9b140b655b03d9a095603350dbbe99b1f45a13e1c76fc50a1",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -393,7 +393,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/client.py",
-      "destination_sha256": "59413ab9fa2eef0d943a70a53e2b5d9d5163c0d9e154538735715e8f88585616",
+      "destination_sha256": "db9eb5043a5c770f155a942459008de684378261e8fd204276d69b0bed3d788f",
       "source": "hermes-plugin/substrate_wiki/client.py",
       "source_sha256": "8684b3ecc788ee058c630747b1c72578177cfc948c72ac539ddcc4a1df9e791b",
       "transformation": "modified_for_standalone"
@@ -417,7 +417,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/plugin.yaml",
-      "destination_sha256": "e76721f0d7ba3d37958d15fa398ea47bb7c457388e0ad181df5471a1b2ede61c",
+      "destination_sha256": "45478259c2e7f584d4a9bbf50d6563b6c57bc41d8f4ed6c6a3e480b87f48b746",
       "source": "hermes-plugin/substrate_wiki/plugin.yaml",
       "source_sha256": "5bfc8b20bfe99b8dd4fcb35616724e9a4a93bdfd1f3b270cfea1ccff18eaa116",
       "transformation": "modified_for_standalone"
@@ -481,7 +481,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_entity_memory.py",
-      "destination_sha256": "9956679141ec085ab00dabca699fd4afc3638d039f9c567bca7b301929bf595a",
+      "destination_sha256": "139f51e9fdd91ee813f86281f41d4a150339ed5f6c303c48e7a5ef7ec358adbd",
       "source": "tests/contract/test_hermes_entity_memory_v13.py",
       "source_sha256": "297d7dffa2a53dd08cb1737ac024a97eb190c4ce42b338a952d8bec9aeba37f4",
       "transformation": "modified_for_standalone"
@@ -537,7 +537,7 @@
     {
       "class": "plugin-tests",
       "destination": "tests/test_packaging.py",
-      "destination_sha256": "9336c62a8011bf4b469574a27dfdee0abe3b1037a7d78baaf95f2840a16c6b51",
+      "destination_sha256": "5793b5b96793d08060dc7faf3c39d3ee4b0717272a297f865968e84d595f4023",
       "source": "tests/contract/test_hermes_plugin_packaging.py",
       "source_sha256": "c54967830788555b8d7bd5d2f871baeb6b98d7804a2bc7410ab297078bc20ee7",
       "transformation": "modified_for_standalone"

@@ -6,6 +6,7 @@ Compatibility has three independent axes: Hermes host, hosted Substrate capabili
 
 | Plugin | Hermes | Required hosted capabilities | Status |
 |---|---|---|---|
+| 2.0.4 | 0.20.x | Same as 2.0.3; compact user/assistant capture and batched history upload | Contract and lifecycle integration tested |
 | 2.0.3 | 0.20.x | Same as 2.0.2; resilient approved-device polling across hosted stalls | Contract and lifecycle integration tested |
 | 2.0.2 | 0.20.x | Same as 2.0.1; bounded retry for hosted tenant cold starts | Contract and lifecycle integration tested |
 | 2.0.1 | 0.20.x | Same as 2.0.0; complete email authorization URL in agent/headless prompts | Contract and lifecycle integration tested |
