@@ -82,6 +82,7 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
             "8793ef3bbab749be6e1089034ba627d24c8b733ffd4311951b590dae01d2ca02",
             "c8eb7c5157ac7027dbf6ae86235e63dea6a2dd1faab46f0cbcbd536fbdd21ecf",
             "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b",
+            "ac62cbf3799a35bbb239a0b951411491aab8ee0f2f2c33e66b8a3380a8c20e88",
         }
     ),
     "scripts/benchmark_migration.py": frozenset(
@@ -123,6 +124,7 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
                                        "c4033e38f9e832779062381b0d0dcf71eecc25554d8df9af383a2d0c334dcd78",
                                        "c7a8e84d116319e62b0b7817c1a049225088c8b3baf59c42ad82cbefc3c172b5",
                                        "5793b5b96793d08060dc7faf3c39d3ee4b0717272a297f865968e84d595f4023",
+                                       "e90c78ea6b182c558079c59752be07af1bc7937b69e06b66ee96a74bc8f7f0db",
                                    }
                                ),
     "tests/test_publication_scanner.py": frozenset(
@@ -237,6 +239,7 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {
                          "cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b",
                          "f139b1328c7884dfa664aa59b47d5d707b2a72894747911b8f99d5e89f6c7eca",
                          "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b",
+                         "ac62cbf3799a35bbb239a0b951411491aab8ee0f2f2c33e66b8a3380a8c20e88",
                      }
                  ),
     'COMPATIBILITY.md': frozenset(
@@ -311,7 +314,7 @@ TRUSTED_INVENTORY_POLICY_SHA256 = (
     "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "88e7743afb748d534413c182eb96e0575942659ce7192c0ea973ef56ed1b2790"
+    "b3ea73d46f3968b99d6695a14b954954826fbd7fa52abd5fd18cf951db8234e1"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
