@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Let hosted onboarding validate only the history replay contract, so a setup-and-upload MVP does not need to advertise entity retrieval features.
+- Add an explicit `SUBSTRATE_WIKI_ORIGIN` override for isolated v5 import tests; the hosted origin remains the default.
+
+## 2.0.5
+
+- Make browser approval completion return an explicit history-consent action to the installing agent.
+- Keep blank or interrupted consent prompts pending instead of treating them as refusal.
+- Always print the complete browser approval URL while the polling installer waits.
+- Support the Substrate v5 history-only capability handshake and test origin.
+- Rename the public source repository to `Substrate-memory-plugins`.
+
 ## 2.0.4
 
 - Upload only completed user/assistant text; exclude tool calls, tool results, system messages,

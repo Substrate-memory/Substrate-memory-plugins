@@ -24,12 +24,14 @@ from .client import SubstrateAPIError, SubstrateClient, validate_capabilities
 from .credentials import CredentialStore, credential_store
 from .spool import secure_atomic_json_write
 
-HOSTED_ORIGIN = "https://app.trysubstrate.co"
+HOSTED_ORIGIN = os.environ.get(
+    "SUBSTRATE_WIKI_ORIGIN", "https://app.trysubstrate.co"
+).rstrip("/")
 CLIENT_ID = "substrate-hermes"
 SCOPES = "capture retrieve"
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 _STATE_VERSION = 1
-_PLUGIN_VERSION = "2.0.4"
+_PLUGIN_VERSION = "2.0.5"
 _MAX_RESPONSE = 64 * 1024
 _CAPABILITY_TIMEOUT_SECONDS = 60.0
 _CAPABILITY_ATTEMPTS = 2
@@ -334,6 +336,8 @@ class OnboardingManager:
             result["credential_backend"] = self.store.backend
             result["authenticated"] = bool(self.store.get())
             result["complete"] = state.get("phase") in _TERMINAL
+            if state.get("phase") == "awaiting_history_consent":
+                result["action_required"] = "history_consent"
             return result
 
     def _check_capabilities(self, token: str) -> dict[str, Any]:
@@ -344,7 +348,7 @@ class OnboardingManager:
             )
             try:
                 capabilities = client.capabilities()
-                validate_capabilities(capabilities, require_replay=True, require_entity=True)
+                validate_capabilities(capabilities, require_replay=True, require_entity=False)
                 return {"provider": capabilities.get("provider"), "protocol": "stream-v2"}
             except SubstrateAPIError as exc:
                 if (
@@ -454,6 +458,11 @@ class OnboardingManager:
             if not self.store.get():
                 raise OnboardingError("authentication_required")
             decision = "approved" if approved else "declined"
+            if state.get("phase") != "awaiting_history_consent":
+                receipt = state.get("history_consent")
+                if isinstance(receipt, dict) and receipt.get("decision") == decision:
+                    return self.status()
+                raise OnboardingError("history_consent_not_pending")
             state["history_consent"] = _receipt(decision)
             if not approved:
                 state.update(phase="ready", completed_at=time.time())
@@ -483,9 +492,7 @@ class OnboardingManager:
         timeout: float = 900.0,
     ) -> dict[str, Any]:
         result = self.begin(mode=mode, open_browser=open_browser)
-        if wait and result.get("phase") == "authorization_pending" and (
-            mode == "device" or not open_browser
-        ):
+        if wait and result.get("phase") == "authorization_pending":
             print(
                 f"Open {result.get('verification_uri_complete')} to sign in by email "
                 f"and connect Hermes. One-time code: {result.get('user_code')}",
@@ -568,14 +575,18 @@ def _prompt_history(manager: OnboardingManager) -> dict[str, Any]:
     if not sys.stdin.isatty():
         return status
     print(
-        "Upload all eligible past Hermes conversations to your Substrate memory? [y/N]: ",
+        "Upload all eligible past Hermes conversations to your Substrate memory? [y/n]: ",
         end="", file=sys.stderr, flush=True,
     )
     try:
         answer = sys.stdin.readline().strip().casefold()
     except (EOFError, KeyboardInterrupt):
-        answer = ""
-    return manager.consent_history(answer in {"y", "yes"})
+        return manager.status()
+    if answer in {"y", "yes"}:
+        return manager.consent_history(True)
+    if answer in {"n", "no"}:
+        return manager.consent_history(False)
+    return manager.status()
 
 
 def bootstrap_package() -> None:

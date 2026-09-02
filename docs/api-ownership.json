@@ -328,7 +328,7 @@
       "response_schema": "ValidationCanaryView-v1 aggregate only"
     }
   ],
-  "plugin_repository": "https://github.com/Substrate-memory/hermes-substrate-wiki",
+  "plugin_repository": "https://github.com/Substrate-memory/Substrate-memory-plugins",
   "repository_obligations": {
     "Substrate-v2": "owns implementation, authentication, validation, persistence, compatibility aliases, and concurrent support",
     "hermes-substrate-wiki": "owns client shaping, origin validation, bounded requests, capability enforcement, fallback, and user-facing errors",

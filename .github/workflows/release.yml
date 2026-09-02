@@ -147,4 +147,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "substrate_wiki $tag" \
-            --notes "Patch release for compact user/assistant-only capture and batched history upload. Tool calls, tool results, system messages, provider metadata, and duplicate envelope fields are excluded. Targets Hermes 0.20.x. See COMPATIBILITY.md and SECURITY.md."
+            --notes "Patch release for explicit post-approval history consent, reliable device-poll completion, and the Substrate v5 history-only handshake. Targets Hermes 0.20.x. See COMPATIBILITY.md and SECURITY.md."

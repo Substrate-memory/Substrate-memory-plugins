@@ -26,7 +26,7 @@ _MAX_CITATION_ITEMS = 50
 _MAX_SHORT_FIELD_CHARS = 2048
 _MAX_TEXT_FIELD_CHARS = 65536
 _MAX_MEMORY_CARD_CHARS = 8192
-_USER_AGENT = "substrate_wiki-hermes-plugin/2.0.4"
+_USER_AGENT = "substrate_wiki-hermes-plugin/2.0.5"
 _PLUGIN_VERSION = (2, 0, 0)
 
 
@@ -208,7 +208,9 @@ class SubstrateClient:
         hosted_default: bool = False,
     ) -> SubstrateClient:
         """Resolve explicit legacy env configuration, then hosted onboarding custody."""
-        hosted_origin = "https://app.trysubstrate.co"
+        hosted_origin = os.environ.get(
+            "SUBSTRATE_WIKI_ORIGIN", "https://app.trysubstrate.co"
+        ).rstrip("/")
         base_url = os.environ.get("HERMES_API_URL", "") or fallback_url
         api_key = os.environ.get("HERMES_API_KEY", "")
         if hosted_default:
