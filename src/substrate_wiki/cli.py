@@ -168,12 +168,16 @@ def _onboarding(args: argparse.Namespace, home: Path) -> dict[str, Any]:
         decision = args.history
         if decision == "ask" and sys.stdin.isatty():
             print(
-                "Upload all eligible past Hermes conversations to Substrate? [y/N]: ",
+                "Upload all eligible past Hermes conversations to Substrate? [y/n]: ",
                 end="",
                 file=sys.stderr,
                 flush=True,
             )
-            decision = "approve" if sys.stdin.readline().strip().casefold() in {"y", "yes"} else "decline"
+            answer = sys.stdin.readline().strip().casefold()
+            if answer in {"y", "yes"}:
+                decision = "approve"
+            elif answer in {"n", "no"}:
+                decision = "decline"
         if decision in {"approve", "decline"}:
             result = manager.consent_history(decision == "approve")
     return result

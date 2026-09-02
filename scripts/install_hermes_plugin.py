@@ -19,7 +19,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 PLUGIN_NAME = "substrate_wiki"
-EXPECTED_VERSION = "2.0.4"
+EXPECTED_VERSION = "2.0.5"
 EXPECTED_HERMES_VERSION = "0.20.0"
 LICENSE_FILENAME = "LICENSE"
 REQUIRED_FILES = {
@@ -464,6 +464,9 @@ def install(
                 "complete": False,
                 "error_class": str(onboarding.get("error_class") or "OnboardingLaunchError"),
             }
+        if onboarding.get("phase") == "awaiting_history_consent":
+            onboarding["action_required"] = "history_consent"
+            result["action_required"] = "history_consent"
         result["onboarding"] = onboarding
         result["onboarding_pending"] = not bool(onboarding.get("complete"))
     return result
@@ -516,6 +519,13 @@ def main() -> int:
             else f"Installation failed: {type(exc).__name__}"
         )
         return 1
+    if result.get("action_required") == "history_consent":
+        print(
+            "Substrate connection successful. Return to the same conversation and ask "
+            "whether the user wants to import existing Hermes history.",
+            file=sys.stderr,
+            flush=True,
+        )
     print(
         json.dumps(result, sort_keys=True)
         if args.json

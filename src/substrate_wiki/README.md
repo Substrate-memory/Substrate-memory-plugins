@@ -33,9 +33,13 @@ migration path.
 
 ## History consent
 
-After connection, Substrate asks whether to upload eligible history. This is the only
-optional step. Declining history upload leaves future capture and recall enabled. Approval
-starts exactly one durable profile-scoped job. Its content-free status reports discovered,
+After browser approval, the polling installer returns control to the same Hermes
+conversation with `action_required: history_consent`. The agent must report that the
+connection succeeded and ask whether to upload eligible history. It must not infer or
+pre-authorize the answer. Blank or interrupted input leaves consent pending.
+
+This is the only optional step. Declining history upload leaves future capture and recall
+enabled. Approval starts exactly one durable profile-scoped job. Its content-free status reports discovered,
 uploaded, processed, duplicate, retry, and error counts; disconnects and restarts resume the
 same checkpoint and stable batch/event IDs.
 

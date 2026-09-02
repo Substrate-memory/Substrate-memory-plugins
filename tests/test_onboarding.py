@@ -10,6 +10,7 @@ from substrate_wiki.onboarding import (
     HostedOAuthClient,
     OnboardingError,
     OnboardingManager,
+    _prompt_history,
 )
 
 
@@ -307,3 +308,61 @@ def test_permanent_capability_failure_is_not_retried_and_is_diagnostic(
     assert result["capability_failure"] == "server_upgrade_required"
     assert result["authenticated"] is False
     assert store.get() == ""
+
+
+def test_pending_history_consent_is_explicit_and_idempotent(tmp_path: Path):
+    store = Store()
+    store.put("tenant-secret")
+    launches = []
+    manager = OnboardingManager(
+        tmp_path,
+        store=store,
+        capability_check=lambda token: {},
+        import_start=lambda home: launches.append(home) or {"job_id": "job-1", "complete": False},
+    )
+    pending = manager.begin()
+    assert pending["phase"] == "awaiting_history_consent"
+    assert pending["action_required"] == "history_consent"
+
+    first = manager.consent_history(True)
+    second = manager.consent_history(True)
+    assert first["phase"] == second["phase"] == "importing"
+    assert launches == [tmp_path.resolve()]
+    with pytest.raises(OnboardingError, match="history_consent_not_pending"):
+        manager.consent_history(False)
+
+
+def test_blank_history_answer_stays_pending(tmp_path: Path, monkeypatch):
+    class InteractiveBlank:
+        def isatty(self): return True
+        def readline(self): return "\n"
+
+    store = Store()
+    store.put("tenant-secret")
+    manager = OnboardingManager(tmp_path, store=store, capability_check=lambda token: {})
+    manager.begin()
+    monkeypatch.setattr("substrate_wiki.onboarding.sys.stdin", InteractiveBlank())
+    result = _prompt_history(manager)
+    assert result["phase"] == "awaiting_history_consent"
+    assert result["action_required"] == "history_consent"
+    assert "history_consent" not in json.loads(
+        (tmp_path / "substrate_wiki/onboarding/state.json").read_text()
+    )
+
+
+def test_auto_device_run_always_prints_complete_authorization_url(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    manager = OnboardingManager(
+        tmp_path,
+        api=API(),
+        store=Store(),
+        capability_check=lambda token: {"ok": token},
+        opener=lambda url: True,
+    )
+    result = manager.run(mode="auto", wait=True, open_browser=True, timeout=5)
+    assert result["phase"] == "awaiting_history_consent"
+    assert result["action_required"] == "history_consent"
+    assert result["verification_uri_complete"] in capsys.readouterr().err

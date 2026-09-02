@@ -86,7 +86,7 @@
     "name": "hermes-substrate-wiki",
     "organization": "Substrate-memory",
     "source_of_truth": true,
-    "url": "https://github.com/Substrate-memory/hermes-substrate-wiki",
+    "url": "https://github.com/Substrate-memory/Substrate-memory-plugins",
     "visibility": "public"
   },
   "schema_version": 1,
