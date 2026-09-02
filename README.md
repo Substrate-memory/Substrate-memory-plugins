@@ -8,6 +8,24 @@ The Substrate application and server are maintained in a separate private reposi
 repository is the canonical editable source for public plugin/client code, verified installers,
 tests, documentation, and immutable release artifacts.
 
+
+## Retrieval MVP plugin (`substrate`)
+
+The repository also contains the thin Substrate v5 retrieval plugin in
+[`plugins/substrate`](plugins/substrate). It uses the server-side candidate pool and
+associative editor, injects bounded turn context, captures completed turns, and provides
+`memory_search`, `memory_expand`, and `memory_evidence`.
+
+Install the public plugin directly from this repository:
+
+```sh
+hermes --profile developer plugins install   Substrate-memory/Substrate-memory-plugins/plugins/substrate --enable
+```
+
+For production, pin the command with `--ref` and a published 40-character commit SHA.
+The plugin reads `SUBSTRATE_API_URL` and `SUBSTRATE_API_KEY` from the Hermes gateway
+environment. See the plugin-local README for details.
+
 ## Install with an agent
 
 Tell your Hermes agent exactly:

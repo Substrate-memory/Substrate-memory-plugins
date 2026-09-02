@@ -83,6 +83,7 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
             "c8eb7c5157ac7027dbf6ae86235e63dea6a2dd1faab46f0cbcbd536fbdd21ecf",
             "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b",
             "ac62cbf3799a35bbb239a0b951411491aab8ee0f2f2c33e66b8a3380a8c20e88",
+            "3638d8fc00fb6328b2235dd77c00d9ba937e9b4a13cadac17f15f514f5bb9561",
         }
     ),
     "scripts/benchmark_migration.py": frozenset(
@@ -127,6 +128,10 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
                                        "e90c78ea6b182c558079c59752be07af1bc7937b69e06b66ee96a74bc8f7f0db",
                                    }
                                ),
+    "plugins/substrate/README.md": frozenset({"35b846e7abdb4faad9382c015f6668d4c4bcbef1e5bb49b27b51368634cfd07c"}),
+    "plugins/substrate/client.py": frozenset({"a1b0718e6e9435d0b5530bd0baa8bdb0944c47cbdd4b74c5058267ac8eed33f8"}),
+    "plugins/substrate/contract.py": frozenset({"f8dabf7d1e8f0c8ce5b6f1dc3529ef5d751b6b98dec1f59705392ff099e24346"}),
+    "plugins/substrate/plugin.yaml": frozenset({"86e28bce3ab3f2c1d25f09be111776c21f88c2e9f03037cfd6b3cd1f2ad9b0f4"}),
     "tests/test_publication_scanner.py": frozenset(
         {
             "c2352cc593ab08d452479f9ed59651e95acdf0cd5511a94f3830e7910bf65a21",
@@ -301,10 +306,10 @@ for _path, _digests in _HOSTED_ONBOARDING_EXACT_ALLOWLIST.items():
 # only that sorted policy projection, so ordinary byte changes do not change
 # policy. Adding, moving, or reclassifying a file requires explicit review.
 TRUSTED_INVENTORY_POLICY_SHA256 = (
-    "4b444b2583fbdd340b17d279fd169103c57f87a56dece39988d784b311222920"
+    "022c4bc0436f6b329d837944a52efd0842ba8b6ca71e7bece46efbb3560a49ae"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "47091457ab7ae27771e7e4580938f0f0bead181a1b62683784d8a07d468f108f"
+    "2d626a34afe1d8d1655284be936433a46f31427e3d40ff5d355222443754edec"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"

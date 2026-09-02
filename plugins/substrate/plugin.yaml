@@ -1,0 +1,15 @@
+name: substrate
+version: 0.1.0
+description: Substrate retrieval and completed-turn capture for Hermes
+provides_tools:
+  - memory_search
+  - memory_expand
+  - memory_evidence
+provides_hooks:
+  - pre_llm_call
+  - post_llm_call
+requires_env:
+  - name: SUBSTRATE_API_KEY
+    description: Substrate API key
+    url: https://app.trysubstrate.co
+    secret: true
