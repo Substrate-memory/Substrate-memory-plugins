@@ -117,7 +117,7 @@ jobs:
           test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = \
             "SHA256SUMS install_hermes_plugin.py substrate_wiki.zip "
           (cd dist && sha256sum -c SHA256SUMS)
-      - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
+      - uses: actions/attest-build-provenance@9d57eef8c06cd9d6b433effeeb7a6a77b3ff94ad # pinned
         with:
           subject-path: "dist/*"
       - name: Create immutable tag and GitHub release
