@@ -220,6 +220,23 @@ def _valid_hosted_capabilities() -> dict[str, object]:
     }
 
 
+def test_setup_handshake_requires_history_upload_but_not_entity_features(
+    tmp_path: Path, monkeypatch
+):
+    from substrate_wiki.client import SubstrateClient
+
+    capabilities = _valid_hosted_capabilities()
+    capabilities.pop("entity_memory")
+    capabilities.pop("entity_quality")
+    monkeypatch.setattr(SubstrateClient, "capabilities", lambda _client: capabilities)
+
+    manager = OnboardingManager(tmp_path, store=Store())
+    assert manager._check_capabilities("tenant-secret") == {
+        "provider": "substrate_wiki",
+        "protocol": "stream-v2",
+    }
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
     [(503, "http_503"), (400, "invalid_response")],

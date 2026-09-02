@@ -208,7 +208,9 @@ class SubstrateClient:
         hosted_default: bool = False,
     ) -> SubstrateClient:
         """Resolve explicit legacy env configuration, then hosted onboarding custody."""
-        hosted_origin = "https://app.trysubstrate.co"
+        hosted_origin = os.environ.get(
+            "SUBSTRATE_WIKI_ORIGIN", "https://app.trysubstrate.co"
+        ).rstrip("/")
         base_url = os.environ.get("HERMES_API_URL", "") or fallback_url
         api_key = os.environ.get("HERMES_API_KEY", "")
         if hosted_default:

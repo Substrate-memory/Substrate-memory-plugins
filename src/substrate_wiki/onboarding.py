@@ -24,7 +24,9 @@ from .client import SubstrateAPIError, SubstrateClient, validate_capabilities
 from .credentials import CredentialStore, credential_store
 from .spool import secure_atomic_json_write
 
-HOSTED_ORIGIN = "https://app.trysubstrate.co"
+HOSTED_ORIGIN = os.environ.get(
+    "SUBSTRATE_WIKI_ORIGIN", "https://app.trysubstrate.co"
+).rstrip("/")
 CLIENT_ID = "substrate-hermes"
 SCOPES = "capture retrieve"
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
@@ -344,7 +346,7 @@ class OnboardingManager:
             )
             try:
                 capabilities = client.capabilities()
-                validate_capabilities(capabilities, require_replay=True, require_entity=True)
+                validate_capabilities(capabilities, require_replay=True, require_entity=False)
                 return {"provider": capabilities.get("provider"), "protocol": "stream-v2"}
             except SubstrateAPIError as exc:
                 if (

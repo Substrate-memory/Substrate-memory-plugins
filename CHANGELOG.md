@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Let hosted onboarding validate only the history replay contract, so a setup-and-upload MVP does not need to advertise entity retrieval features.
+- Add an explicit `SUBSTRATE_WIKI_ORIGIN` override for isolated v5 import tests; the hosted origin remains the default.
+
 ## 2.0.4
 
 - Upload only completed user/assistant text; exclude tool calls, tool results, system messages,
