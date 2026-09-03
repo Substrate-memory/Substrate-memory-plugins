@@ -27,14 +27,14 @@ jobs:
               grep -Eq '^Signed-off-by: .+ <[^>]+>$'
           done
 
-  publication-scan:
+  hygiene:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Scan pristine tracked, untracked, ignored, and reachable Git content
-        run: python scripts/verify_public_plugin_candidate.py --root . --layout destination
+      - name: Check the tree for real secrets and unexpected endpoints
+        run: python3 scripts/check_public_hygiene.py --root .
 
   test:
     strategy:
@@ -56,65 +56,9 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: uv sync --frozen --extra dev
       - run: uv run --frozen --extra dev ruff check .
-      - run: uv run --frozen --extra dev python -m compileall -q src scripts
+      - run: uv run --frozen --extra dev python -m compileall -q plugins scripts
       - run: uv run --frozen --extra dev python -m pytest -q
-
-
-  release-artifact:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          version: "0.11.32"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-      - run: uv sync --frozen --extra dev
-      - name: Re-run the complete privacy-safe migration matrix
-        run: |
-          set -euo pipefail
-          uv run --frozen --extra dev python scripts/benchmark_migration.py \
-            --manifest benchmarks/hermes-migration-manifest.json \
-            --profile ci \
-            --output "$RUNNER_TEMP/hermes-migration-baseline.json"
-          uv run --frozen --extra dev python scripts/verify_fresh_migration_run.py \
-            --receipt "$RUNNER_TEMP/hermes-migration-baseline.json"
-      - name: Build twice and verify deterministic bytes
-        env:
-          HERMES_PLUGIN_SOURCE_COMMIT: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          uv run --frozen --extra dev python scripts/build_plugin.py
-          cp dist/substrate_wiki.zip "$RUNNER_TEMP/first-substrate_wiki.zip"
-          rm -rf dist release-assets
-          uv run --frozen --extra dev python scripts/build_plugin.py
-          cmp "$RUNNER_TEMP/first-substrate_wiki.zip" dist/substrate_wiki.zip
-          uv run --frozen --extra dev python scripts/build_plugin.py --check
-      - name: Install exact artifact and reject a wrong digest
-        run: |
-          set -euo pipefail
-          archive_sha="$(sha256sum dist/substrate_wiki.zip | cut -d ' ' -f1)"
-          uv run --frozen --extra dev python scripts/install_hermes_plugin.py \
-            --archive dist/substrate_wiki.zip \
-            --hermes-home "$RUNNER_TEMP/hermes" \
-            --sha256 "$archive_sha" \
-            --no-activate --no-onboard \
-            --yes --json
-          test -f "$RUNNER_TEMP/hermes/plugins/substrate_wiki/plugin.yaml"
-          if uv run --frozen --extra dev python scripts/install_hermes_plugin.py \
-            --archive dist/substrate_wiki.zip \
-            --hermes-home "$RUNNER_TEMP/tamper-canary" \
-            --sha256 "$(printf '0%.0s' {1..64})" \
-            --no-activate --no-onboard \
-            --yes --json; then
-            echo "installer accepted a wrong digest" >&2
-            exit 1
-          fi
+      - run: uv run --frozen --extra dev python scripts/build_release.py --check
 
   dependency-review:
     if: github.event_name == 'pull_request'

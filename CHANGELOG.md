@@ -1,8 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
-- Add the current `substrate` plugin (`plugins/substrate`, version 0.2.x) for Hermes 0.21.x: one-prompt `hermes plugins install` of the subdirectory, self-contained RFC 8628 device onboarding on first use (browser approval link, background polling, key stored privately in the active profile's `.env`), `memory_search`/`memory_expand`/`memory_evidence` tools, verified TLS with bundled public ISRG root anchors, and health-gated legacy cutover. The legacy `substrate_wiki` 2.0.x provider below remains only for existing Hermes 0.20.x installations.
+- First full release of the `substrate` plugin for Hermes 0.21.x: one-prompt install
+  from the `v0.3.0` tag, self-contained RFC 8628 device onboarding with agent display
+  names, `memory_search`/`memory_expand`/`memory_evidence`, live session completion
+  markers, pinned public ISRG trust roots, and health-gated legacy cutover.
+- Remove the legacy `substrate_wiki` provider, its installer/builder, migration
+  benchmarks, release assets, and publication-policy machinery. The repository now
+  contains only the current plugin, its tests, and a deterministic release builder.
+- Replace the closed-inventory publication scanner with a dependency-free public
+  hygiene check (`scripts/check_public_hygiene.py`).
+
+- Add the current `substrate` plugin (`plugins/substrate`, now version 0.3.0) for Hermes 0.21.x: one-prompt `hermes plugins install` of the subdirectory, self-contained RFC 8628 device onboarding on first use (browser approval link, background polling, key stored privately in the active profile's `.env`), `memory_search`/`memory_expand`/`memory_evidence` tools, verified TLS with bundled public ISRG root anchors, and health-gated legacy cutover. The legacy `substrate_wiki` 2.0.x provider below remains only for existing Hermes 0.20.x installations.
 - Let hosted onboarding validate only the history replay contract, so a setup-and-upload MVP does not need to advertise entity retrieval features.
 - Add an explicit `SUBSTRATE_WIKI_ORIGIN` override for isolated v5 import tests; the hosted origin remains the default.
 

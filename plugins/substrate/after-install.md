@@ -1,8 +1,11 @@
 # Complete Substrate setup
 
-The plugin files are installed. The installing agent must finish setup for the same active
-Hermes profile. Run this block and keep the setup process open while authorization is
-pending:
+No manual credential step is required. The plugin runs device onboarding by itself
+on the first turn or first `memory_search` call: it shows a browser approval link
+through the agent, and after approval the tenant-scoped key is stored privately in
+the active profile's `.env`. Never ask the user to paste a key into chat.
+
+Optionally, to connect during installation instead of on first use, run:
 
 ```sh
 profile_home="${HERMES_HOME:-$(dirname "$(hermes config path)")}"
@@ -10,11 +13,10 @@ HERMES_HOME="$profile_home" python3 "$profile_home/plugins/substrate/setup.py" \
   --hermes-home "$profile_home"
 ```
 
-If setup prints `verification_uri_complete`, show that exact URL to the user and ask them
-to approve it. Do not expose or request an access token. Continue only after setup prints
-`"status": "ready"`.
+If it prints `verification_uri_complete`, show that exact URL to the user and ask them
+to approve it in a browser. Do not expose or request an access token.
 
-Then complete the cutover:
+Then complete the cutover (only after a memory call succeeds):
 
 ```sh
 config_path="$(hermes config path)"
@@ -42,4 +44,5 @@ In a new agent turn, call `memory_search`. Do not use the legacy `wiki_search` t
 Report success only when `memory_search` reaches the authenticated Substrate API.
 
 Do not disable TLS verification, install a private certificate, or inspect a different
-Hermes profile. `setup.py` adds only the bundled public ISRG roots to normal system trust.
+Hermes profile. The plugin supplements system trust only with the bundled public ISRG
+roots.

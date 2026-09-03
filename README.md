@@ -1,7 +1,8 @@
 # Substrate Memory Plugins
 
-This is the official public repository and canonical editable source for Substrate memory integrations. The current
-Hermes plugin is [`plugins/substrate`](plugins/substrate) and supports Hermes 0.21.x.
+This is the official public repository for the Substrate memory plugin for
+Hermes 0.21.x. The current release is
+[`v0.3.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.3.0).
 
 ## Install with a Hermes agent
 
@@ -18,14 +19,12 @@ for the active Hermes profile. Do not ask the user for repository paths, command
 hashes, API keys, or TLS workarounds.
 
 1. Confirm `hermes --version` is 0.21.x. Do not upgrade Hermes automatically.
-2. Install the plugin subdirectory, not the repository root:
+2. Install the plugin subdirectory at the released tag, not the repository root:
 
    ```sh
-   substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/heads/main | awk '{print $1}')"
-   printf '%s\n' "$substrate_ref" | grep -Eq '^[0-9a-f]{40}$'
    hermes plugins install \
      Substrate-memory/Substrate-memory-plugins/plugins/substrate \
-     --ref "$substrate_ref" --no-enable
+     --ref v0.3.0 --no-enable
    ```
 
 3. Run `hermes plugins doctor substrate --ci`. Stop without changing the legacy provider
@@ -36,9 +35,10 @@ hashes, API keys, or TLS workarounds.
    the agent must never approve it for them or ask for a pasted key.
 5. The plugin stores the tenant-scoped key privately in the active profile's `.env` and
    retries automatically. No manual credential migration is required.
-6. Only after a memory call succeeds, disable `substrate_wiki`, clear an old
-   `memory.provider: substrate_wiki` selection with `hermes memory off`, and restart the
-   gateway. This prevents duplicate capture while preserving built-in local memory.
+6. Only after a memory call succeeds, disable `substrate_wiki` (if an old provider is
+   installed), clear an old `memory.provider: substrate_wiki` selection with
+   `hermes memory off`, and restart the gateway. This prevents duplicate capture while
+   preserving built-in local memory.
 7. The optional `setup.py` can pre-connect during installation, but it is not required.
 8. Verify the new `memory_search` tool in a new turn. `wiki_search` is legacy and is not a
    valid verification of the current plugin.
@@ -55,24 +55,15 @@ The `substrate` plugin is a thin, standard-library-only adapter. It provides:
 
 - bounded next-turn memory context through `pre_llm_call`;
 - nonblocking completed-turn capture through `post_llm_call`;
+- session completion markers through `on_session_reset` and `on_session_finalize`, so
+  ended sessions are materialized into the extraction pipeline automatically;
 - `memory_search`, `memory_expand`, and `memory_evidence`;
-- active-profile credential migration and passwordless device authorization;
+- active-profile credential reuse and passwordless device authorization;
+- agent display names, selectable on the approval page and visible in the agent pane;
 - additive public-root TLS trust without disabling certificate or hostname checks.
 
 The Substrate server remains the source of truth for storage, ranking, the associative
 editor, and evidence.
-
-## Legacy compatibility
-
-Hermes 0.21.x is certified for the current `substrate` plugin. The legacy
-`src/substrate_wiki` provider and its release tooling are retained for existing Hermes 0.20.x
-installations and migration tests. It is not the current install target, and its
-compatibility rows in `COMPATIBILITY.md` apply only to 0.20.x. Do not run
-`scripts/install_hermes_plugin.py` for the prompt above. Legacy packaging state remains
-unchanged: `v2.0.5` is not published yet, its historical URL would contain
-`releases/download/v2.0.5`, and its unpublished checksum marker remains
-`PLUGIN_SHA256_PENDING`. These strings document legacy release truth; they are not install
-instructions. Immutable historical releases remain under `legacy-assets` and Git tags.
 
 ## Privacy boundary
 
@@ -80,9 +71,8 @@ Visible prompts and assistant output may be sent to the configured Substrate ser
 redaction. The current plugin does not upload tool results or system messages. It caches no
 retrieved memory locally and returns empty context on any retrieval failure.
 
-Read [SECURITY.md](SECURITY.md), [the threat model](docs/threat-model.md),
-[the source-ownership boundary](docs/source-of-truth.md), and [BOUNDARY.md](BOUNDARY.md)
-before deployment.
+Read [SECURITY.md](SECURITY.md) and [the threat model](docs/threat-model.md) before
+deployment.
 
 ## Development
 
@@ -90,17 +80,16 @@ before deployment.
 uv sync --frozen --extra dev
 uv run --frozen --extra dev ruff check .
 uv run --frozen --extra dev python -m pytest -q
-python3 scripts/verify_public_plugin_candidate.py --root . --layout destination
+python3 scripts/check_public_hygiene.py --root .
+uv run --frozen --extra dev python scripts/build_release.py --check
 ```
 
 ## Repository map
 
-- `plugins/substrate/` — current Hermes 0.21.x retrieval plugin and setup flow.
-- `src/substrate_wiki/` — legacy provider retained for migration compatibility.
-- `scripts/` — deterministic legacy builder, installer, and publication scanner.
-- `tests/` — provider, privacy, replay, packaging, retrieval, and setup tests.
-- `legacy-assets/` — immutable historical releases.
-- `docs/` — architecture, compatibility, ownership, and threat-model contracts.
+- `plugins/substrate/` — the Hermes 0.21.x retrieval plugin and setup flow.
+- `scripts/` — deterministic release builder and public-hygiene check.
+- `tests/` — contract, behavior, transport, onboarding, and packaging tests.
+- `docs/` — architecture, ownership, and threat-model contracts.
 
 ## License
 

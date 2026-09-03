@@ -2,7 +2,10 @@
 
 ## Scope
 
-This repository owns the Hermes `substrate_wiki` plugin, its local state machinery, build/installer tooling, tests, release artifacts, and user documentation. Server routes, persistence, deployment, and production data belong in `Substrate-memory/Substrate-v2`.
+This repository owns the Hermes `substrate` retrieval plugin (`plugins/substrate`), its
+device onboarding, session-completion capture, response validation, release builder,
+tests, and user documentation. Server routes, persistence, deployment, and production
+data belong in the Substrate server repository.
 
 ## Workflow
 
@@ -12,19 +15,22 @@ This repository owns the Hermes `substrate_wiki` plugin, its local state machine
 4. Run:
 
    ```bash
-   python -m pip install -e '.[dev]'
-   pytest -q
-   python -m compileall -q src scripts
-   python scripts/verify_public_plugin_candidate.py --root . --layout destination
+   uv sync --frozen --extra dev
+   uv run --frozen --extra dev ruff check .
+   uv run --frozen --extra dev python -m pytest -q
+   python3 scripts/check_public_hygiene.py --root .
+   uv run --frozen --extra dev python scripts/build_release.py --check
    ```
 
 5. Update `CHANGELOG.md` and compatibility/security docs when behavior changes.
 6. Sign every commit with the [Developer Certificate of Origin 1.1](https://developercertificate.org/) by adding `Signed-off-by: Name <email>` (`git commit -s`). This repository uses DCO sign-off, not a contributor license agreement.
-7. Open a PR. Every PR requires an adversarial review and passing CI.
+7. Open a PR. Every PR requires passing CI.
 
 ## Compatibility
 
-Do not claim a Hermes or server version based on import success alone. Provider discovery, lifecycle hooks, tool schemas, profile isolation, import service, configuration, replay, rollback, and failure behavior must all pass.
+Do not claim a Hermes or server version based on import success alone. Hook registration,
+tool schemas, profile isolation, onboarding, session capture, configuration, and failure
+behavior must all pass.
 
 Breaking server behavior requires a new protocol/schema identifier with concurrent old-version support. Never silently rewrite user configuration or state.
 

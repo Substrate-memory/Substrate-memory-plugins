@@ -1,35 +1,29 @@
 # Architecture
 
 ```text
-Hermes lifecycle / tools
+Hermes 0.21.x lifecycle / tools
         |
         v
-substrate_wiki provider
-  - bounded prefetch cache
-  - capture + redaction
-  - durable spool/checkpoint
-  - verified HTTPS client
+substrate plugin (plugins/substrate, stdlib only)
+  - pre_llm_call: bounded turn-context recall injection
+  - post_llm_call: nonblocking completed-turn capture
+  - on_session_reset / on_session_finalize: session-completion markers
+  - memory_search / memory_expand / memory_evidence tools
+  - onboarding.py: RFC 8628 device flow, key stored in profile .env
+  - verified HTTPS client with pinned public ISRG roots
         |
         v
-versioned Substrate HTTP capabilities
+versioned Substrate HTTP API (capabilities, ledger, memory, agents)
 ```
 
 ## Recall
 
-Hermes queues retrieval asynchronously. `prefetch()` reads only a bounded session/query cache and never blocks the model turn on network I/O. Accepted automatic-recall results are bounded cited `memory_card` values from canonical entity pages.
+Retrieval is ranked server-side over projected fact units. The plugin caches no memory;
+every failure injects nothing and every tool result is bounded and redacted.
 
 ## Capture
 
-Completed turns, pre-compression boundaries, memory writes, and session boundaries become versioned events. Credential-shaped values are redacted before admission to the durable spool. Delivery uses deterministic event IDs, idempotency keys, bounded retries, and durable acknowledgement checkpoints.
-
-## History replay
-
-The importer reads the active Hermes profile's canonical SQLite or supported export source through bounded cursors. It resumes exact acknowledged progress after interruption and sends a content-free completion boundary. It refuses servers without `stream-v2`.
-
-## Local state
-
-All writable plugin state is rooted beneath the active `$HERMES_HOME/substrate_wiki` directory. No state is shared across profiles. Spool files and checkpoints are owner-private on POSIX systems.
-
-## Dependency boundary
-
-The runtime uses the Python standard library and Hermes host interfaces. The Substrate server never imports plugin Python; this repository never imports Substrate-v2 server code.
+Completed turns are posted as live ledger events. Session boundaries post
+`capture_session` envelopes so the server can materialize ended sessions into the
+extraction pipeline. Credential-shaped values are redacted before admission to the
+network path.

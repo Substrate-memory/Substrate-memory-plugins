@@ -8,11 +8,9 @@ the associative editor, and evidence. The plugin caches no memory and fails clos
 Install this directory, not the repository root:
 
 ```sh
-substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/heads/main | awk '{print $1}')"
-printf '%s\n' "$substrate_ref" | grep -Eq '^[0-9a-f]{40}$'
 hermes plugins install \
   Substrate-memory/Substrate-memory-plugins/plugins/substrate \
-  --ref "$substrate_ref" --no-enable
+  --ref v0.3.0 --no-enable
 ```
 
 No manual credential setup is required. The plugin connects itself on first use:

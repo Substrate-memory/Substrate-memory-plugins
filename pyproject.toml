@@ -1,11 +1,7 @@
-[build-system]
-requires = ["setuptools==83.0.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "hermes-substrate-wiki"
-version = "2.0.5"
-description = "Substrate memory-provider plugin for Hermes Agent"
+name = "substrate-retrieval"
+version = "0.3.0"
+description = "Substrate retrieval plugin for Hermes Agent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -23,14 +19,7 @@ dev = [
   "pytest==9.0.3",
   "pytest-timeout==2.3.1",
   "ruff==0.9.10",
-  "setuptools==83.0.0",
 ]
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.package-data]
-substrate_wiki = ["README.md", "plugin.yaml", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
