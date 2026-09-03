@@ -59,13 +59,13 @@
       "class": "standalone_repository_policy_or_test",
       "path": "CHANGELOG.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "5c3f024118fd7c5f492d5fc52af76b0fe1fa6bf4ee1b5ccd94b3bb34cd08a114"
+      "sha256": "46459da2eddfa84cae2298ef5b61cfbb6298ce9f6e9048173a7577a33fb0a5a8"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "COMPATIBILITY.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "9e2f30159b85caf7682e20d5c8abcbb1881eb2a624565ca565b93353d4bb624f"
+      "sha256": "ba5e0559b396a1618f296b6ac8824e78431cde706a8fc8774c5e16273e121768"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -77,13 +77,13 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "b92ac5001e533722bd27713a39be232f25d282324179feb3e9315f1524e9c966"
+      "sha256": "7187a43e2c9936018e4953ae805715f49fc2c0d94fa1aa708263795d7f8d590b"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "SECURITY.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "e4457fb9df863d239120b4b4d05db31c56e5a73b4331c6bf959ed12d1f06410f"
+      "sha256": "7b819f70e96bc4c07db083b416584dc66f6773c80746874a17f0bc5904e4fb2e"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -113,7 +113,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "docs/threat-model.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "a0f2ffd82cd29fe3c5f551134a019d815c7df6b1198bfc95dfe456d6005c46c4"
+      "sha256": "84c3f829b2d854690c35c6fd553ecfd25bf1ebdec428a2c167c75a1b1e0857b3"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -335,7 +335,7 @@
     {
       "class": "boundary",
       "destination": "docs/public-boundary.md",
-      "destination_sha256": "c9228e2abd22a8af558cd272988435c1caa69ad79c625cb08c8ef32e639eb0f3",
+      "destination_sha256": "fd5e6965cda0decaf7ef539ec53e24bcbca4de16b591d029031402ef2217b62a",
       "source": "docs/plugin/public-boundary.md",
       "source_sha256": "917feee8c785f9ae14a474e9e948079f52084700b1dfff6fe479cc3627adc0c1",
       "transformation": "modified_for_standalone"
@@ -455,7 +455,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "b67230ca55e11a4e122341d8c508047f8b7dc9f5a1b0e1b51e24b163daa27989",
+      "destination_sha256": "677d119930eadc663cc8ef64587890add8a0c7db4ddd81692d50a061953d2829",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
@@ -463,7 +463,7 @@
     {
       "class": "plugin-package",
       "destination": "src/substrate_wiki/README.md",
-      "destination_sha256": "0c555fe0adf4f0eb7112f2897ba0ce0fb22e3d15b928608c4a67447be98c3c23",
+      "destination_sha256": "72195739860b3d64338cff133e31a1cdaefe6cd6e09bcebc9d8c5e1f27e987b3",
       "source": "hermes-plugin/substrate_wiki/README.md",
       "source_sha256": "21b6e60ef34e408fd87570334ba6d2811d2a9ea3c95d512e4d625f958b1cb0dc",
       "transformation": "modified_for_standalone"

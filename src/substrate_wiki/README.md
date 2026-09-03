@@ -1,5 +1,10 @@
 # Substrate Wiki memory provider
 
+> **Legacy — not the current install target.** This provider supports Hermes 0.20.x only and
+> its v2.0.5 release is not published. The current Hermes 0.21.x plugin is
+> [`plugins/substrate`](../../plugins/substrate); install that instead. Do not use this
+> document to reject a Hermes 0.21.x installation.
+
 `substrate_wiki` connects Hermes Agent 0.20.x to the hosted Substrate service at
 `https://app.trysubstrate.co`. It provides cited recall, automatic future capture, and an
 optional, resumable import of eligible prior conversations and explicitly saved memories.
