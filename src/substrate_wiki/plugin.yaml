@@ -1,5 +1,0 @@
-name: substrate_wiki
-version: 2.0.5
-description: "Unified entity-centric Substrate Markdown wiki memory with durable asynchronous capture."
-hooks:
-  - on_session_switch

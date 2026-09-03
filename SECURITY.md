@@ -2,35 +2,27 @@
 
 ## Supported versions
 
-The current supported install target is the `substrate` plugin (0.2.x) in
-[`plugins/substrate`](plugins/substrate), certified for Hermes 0.21.x. It is the plugin an
-agent should install from this repository; it self-onboards and never requires a pasted API
-key.
-
-The standalone `v2.0.0` through `v2.0.5` releases listed below are the **legacy**
-`substrate_wiki` provider for Hermes 0.20.x and the hosted service at
-`https://app.trysubstrate.co`. They remain documented for existing installations only.
-Candidate CI artifacts are not supported releases.
+The current supported install target is the `substrate` plugin (0.3.x) in
+[`plugins/substrate`](plugins/substrate), certified for Hermes 0.21.x and installed from
+the `v0.3.0` release tag. It self-onboards and never requires a pasted API key.
 
 ## Report a vulnerability
 
-Use GitHub's private **Security advisories → Report a vulnerability** flow. Do not open a
-public issue containing a credential, private history, spool contents, traceback with user
-content, or exploit details. Include only content-free diagnostics: plugin/Hermes versions,
-operating system, lifecycle operation, failure category, and a synthetic reproduction.
+Use GitHub's private **Security advisories → Report a vulnerability** flow for this
+repository. Do not open a public issue for a suspected secret leak, auth bypass, or
+remote-execution vector.
 
-## Security boundary
+## Credential handling
 
-The plugin:
+- Tenant-scoped keys live only in the active profile's `.env` (`SUBSTRATE_API_KEY`) and
+  the issuing server. They never enter source, artifacts, logs, errors, chat, or process
+  arguments.
+- Device codes live only in an owner-private profile file and are deleted on terminal
+  states. Onboarding state files never contain access tokens.
+- The plugin verifies TLS with the system trust store plus pinned public ISRG Root X1
+  and X2 anchors. Verification is never disabled and leaf certificates are never pinned.
 
-- accepts hosted tenant credentials only through onboarding credential custody;
-- fixes the network origin to `https://app.trysubstrate.co` and rejects unsafe overrides;
-- stores credentials in a native vault when available, with a fail-closed owner-private fallback;
-- never puts credentials in normal config, logs, errors, receipts, or command arguments;
-- redacts before queueing, persistence, or network transfer;
-- bounds requests, responses, spool size, retries, and import resources;
-- keeps profile state beneath the active `$HERMES_HOME`;
-- verifies immutable checksums, provenance, and packaged source hashes during installation.
+## Response validation
 
-Pattern redaction cannot identify every sensitive statement. Historical upload requires
-explicit consent; declining it leaves future capture enabled. See `docs/threat-model.md`.
+Every server response is schema-validated before use. Unknown or oversized payloads fail
+closed. Tool results are bounded and redacted before they reach the model.
