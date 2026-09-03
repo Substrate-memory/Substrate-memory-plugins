@@ -138,7 +138,7 @@ SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     "plugins/substrate/README.md": frozenset({"35b846e7abdb4faad9382c015f6668d4c4bcbef1e5bb49b27b51368634cfd07c"}),
     "plugins/substrate/client.py": frozenset({"a1b0718e6e9435d0b5530bd0baa8bdb0944c47cbdd4b74c5058267ac8eed33f8"}),
     "plugins/substrate/contract.py": frozenset({"f8dabf7d1e8f0c8ce5b6f1dc3529ef5d751b6b98dec1f59705392ff099e24346"}),
-    "plugins/substrate/plugin.yaml": frozenset({"86e28bce3ab3f2c1d25f09be111776c21f88c2e9f03037cfd6b3cd1f2ad9b0f4"}),
+    "plugins/substrate/plugin.yaml": frozenset({"86e28bce3ab3f2c1d25f09be111776c21f88c2e9f03037cfd6b3cd1f2ad9b0f4", "5c52cf65a93525d3569a0935ca56a6398ffd8f413af289b19bcfe5902a10a03b"}),
     "tests/test_publication_scanner.py": frozenset(
         {
             "c2352cc593ab08d452479f9ed59651e95acdf0cd5511a94f3830e7910bf65a21",
@@ -286,14 +286,15 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {'COMPATIBILITY.md': frozenset({'1f18a49d55
                                        'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3'}),
  'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd',
                                              'cc967199b8e877a8088937a0c951e80f188ad4c7f29a98067bf649a2f8500b72'}),
- 'plugins/substrate/onboarding.py': frozenset({'19708eb1ce0cb4ddc5a64523cad351d0794ce4c8397079add2098c3905a66629'}),
- 'tests/test_retrieval_onboarding.py': frozenset({'866b7637fcdb8120b22fe2c822b18e7b211d4dc447e702af47cb2bd89b343127'}),
- 'plugins/substrate/plugin.py': frozenset({'b9004cde31173ad2037c7b21b5975b05b7360efed5ae4f07a78594ed037ff3c7'}),
- 'plugins/substrate/README.md': frozenset({'dff165ab8024d2788d52e4653e57c425cf98a8f24d1c13a5b3b0bead38287c40'}),
+ 'plugins/substrate/onboarding.py': frozenset({'19708eb1ce0cb4ddc5a64523cad351d0794ce4c8397079add2098c3905a66629', '5cb19fd1bcdac20ef61091329e20c47c381212bac07578c6da4d480583978a31'}),
+ 'tests/test_retrieval_onboarding.py': frozenset({'866b7637fcdb8120b22fe2c822b18e7b211d4dc447e702af47cb2bd89b343127', '87a4b15e34f809160b33d4c94362a94a82fa93bd46e2b6ba6aa68aea10ef07b0'}),
+ 'plugins/substrate/plugin.py': frozenset({'7289109843f5325713e7a02e311078d4dd9ce1fc18d481124b343c50b952abdf', 'b9004cde31173ad2037c7b21b5975b05b7360efed5ae4f07a78594ed037ff3c7'}),
+ 'plugins/substrate/README.md': frozenset({'547e6b106337dd2fed2148fc4273fd90360822652dad4941533d85bef951838d', 'dff165ab8024d2788d52e4653e57c425cf98a8f24d1c13a5b3b0bead38287c40'}),
  'plugins/substrate/client.py': frozenset({'61ece2e3c21517d34341a1df13fb6782e844100c25c1020c679b62e28c22885b'}),
- 'plugins/substrate/setup.py': frozenset({'caec7593ba38e6849ec65d4ba1e1951a35e07fdcc68dd5f32df335b75554f202'}),
- 'tests/test_retrieval_plugin.py': frozenset({'768cbaefad2efcf49eaf24772410ddbf03373b54714113bc392e375626ea5b49'}),
+ 'plugins/substrate/setup.py': frozenset({'488a0c51bf0ea534aa75c968416c40baec09f8dc8eef10fd9f112010b089ac4a', 'caec7593ba38e6849ec65d4ba1e1951a35e07fdcc68dd5f32df335b75554f202'}),
+ 'tests/test_retrieval_plugin.py': frozenset({'206fa1b00515372ccd9827b1bd2ce46c1bb08bb3e53637104970c216e09d17ea', '768cbaefad2efcf49eaf24772410ddbf03373b54714113bc392e375626ea5b49'}),
  'tests/test_retrieval_setup.py': frozenset({'109b1721f12223493aec3528703c7c65db1b58355efa6c06f04821ddb9c0fe33'}),
+ 'tests/test_retrieval_session_capture.py': frozenset({'674b25023225ba72bb34aff83b971f5f70c1ce9c0739463fd8077e7077e0b70e'}),
 }
 for _path, _digests in _HOSTED_ONBOARDING_EXACT_ALLOWLIST.items():
     SYNTHETIC_FILE_SHA256_ALLOWLIST[_path] = (
@@ -305,10 +306,10 @@ for _path, _digests in _HOSTED_ONBOARDING_EXACT_ALLOWLIST.items():
 # only that sorted policy projection, so ordinary byte changes do not change
 # policy. Adding, moving, or reclassifying a file requires explicit review.
 TRUSTED_INVENTORY_POLICY_SHA256 = (
-    "a36a7a604d07d2478936c8f614d13adf41a34b41a8873e792338a03579a12884"
+    "c850a1780d6de7b73d071780bfda56ac1acebb2359dfdde69679220a8ef7713c"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "1af56d541392836ea5fe0f5b38271b9d391e70a2193573bc419716e4fc1fa1b2"
+    "6f7546ccc968b1e18a9b74f48ed895185f0f2c6068ecdcae531a0fd2c9e11732"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"

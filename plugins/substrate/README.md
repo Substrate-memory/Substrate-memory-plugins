@@ -39,8 +39,10 @@ The plugin registers:
 - `post_llm_call` for nonblocking full completed-turn capture;
 - `memory_search`, `memory_expand`, and `memory_evidence`.
 
-Optional overrides are `SUBSTRATE_API_URL`, `SUBSTRATE_API_KEY`, and
-`SUBSTRATE_WIKI_ORIGIN`. The active profile's secure plugin state is used when these are
+Optional overrides are `SUBSTRATE_API_URL`, `SUBSTRATE_API_KEY`,
+`SUBSTRATE_WIKI_ORIGIN`, and `SUBSTRATE_AGENT_NAME`. The agent name is what
+you and your agents see in the Substrate agent pane; the approval page lets
+you edit it before approving, and it can be renamed there later. The active profile's secure plugin state is used when these are
 unset.
 
 The bundled CA files are unmodified public ISRG roots, loaded in addition to system trust:

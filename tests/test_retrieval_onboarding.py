@@ -219,3 +219,44 @@ def test_pre_llm_call_without_key_returns_connect_notice(monkeypatch, tmp_path):
     result = plugin.pre_llm_call("s", "hello", [])
     assert result and result["context"].startswith("<substrate-connect>")
     assert "https://memory.example/oauth/device?user_code=ABCD-EFGH" in result["context"]
+
+
+def test_agent_name_is_sent_with_the_grant_and_surfaced(monkeypatch, tmp_path):
+    home = tmp_path
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("SUBSTRATE_AGENT_NAME", "Henry's Hermes")
+    monkeypatch.setattr(onboarding, "active_home", lambda: home.resolve())
+    seen = {}
+
+    def fake_request_json(origin, path, *, form=None, **kwargs):
+        if path == "/oauth/device_authorization":
+            seen["form"] = form
+            return (200, {
+                "device_code": "device-secret",
+                "user_code": "ABCD-EFGH",
+                "verification_uri_complete": "https://memory.example/oauth/device?user_code=ABCD-EFGH",
+                "expires_in": 300,
+                "interval": 1,
+                "agent_name": "Henry's Hermes",
+            })
+        raise AssertionError("unexpected request")
+
+    monkeypatch.setattr(onboarding, "request_json", fake_request_json)
+    manager = onboarding.OnboardingManager(home.resolve(), "https://memory.example")
+    status = manager.ensure(force=True)
+    assert seen["form"]["agent_name"] == "Henry's Hermes"
+    assert status["status"] == "authorization_pending"
+    assert status["agent_name"] == "Henry's Hermes"
+    state = json.loads((home / "substrate" / "onboarding.json").read_text())
+    assert state["agent_name"] == "Henry's Hermes"
+    # device codes stay private; names are not credentials and may be in state
+    assert "device_code" not in state
+
+
+def test_agent_name_falls_back_to_hermes_profile(monkeypatch, tmp_path):
+    monkeypatch.delenv("SUBSTRATE_AGENT_NAME", raising=False)
+    monkeypatch.setenv("HERMES_PROFILE", "telegram-henry")
+    assert onboarding.resolve_agent_name() == "telegram-henry"
+    monkeypatch.delenv("HERMES_PROFILE", raising=False)
+    monkeypatch.delenv("SUBSTRATE_AGENT_NAME", raising=False)
+    assert onboarding.resolve_agent_name() == ""

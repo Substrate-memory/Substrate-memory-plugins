@@ -1,5 +1,5 @@
 name: substrate
-version: 0.2.0
+version: 0.3.0
 description: Substrate retrieval and completed-turn capture for Hermes 0.21.x
 provides_tools:
   - memory_search
@@ -8,7 +8,10 @@ provides_tools:
 provides_hooks:
   - pre_llm_call
   - post_llm_call
+  - on_session_reset
+  - on_session_finalize
 optional_env:
   - SUBSTRATE_API_URL
   - SUBSTRATE_API_KEY
   - SUBSTRATE_WIKI_ORIGIN
+  - SUBSTRATE_AGENT_NAME

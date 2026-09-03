@@ -208,6 +208,10 @@ def _onboarding_notice(status: dict[str, Any]) -> str:
     link = str(status.get("verification_uri_complete", ""))
     code = str(status.get("user_code", ""))
     expires = int(status.get("expires_in", 0))
+    name = str(status.get("agent_name", ""))
+    name_line = (
+        f"Agent name (editable on the approval page): {name}\n" if name else ""
+    )
     return (
         "<substrate-connect>\n"
         "Substrate memory needs one-time browser approval. Show this link to the "
@@ -217,6 +221,7 @@ def _onboarding_notice(status: dict[str, Any]) -> str:
         f"One-time code: {code} (valid for {expires} seconds). After approval the "
         "key is stored privately for this profile and memory works automatically. "
         "Never ask the user to paste a key into chat.\n"
+        f"{name_line}"
         "</substrate-connect>"
     )
 
@@ -443,6 +448,101 @@ class _CaptureWorker:
 
 _CAPTURE_WORKER = _CaptureWorker()
 
+# Sessions whose end has already been queued for materialization. Hermes fires
+# on_session_end per turn, so boundary hooks must deduplicate; the set is
+# bounded and process-local, and the server deduplicates by event id anyway.
+_SENT_SESSIONS: dict[str, int] = {}
+_SENT_SESSIONS_LOCK = threading.Lock()
+_MAX_SENT_SESSIONS = 4096
+
+
+def _session_envelope(
+    session_id: Any,
+    boundary: str,
+    *,
+    platform: Any = "",
+    chat_type: Any = "",
+    next_session_id: Any = "",
+    parent_session_id: Any = "",
+    high_water: int = 0,
+) -> dict[str, Any] | None:
+    """Build a validated capture_session envelope for a session boundary."""
+    sid = _bounded_text(session_id, contract.MAX_SESSION_ID_BYTES)
+    if not sid:
+        return None
+    event_id = str(uuid.uuid4())
+    envelope: dict[str, Any] = {
+        "schema_version": contract.SCHEMA_VERSION,
+        "contract_version": contract.CONTRACT_VERSION,
+        "event_id": event_id,
+        "kind": "capture_session",
+        "session_id": sid,
+        "offset": {"start": 0, "end": max(0, high_water)},
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {"id": "user", "role": "owner", "display": ""},
+        "created_at": _utc_now(),
+        "payload": {
+            "boundary": boundary,
+            "session_complete": True,
+            "message_high_water": max(0, high_water),
+            "platform": _bounded_text(platform, 32) or "cli",
+            "chat_type": _bounded_text(chat_type, 32) or "direct",
+        },
+    }
+    if next_session_id:
+        envelope["payload"]["next_session_id"] = _bounded_text(next_session_id, contract.MAX_SESSION_ID_BYTES)
+    if parent_session_id:
+        envelope["payload"]["parent_session_id"] = _bounded_text(parent_session_id, contract.MAX_SESSION_ID_BYTES)
+    try:
+        contract.validate_envelope(envelope, idempotency_key=event_id)
+    except contract.ContractError:
+        return None
+    return envelope
+
+
+def end_session(
+    session_id: Any = "",
+    *,
+    boundary: str = "end",
+    platform: Any = "",
+    chat_type: Any = "",
+    next_session_id: Any = "",
+    parent_session_id: Any = "",
+    high_water: int = 0,
+    **kwargs: Any,
+) -> None:
+    """Queue a live session-complete marker for server-side materialization.
+
+    Idempotent per session: repeated boundary callbacks for one session are
+    ignored. Every failure is swallowed; session capture never blocks the host.
+    """
+    try:
+        sid = _bounded_text(session_id, contract.MAX_SESSION_ID_BYTES)
+        if not sid or boundary not in contract.BOUNDARIES:
+            return
+        with _SENT_SESSIONS_LOCK:
+            if sid in _SENT_SESSIONS:
+                return
+            if len(_SENT_SESSIONS) >= _MAX_SENT_SESSIONS:
+                _SENT_SESSIONS.clear()
+            _SENT_SESSIONS[sid] = 1
+        envelope = _session_envelope(
+            sid,
+            boundary,
+            platform=platform or kwargs.get("platform", ""),
+            chat_type=chat_type or kwargs.get("chat_type", ""),
+            next_session_id=next_session_id or kwargs.get("new_session_id", "")
+            or kwargs.get("next_session_id", ""),
+            parent_session_id=parent_session_id or kwargs.get("old_session_id", "")
+            or kwargs.get("parent_session_id", ""),
+            high_water=high_water or 0,
+        )
+        if envelope is not None:
+            _CAPTURE_WORKER.enqueue(envelope)
+    except Exception:
+        pass
+
 
 def sync_turn(
     user_content: Any = "",
@@ -481,6 +581,26 @@ def post_llm_call(
         session_id=session_id,
         messages=conversation_history or [],
         **kwargs,
+    )
+
+
+def on_session_reset(**kwargs: Any) -> None:
+    """Hermes /new boundary: mark the previous session complete."""
+    end_session(
+        kwargs.get("old_session_id") or kwargs.get("session_id") or "",
+        boundary="reset",
+        platform=kwargs.get("platform", ""),
+        next_session_id=kwargs.get("new_session_id", ""),
+        parent_session_id=kwargs.get("old_session_id", ""),
+    )
+
+
+def on_session_finalize(**kwargs: Any) -> None:
+    """CLI shutdown or gateway session-expiry boundary."""
+    end_session(
+        kwargs.get("session_id") or "",
+        boundary="end",
+        platform=kwargs.get("platform", ""),
     )
 
 
@@ -562,6 +682,7 @@ def _onboarding_result(status: dict[str, Any]) -> str:
     link = str(status.get("verification_uri_complete", ""))
     code = str(status.get("user_code", ""))
     expires = int(status.get("expires_in", 0))
+    name = str(status.get("agent_name", ""))
     return json.dumps(
         {
             "status": "authorization_required",
@@ -572,10 +693,12 @@ def _onboarding_result(status: dict[str, Any]) -> str:
                 "stored privately in this profile and never needs to be pasted "
                 "into chat. After approving, call memory_search again; "
                 "authorization completes automatically."
+                + (f" This agent will be named '{name}' (editable on the approval page)." if name else "")
             ),
             "verification_uri_complete": link,
             "user_code": code,
             "expires_in": expires,
+            "agent_name": name,
         },
         sort_keys=True,
     )
@@ -739,6 +862,9 @@ def register(ctx: Any) -> None:
     # Current Hermes post_llm_call includes the finalized full conversation in
     # conversation_history, plus user_message and assistant_response.
     ctx.register_hook("post_llm_call", post_llm_call)
+    # Session boundaries feed live-session materialization on the server.
+    ctx.register_hook("on_session_reset", on_session_reset)
+    ctx.register_hook("on_session_finalize", on_session_finalize)
     ctx.register_tool(
         name="memory_search", toolset=TOOLSET, schema=MEMORY_SEARCH_SCHEMA, handler=memory_search
     )

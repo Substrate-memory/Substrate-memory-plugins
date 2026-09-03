@@ -125,7 +125,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "plugins/substrate/README.md",
       "reason": "Usage documentation for the independent Substrate retrieval plugin.",
-      "sha256": "dff165ab8024d2788d52e4653e57c425cf98a8f24d1c13a5b3b0bead38287c40"
+      "sha256": "547e6b106337dd2fed2148fc4273fd90360822652dad4941533d85bef951838d"
     },
     {
       "class": "standalone_plugin_implementation",
@@ -173,25 +173,25 @@
       "class": "standalone_plugin_implementation",
       "path": "plugins/substrate/onboarding.py",
       "reason": "Automatic RFC 8628 device onboarding for the Substrate retrieval plugin.",
-      "sha256": "19708eb1ce0cb4ddc5a64523cad351d0794ce4c8397079add2098c3905a66629"
+      "sha256": "5cb19fd1bcdac20ef61091329e20c47c381212bac07578c6da4d480583978a31"
     },
     {
       "class": "standalone_plugin_implementation",
       "path": "plugins/substrate/plugin.py",
       "reason": "Hermes hooks and tools for Substrate retrieval.",
-      "sha256": "b9004cde31173ad2037c7b21b5975b05b7360efed5ae4f07a78594ed037ff3c7"
+      "sha256": "7289109843f5325713e7a02e311078d4dd9ce1fc18d481124b343c50b952abdf"
     },
     {
       "class": "standalone_plugin_implementation",
       "path": "plugins/substrate/plugin.yaml",
       "reason": "Native Hermes manifest for Substrate retrieval.",
-      "sha256": "dcc3a7ce11e16f474deb1887c92bc628ade01d57ebbe2ad455aca8357e9099c9"
+      "sha256": "5c52cf65a93525d3569a0935ca56a6398ffd8f413af289b19bcfe5902a10a03b"
     },
     {
       "class": "standalone_plugin_implementation",
       "path": "plugins/substrate/setup.py",
       "reason": "Passwordless active-profile setup and authenticated preflight.",
-      "sha256": "caec7593ba38e6849ec65d4ba1e1951a35e07fdcc68dd5f32df335b75554f202"
+      "sha256": "488a0c51bf0ea534aa75c968416c40baec09f8dc8eef10fd9f112010b089ac4a"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -245,13 +245,19 @@
       "class": "standalone_repository_policy_or_test",
       "path": "tests/test_retrieval_onboarding.py",
       "reason": "Onboarding automation tests for the independent Substrate retrieval plugin.",
-      "sha256": "866b7637fcdb8120b22fe2c822b18e7b211d4dc447e702af47cb2bd89b343127"
+      "sha256": "87a4b15e34f809160b33d4c94362a94a82fa93bd46e2b6ba6aa68aea10ef07b0"
     },
     {
       "class": "standalone_repository_policy_or_test",
       "path": "tests/test_retrieval_plugin.py",
       "reason": "Behavior and transport tests for the independent Substrate retrieval plugin.",
-      "sha256": "768cbaefad2efcf49eaf24772410ddbf03373b54714113bc392e375626ea5b49"
+      "sha256": "206fa1b00515372ccd9827b1bd2ce46c1bb08bb3e53637104970c216e09d17ea"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
+      "path": "tests/test_retrieval_session_capture.py",
+      "reason": "Updated by PR #33: live session capture and agent display names.",
+      "sha256": "674b25023225ba72bb34aff83b971f5f70c1ce9c0739463fd8077e7077e0b70e"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -455,7 +461,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "677d119930eadc663cc8ef64587890add8a0c7db4ddd81692d50a061953d2829",
+      "destination_sha256": "5f53e191cab7045b83e38645ca81a24cf04f0610f84f155126b2d17e89f9cc6e",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"

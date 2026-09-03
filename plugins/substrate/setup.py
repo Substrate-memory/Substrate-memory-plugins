@@ -219,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Connect the active Hermes profile to Substrate")
     parser.add_argument("--hermes-home", type=Path)
     parser.add_argument("--origin")
+    parser.add_argument("--name", help="display name shown for this agent in Substrate")
     args = parser.parse_args(argv)
     homes = _profile_homes()
     active_home = (homes[0] if homes else Path.home() / ".hermes").resolve()
@@ -226,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
     if home != active_home:
         print(json.dumps({"status": "failed", "error": "active_profile_mismatch"}), flush=True)
         return 1
+    if args.name:
+        os.environ["SUBSTRATE_AGENT_NAME"] = str(args.name)[:64]
     origin = _origin(
         args.origin
         or os.environ.get("SUBSTRATE_API_URL")
