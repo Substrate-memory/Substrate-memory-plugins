@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 import socket
+import ssl
+import stat
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+_MAX_TOKEN_BYTES = 16_384
 
 
 class ClientError(RuntimeError):
@@ -19,13 +27,181 @@ class ClientError(RuntimeError):
         super().__init__(category)
 
 
+def _profile_homes() -> list[Path]:
+    """Return likely active Hermes homes without inspecting other profiles."""
+    values: list[Path] = []
+    configured = os.environ.get("HERMES_HOME", "").strip()
+    if configured:
+        values.append(Path(configured).expanduser())
+    location = Path(__file__).resolve()
+    # Installed layout: <HERMES_HOME>/plugins/substrate/client.py.
+    if location.parent.name == "substrate" and location.parent.parent.name == "plugins":
+        values.append(location.parents[2])
+    values.append(Path.home() / ".hermes")
+    # Never inspect a fallback profile when an active/configured profile is known.
+    selected = values[:1]
+    result: list[Path] = []
+    for value in selected:
+        try:
+            resolved = value.resolve()
+        except OSError:
+            continue
+        if resolved not in result:
+            result.append(resolved)
+    return result
+
+
+def _read_private_token(path: Path) -> str:
+    """Read only an owner-private regular token file; otherwise return empty."""
+    try:
+        info = path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(info.st_mode) or path.is_symlink() or info.st_size > _MAX_TOKEN_BYTES:
+            return ""
+        getuid = getattr(os, "getuid", None)
+        if callable(getuid) and (info.st_uid != getuid() or stat.S_IMODE(info.st_mode) & 0o077):
+            return ""
+        value = path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError, UnicodeError):
+        return ""
+    return value.strip() if 0 < len(value.strip()) <= _MAX_TOKEN_BYTES else ""
+
+
+def _secret_service_token(home: Path) -> str:
+    """Read the legacy token from Secret Service without placing it in arguments or logs."""
+    executable = shutil.which("secret-tool")
+    if not executable:
+        return ""
+    account = hashlib.sha256(os.fsencode(str(home.resolve()))).hexdigest()[:24] + ":profile"
+    try:
+        result = subprocess.run(
+            (
+                executable,
+                "lookup",
+                "service",
+                "co.trysubstrate.hermes",
+                "account",
+                account,
+                "slot",
+                "access-token",
+            ),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if result.returncode != 0 or len(result.stdout) > _MAX_TOKEN_BYTES:
+        return ""
+    try:
+        value = result.stdout.decode("utf-8").strip()
+    except UnicodeError:
+        return ""
+    return value if 0 < len(value) <= _MAX_TOKEN_BYTES else ""
+
+
+def _stored_api_key() -> str:
+    """Resolve this plugin's token, then a secure legacy-plugin token for migration."""
+    homes = _profile_homes()
+    for home in homes:
+        for relative in (
+            ("substrate", "credentials", "access-token"),
+            ("substrate_wiki", "credentials", "access-token"),
+        ):
+            value = _read_private_token(home.joinpath(*relative))
+            if value:
+                return value
+    for home in homes:
+        value = _secret_service_token(home)
+        if value:
+            return value
+    return ""
+
+
+def _stored_origin() -> str:
+    for home in _profile_homes():
+        path = home / "substrate" / "config.json"
+        try:
+            info = path.stat(follow_symlinks=False)
+            getuid = getattr(os, "getuid", None)
+            if (
+                path.is_symlink()
+                or not stat.S_ISREG(info.st_mode)
+                or info.st_size > 16_384
+                or (callable(getuid) and (info.st_uid != getuid() or stat.S_IMODE(info.st_mode) & 0o077))
+            ):
+                continue
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        origin = value.get("api_url") if isinstance(value, dict) else None
+        if isinstance(origin, str) and origin:
+            return origin
+    return ""
+
+
+_ROOT_FINGERPRINTS = {
+    "isrg-root-x1.pem": "96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6",
+    "isrg-root-x2.pem": "69729b8e15a86efc177a57afb7171dfc64add28c2fca8cf1507e34453ccb1470",
+}
+
+
+def tls_context() -> ssl.SSLContext:
+    """Use system trust plus verified public ISRG roots for Let's Encrypt chains."""
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    root_dir = Path(__file__).resolve().parent / "ca"
+    for name, expected in _ROOT_FINGERPRINTS.items():
+        try:
+            pem = (root_dir / name).read_text(encoding="ascii")
+            der = ssl.PEM_cert_to_DER_cert(pem)
+            if hashlib.sha256(der).hexdigest() != expected:
+                raise ClientError("invalid_config")
+            context.load_verify_locations(cadata=pem)
+        except (FileNotFoundError, OSError, UnicodeError, ValueError, ssl.SSLError) as exc:
+            raise ClientError("invalid_config") from exc
+    return context
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str,
+                         headers: Any, newurl: str) -> None:
+        return None
+
+
+def _open_request(request: urllib.request.Request, *, timeout: float) -> Any:
+    parsed = urllib.parse.urlsplit(request.full_url)
+    handlers: list[Any] = [_NoRedirect()]
+    if parsed.scheme == "https":
+        handlers.append(urllib.request.HTTPSHandler(context=tls_context()))
+    return urllib.request.build_opener(*handlers).open(request, timeout=timeout)
+
+
 class SubstrateClient:
     """JSON-over-HTTP client with no work performed at construction time."""
 
     def __init__(self, api_url: str, api_key: str) -> None:
         api_url = (api_url or "").rstrip("/")
         parsed = urllib.parse.urlsplit(api_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        development = os.environ.get("SUBSTRATE_DEVELOPMENT_MODE") == "1"
+        allowed_hosts = {"app.trysubstrate.co", "vm-substrate-ar-01.taile961d2.ts.net"}
+        try:
+            valid_production = (
+                parsed.scheme == "https"
+                and parsed.hostname in allowed_hosts
+                and parsed.port in {None, 443, 8443, 10000}
+            )
+        except ValueError as exc:
+            raise ClientError("invalid_config") from exc
+        if (
+            not parsed.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or (not valid_production and not development)
+        ):
             raise ClientError("invalid_config")
         self.api_url = api_url
         self.api_key = api_key or ""
@@ -33,8 +209,11 @@ class SubstrateClient:
     @classmethod
     def from_env(cls) -> "SubstrateClient":
         return cls(
-            os.environ.get("SUBSTRATE_API_URL", "https://app.trysubstrate.co"),
-            os.environ.get("SUBSTRATE_API_KEY", ""),
+            os.environ.get("SUBSTRATE_API_URL")
+            or _stored_origin()
+            or os.environ.get("SUBSTRATE_WIKI_ORIGIN")
+            or "https://vm-substrate-ar-01.taile961d2.ts.net:10000",
+            os.environ.get("SUBSTRATE_API_KEY") or _stored_api_key(),
         )
 
     def post_json(
@@ -62,7 +241,7 @@ class SubstrateClient:
             f"{self.api_url}{path}", data=data, headers=headers, method="POST"
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with _open_request(request, timeout=timeout) as response:
                 status = getattr(response, "status", 200)
                 if isinstance(status, int) and not 200 <= status < 300:
                     raise ClientError("transport_error")

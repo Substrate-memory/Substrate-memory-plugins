@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from . import contract
+from . import onboarding
 from .client import ClientError, SubstrateClient
 
 STATIC_MEMORY_PROMPT = (
@@ -193,8 +194,31 @@ def pre_llm_call(
             return None
         block = checked["block"]
         return {"context": block} if block else None
+    except ClientError as exc:
+        if exc.category == "invalid_config":
+            status = onboarding.ensure_started()
+            if status and status.get("status") == "authorization_pending":
+                return {"context": _onboarding_notice(status)}
+        return None
     except Exception:
         return None
+
+
+def _onboarding_notice(status: dict[str, Any]) -> str:
+    link = str(status.get("verification_uri_complete", ""))
+    code = str(status.get("user_code", ""))
+    expires = int(status.get("expires_in", 0))
+    return (
+        "<substrate-connect>\n"
+        "Substrate memory needs one-time browser approval. Show this link to the "
+        "user and ask them to open it, sign in by email, and approve the "
+        "connection:\n"
+        f"{link}\n"
+        f"One-time code: {code} (valid for {expires} seconds). After approval the "
+        "key is stored privately for this profile and memory works automatically. "
+        "Never ask the user to paste a key into chat.\n"
+        "</substrate-connect>"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -517,6 +541,10 @@ def _fit_result(value: dict[str, Any]) -> str:
 
 def _call_tool(route: str, path: str, request: dict[str, Any], shape: Any) -> str:
     try:
+        if not SubstrateClient.from_env().api_key:
+            status = onboarding.ensure_started()
+            if status and status.get("status") == "authorization_pending":
+                return _onboarding_result(status)
         response = SubstrateClient.from_env().post_json(path, request, timeout=3.0)
         shaped = contract.shape_response(route, response)
         return _fit_result(shape(shaped))
@@ -528,6 +556,29 @@ def _call_tool(route: str, path: str, request: dict[str, Any], shape: Any) -> st
         return _error(exc.category)
     except Exception:
         return _error("transport_error")
+
+
+def _onboarding_result(status: dict[str, Any]) -> str:
+    link = str(status.get("verification_uri_complete", ""))
+    code = str(status.get("user_code", ""))
+    expires = int(status.get("expires_in", 0))
+    return json.dumps(
+        {
+            "status": "authorization_required",
+            "message": (
+                "Substrate memory is not connected yet. Open the link below in a "
+                "browser, sign in by email, and approve the connection to grant "
+                "this Hermes profile a tenant-scoped memory key. The key is "
+                "stored privately in this profile and never needs to be pasted "
+                "into chat. After approving, call memory_search again; "
+                "authorization completes automatically."
+            ),
+            "verification_uri_complete": link,
+            "user_code": code,
+            "expires_in": expires,
+        },
+        sort_keys=True,
+    )
 
 
 def _shape_search(value: dict[str, Any]) -> dict[str, Any]:

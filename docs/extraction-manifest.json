@@ -77,7 +77,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "3638d8fc00fb6328b2235dd77c00d9ba937e9b4a13cadac17f15f514f5bb9561"
+      "sha256": "b92ac5001e533722bd27713a39be232f25d282324179feb3e9315f1524e9c966"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -125,7 +125,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "plugins/substrate/README.md",
       "reason": "Usage documentation for the independent Substrate retrieval plugin.",
-      "sha256": "35b846e7abdb4faad9382c015f6668d4c4bcbef1e5bb49b27b51368634cfd07c"
+      "sha256": "dff165ab8024d2788d52e4653e57c425cf98a8f24d1c13a5b3b0bead38287c40"
     },
     {
       "class": "standalone_plugin_implementation",
@@ -134,10 +134,28 @@
       "sha256": "df55769a899af189af4fbc78e72a5f17cc62cae27db51441b2f4bd4311bbc543"
     },
     {
+      "class": "standalone_repository_policy_or_test",
+      "path": "plugins/substrate/after-install.md",
+      "reason": "Health-gated active-profile setup and cutover instructions.",
+      "sha256": "00970176f8081afeb43b8dba40fb68683bfe040d30424c6b6edae236d30496eb"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/ca/isrg-root-x1.pem",
+      "reason": "Unmodified public ISRG Root X1 trust anchor.",
+      "sha256": "22b557a27055b33606b6559f37703928d3e4ad79f110b407d04986e1843543d1"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/ca/isrg-root-x2.pem",
+      "reason": "Unmodified public ISRG Root X2 trust anchor.",
+      "sha256": "a13d881e11fe6df181b53841f9fa738a2d7ca9ae7be3d53c866f722b4242b013"
+    },
+    {
       "class": "standalone_plugin_implementation",
       "path": "plugins/substrate/client.py",
-      "reason": "Standard-library Substrate retrieval API client.",
-      "sha256": "a1b0718e6e9435d0b5530bd0baa8bdb0944c47cbdd4b74c5058267ac8eed33f8"
+      "reason": "Standard-library Substrate retrieval API client and active-profile credential resolver.",
+      "sha256": "61ece2e3c21517d34341a1df13fb6782e844100c25c1020c679b62e28c22885b"
     },
     {
       "class": "standalone_plugin_implementation",
@@ -153,15 +171,27 @@
     },
     {
       "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/onboarding.py",
+      "reason": "Automatic RFC 8628 device onboarding for the Substrate retrieval plugin.",
+      "sha256": "19708eb1ce0cb4ddc5a64523cad351d0794ce4c8397079add2098c3905a66629"
+    },
+    {
+      "class": "standalone_plugin_implementation",
       "path": "plugins/substrate/plugin.py",
       "reason": "Hermes hooks and tools for Substrate retrieval.",
-      "sha256": "e7774caa2e6d6ef4f867fbd37e5fceb74750b9e30e2e0b0f4dbbac1042a78dc7"
+      "sha256": "b9004cde31173ad2037c7b21b5975b05b7360efed5ae4f07a78594ed037ff3c7"
     },
     {
       "class": "standalone_plugin_implementation",
       "path": "plugins/substrate/plugin.yaml",
       "reason": "Native Hermes manifest for Substrate retrieval.",
-      "sha256": "86e28bce3ab3f2c1d25f09be111776c21f88c2e9f03037cfd6b3cd1f2ad9b0f4"
+      "sha256": "dcc3a7ce11e16f474deb1887c92bc628ade01d57ebbe2ad455aca8357e9099c9"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/setup.py",
+      "reason": "Passwordless active-profile setup and authenticated preflight.",
+      "sha256": "caec7593ba38e6849ec65d4ba1e1951a35e07fdcc68dd5f32df335b75554f202"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -213,9 +243,21 @@
     },
     {
       "class": "standalone_repository_policy_or_test",
+      "path": "tests/test_retrieval_onboarding.py",
+      "reason": "Onboarding automation tests for the independent Substrate retrieval plugin.",
+      "sha256": "866b7637fcdb8120b22fe2c822b18e7b211d4dc447e702af47cb2bd89b343127"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
       "path": "tests/test_retrieval_plugin.py",
-      "reason": "Behavior tests for the independent Substrate retrieval plugin.",
-      "sha256": "ce2070dbf29cdb21a69f2af6327976a16578f51ecb7b8987c48d1ee1d8a69031"
+      "reason": "Behavior and transport tests for the independent Substrate retrieval plugin.",
+      "sha256": "768cbaefad2efcf49eaf24772410ddbf03373b54714113bc392e375626ea5b49"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
+      "path": "tests/test_retrieval_setup.py",
+      "reason": "Credential, TLS, and setup regression tests.",
+      "sha256": "109b1721f12223493aec3528703c7c65db1b58355efa6c06f04821ddb9c0fe33"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -413,7 +455,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "a45b9d12b6d92140c1931dc8d8193194ed8b34930f19170cce0e66fbf87d2f69",
+      "destination_sha256": "b67230ca55e11a4e122341d8c508047f8b7dc9f5a1b0e1b51e24b163daa27989",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
