@@ -106,7 +106,7 @@ jobs:
           set -euo pipefail
           test -n "${{ needs.verify.outputs.artifact_digest }}"
           test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = \
-            "SHA256SUMS install_hermes_plugin.py substrate_wiki.zip "
+            "SHA256SUMS substrate.zip "
           (cd dist && sha256sum -c SHA256SUMS)
       - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
         with:
@@ -132,10 +132,9 @@ jobs:
             exit 1
           fi
           gh release create "$tag" \
-            dist/substrate_wiki.zip \
-            dist/install_hermes_plugin.py \
+            dist/substrate.zip \
             dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "substrate_wiki $tag" \
-            --notes "Patch release for explicit post-approval history consent, reliable device-poll completion, and the Substrate v5 history-only handshake. Targets Hermes 0.20.x. See COMPATIBILITY.md and SECURITY.md."
+            --title "substrate $tag" \
+            --notes "Substrate retrieval plugin for Hermes 0.21.x: one-prompt install, self-contained RFC 8628 device onboarding, memory_search/memory_expand/memory_evidence. See README.md and COMPATIBILITY.md."
