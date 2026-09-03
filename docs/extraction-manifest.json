@@ -77,7 +77,7 @@
       "class": "standalone_repository_policy_or_test",
       "path": "README.md",
       "reason": "Required only by the independent public repository.",
-      "sha256": "a5285e1800831e754b648f49f1afd8b37858a2353600db497991579de7e4f323"
+      "sha256": "3638d8fc00fb6328b2235dd77c00d9ba937e9b4a13cadac17f15f514f5bb9561"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -114,6 +114,54 @@
       "path": "docs/threat-model.md",
       "reason": "Required only by the independent public repository.",
       "sha256": "a0f2ffd82cd29fe3c5f551134a019d815c7df6b1198bfc95dfe456d6005c46c4"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
+      "path": "plugins/substrate/CONTRACT.md",
+      "reason": "Wire contract for the independent Substrate retrieval plugin.",
+      "sha256": "e3137a5852c16b484c55f61da8c6048d8bc29f860e3c5fd04bddc77b97cb539c"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
+      "path": "plugins/substrate/README.md",
+      "reason": "Usage documentation for the independent Substrate retrieval plugin.",
+      "sha256": "35b846e7abdb4faad9382c015f6668d4c4bcbef1e5bb49b27b51368634cfd07c"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/__init__.py",
+      "reason": "Hermes directory-plugin entry point for Substrate retrieval.",
+      "sha256": "df55769a899af189af4fbc78e72a5f17cc62cae27db51441b2f4bd4311bbc543"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/client.py",
+      "reason": "Standard-library Substrate retrieval API client.",
+      "sha256": "a1b0718e6e9435d0b5530bd0baa8bdb0944c47cbdd4b74c5058267ac8eed33f8"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/contract.py",
+      "reason": "Validated Substrate retrieval wire contract.",
+      "sha256": "f8dabf7d1e8f0c8ce5b6f1dc3529ef5d751b6b98dec1f59705392ff099e24346"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
+      "path": "plugins/substrate/contract/envelope-fixtures.json",
+      "reason": "Shared retrieval wire-contract fixtures.",
+      "sha256": "627615398b726d04f32b5bab58b480b00ba85ca80c65d66864d7e8ea1a30ab85"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/plugin.py",
+      "reason": "Hermes hooks and tools for Substrate retrieval.",
+      "sha256": "e7774caa2e6d6ef4f867fbd37e5fceb74750b9e30e2e0b0f4dbbac1042a78dc7"
+    },
+    {
+      "class": "standalone_plugin_implementation",
+      "path": "plugins/substrate/plugin.yaml",
+      "reason": "Native Hermes manifest for Substrate retrieval.",
+      "sha256": "86e28bce3ab3f2c1d25f09be111776c21f88c2e9f03037cfd6b3cd1f2ad9b0f4"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -156,6 +204,18 @@
       "path": "tests/test_redaction.py",
       "reason": "Required only by the independent public repository.",
       "sha256": "28c3cfb895bd3e4b556aa4580da7612609d8bc3df42f4132000a9af000008d5d"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
+      "path": "tests/test_retrieval_contract.py",
+      "reason": "Contract tests for the independent Substrate retrieval plugin.",
+      "sha256": "554679f0272b59d2380d54d398ffb4f2cf23c4f1b5bf2052085f3c77e2d7e225"
+    },
+    {
+      "class": "standalone_repository_policy_or_test",
+      "path": "tests/test_retrieval_plugin.py",
+      "reason": "Behavior tests for the independent Substrate retrieval plugin.",
+      "sha256": "ce2070dbf29cdb21a69f2af6327976a16578f51ecb7b8987c48d1ee1d8a69031"
     },
     {
       "class": "standalone_repository_policy_or_test",
@@ -353,7 +413,7 @@
     {
       "class": "build-and-install",
       "destination": "scripts/verify_public_plugin_candidate.py",
-      "destination_sha256": "292700ed3357372393b44371297e5368600930995479b7ff983701bed16c56a4",
+      "destination_sha256": "a45b9d12b6d92140c1931dc8d8193194ed8b34930f19170cce0e66fbf87d2f69",
       "source": "scripts/verify_public_plugin_candidate.py",
       "source_sha256": "4130935d530075fce1758e2e89bd5d973a722e2293b5b1058cfe0d17f326172b",
       "transformation": "modified_for_standalone"
