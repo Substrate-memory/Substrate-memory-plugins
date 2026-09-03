@@ -58,6 +58,7 @@ jobs:
       - run: uv run --frozen --extra dev ruff check .
       - run: uv run --frozen --extra dev python -m compileall -q plugins scripts
       - run: uv run --frozen --extra dev python -m pytest -q
+      - run: uv run --frozen --extra dev python scripts/build_release.py
       - run: uv run --frozen --extra dev python scripts/build_release.py --check
 
   dependency-review:
