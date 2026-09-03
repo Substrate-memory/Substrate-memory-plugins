@@ -20,6 +20,8 @@ jobs:
     outputs:
       release_version: ${{ steps.metadata.outputs.release_version }}
       artifact_digest: ${{ steps.release_artifact.outputs.artifact-digest }}
+    env:
+      PYTHONPATH: src
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -42,7 +44,7 @@ jobs:
       - name: Scan the pristine candidate before installing dependencies
         run: |
           set -euo pipefail
-          python3 scripts/check_public_hygiene.py --root .
+          python scripts/verify_public_plugin_candidate.py --root . --layout destination
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
@@ -57,24 +59,31 @@ jobs:
         id: metadata
         run: |
           set -euo pipefail
-          version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
+          version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("src/substrate_wiki/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
           test -n "$version"
-          test "$version" = "0.3.0"
           uv run --no-sync ruff check .
-          uv run --no-sync python -m compileall -q plugins scripts
+          uv run --no-sync python -m compileall -q src scripts
           uv run --no-sync python -m pytest -q
+          uv run --no-sync python scripts/verify_migration_baseline.py
+          uv run --no-sync python scripts/benchmark_migration.py \
+            --profile ci \
+            --output "$RUNNER_TEMP/hermes-migration-baseline.json"
+          uv run --no-sync python scripts/verify_fresh_migration_run.py \
+            --receipt "$RUNNER_TEMP/hermes-migration-baseline.json"
           printf 'release_version=%s\n' "$version" >> "$GITHUB_OUTPUT"
       - name: Build and verify exact release bytes twice
         env:
           HERMES_PLUGIN_SOURCE_COMMIT: ${{ inputs.candidate_sha }}
         run: |
           set -euo pipefail
-          uv run --no-sync python scripts/build_release.py
-          cp dist/substrate.zip "$RUNNER_TEMP/first-substrate.zip"
-          rm -rf dist
-          uv run --no-sync python scripts/build_release.py
-          cmp "$RUNNER_TEMP/first-substrate.zip" dist/substrate.zip
-          uv run --no-sync python scripts/build_release.py --check
+          uv run --no-sync python scripts/build_plugin.py
+          cp dist/substrate_wiki.zip "$RUNNER_TEMP/first-substrate_wiki.zip"
+          rm -rf dist release-assets
+          uv run --no-sync python scripts/build_plugin.py
+          cmp "$RUNNER_TEMP/first-substrate_wiki.zip" dist/substrate_wiki.zip
+          uv run --no-sync python scripts/build_plugin.py --check
+          cp scripts/install_hermes_plugin.py dist/install_hermes_plugin.py
+          (cd dist && sha256sum install_hermes_plugin.py substrate_wiki.zip > SHA256SUMS)
       - name: Upload exact verified release bytes
         id: release_artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -106,9 +115,9 @@ jobs:
           set -euo pipefail
           test -n "${{ needs.verify.outputs.artifact_digest }}"
           test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = \
-            "SHA256SUMS substrate.zip "
+            "SHA256SUMS install_hermes_plugin.py substrate_wiki.zip "
           (cd dist && sha256sum -c SHA256SUMS)
-      - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b64c4f6772 # pinned
+      - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
         with:
           subject-path: "dist/*"
       - name: Create immutable tag and GitHub release
@@ -132,9 +141,10 @@ jobs:
             exit 1
           fi
           gh release create "$tag" \
-            dist/substrate.zip \
+            dist/substrate_wiki.zip \
+            dist/install_hermes_plugin.py \
             dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "substrate $tag" \
-            --notes "Substrate retrieval plugin for Hermes 0.21.x: one-prompt install, self-contained RFC 8628 device onboarding, memory_search/memory_expand/memory_evidence. See README.md and COMPATIBILITY.md."
+            --title "substrate_wiki $tag" \
+            --notes "Patch release for explicit post-approval history consent, reliable device-poll completion, and the Substrate v5 history-only handshake. Targets Hermes 0.20.x. See COMPATIBILITY.md and SECURITY.md."
