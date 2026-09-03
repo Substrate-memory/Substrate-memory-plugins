@@ -108,7 +108,7 @@ jobs:
           test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = \
             "SHA256SUMS substrate.zip "
           (cd dist && sha256sum -c SHA256SUMS)
-      - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b64c4f6772 # pinned
+      - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
         with:
           subject-path: "dist/*"
       - name: Create immutable tag and GitHub release
