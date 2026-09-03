@@ -64,8 +64,10 @@ editor, and evidence.
 
 ## Legacy compatibility
 
-`src/substrate_wiki` and its release tooling are retained for existing installations and
-migration tests. It is not the current install target. Do not run
+Hermes 0.21.x is certified for the current `substrate` plugin. The legacy
+`src/substrate_wiki` provider and its release tooling are retained for existing Hermes 0.20.x
+installations and migration tests. It is not the current install target, and its
+compatibility rows in `COMPATIBILITY.md` apply only to 0.20.x. Do not run
 `scripts/install_hermes_plugin.py` for the prompt above. Legacy packaging state remains
 unchanged: `v2.0.5` is not published yet, its historical URL would contain
 `releases/download/v2.0.5`, and its unpublished checksum marker remains

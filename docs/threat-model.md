@@ -17,7 +17,8 @@
 ## Trust assumptions
 
 - Hosted account authentication and tenant isolation are operated at `app.trysubstrate.co`.
-- Hermes 0.20.x invokes current user-plugin discovery and provider lifecycle hooks.
+- Hermes 0.21.x invokes the current `substrate` plugin's discovery path, `pre_llm_call`/`post_llm_call` hooks, and native tool registration (see [`plugins/substrate`](../plugins/substrate)).
+- Hermes 0.20.x invokes the legacy `substrate_wiki` user-plugin discovery and provider lifecycle hooks.
 - The operating-system user and `$HERMES_HOME` permissions protect local state.
 - Published checksums and release custody are verified before installation.
 

@@ -2,7 +2,14 @@
 
 ## Supported versions
 
-The standalone `v2.0.0`, `v2.0.1`, `v2.0.2`, `v2.0.3`, `v2.0.4`, and `v2.0.5` releases target Hermes 0.20.x and the hosted service at `https://app.trysubstrate.co`.
+The current supported install target is the `substrate` plugin (0.2.x) in
+[`plugins/substrate`](plugins/substrate), certified for Hermes 0.21.x. It is the plugin an
+agent should install from this repository; it self-onboards and never requires a pasted API
+key.
+
+The standalone `v2.0.0` through `v2.0.5` releases listed below are the **legacy**
+`substrate_wiki` provider for Hermes 0.20.x and the hosted service at
+`https://app.trysubstrate.co`. They remain documented for existing installations only.
 Candidate CI artifacts are not supported releases.
 
 ## Report a vulnerability
