@@ -47,6 +47,7 @@ except ImportError:  # standalone script layout
 
 CLIENT_ID = "substrate-hermes"
 SCOPES = "capture retrieve"
+MAX_AGENT_NAME_BYTES = 64
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 ENV_KEY = "SUBSTRATE_API_KEY"
 DEFAULT_ORIGIN = "https://vm-substrate-ar-01.taile961d2.ts.net:10000"
@@ -85,6 +86,13 @@ def active_home() -> Path:
     """The one active profile home; no other profile is ever inspected."""
     homes = _profile_homes()
     return (homes[0] if homes else Path.home() / ".hermes").resolve()
+
+
+def resolve_agent_name() -> str:
+    """A human-readable name for this agent, shown in the approval page."""
+    candidate = os.environ.get("SUBSTRATE_AGENT_NAME") or os.environ.get("HERMES_PROFILE") or ""
+    candidate = _clip(" ".join(str(candidate).split()), MAX_AGENT_NAME_BYTES)
+    return candidate
 
 
 def resolve_origin() -> str:
@@ -327,6 +335,7 @@ class OnboardingManager:
                 ),
                 "user_code": _clip(str(state.get("user_code", "")), 16),
                 "expires_in": max(0, int(float(state.get("expires_at", now)) - now)),
+                "agent_name": _clip(str(state.get("agent_name", "")), MAX_AGENT_NAME_BYTES),
             }
         if phase in {"failed", "declined", "invalid"}:
             return {
@@ -362,7 +371,11 @@ class OnboardingManager:
             status, value = request_json(
                 self.origin,
                 "/oauth/device_authorization",
-                form={"client_id": CLIENT_ID, "scope": SCOPES},
+                form={
+                    "client_id": CLIENT_ID,
+                    "scope": SCOPES,
+                    "agent_name": resolve_agent_name(),
+                },
                 timeout=BEGIN_TIMEOUT_SECONDS,
             )
         except OnboardingError as exc:
@@ -385,6 +398,7 @@ class OnboardingManager:
         state = {
             "phase": "pending",
             "user_code": user_code,
+            "agent_name": _clip(str(value.get("agent_name") or resolve_agent_name()), MAX_AGENT_NAME_BYTES),
             "verification_uri_complete": complete,
             "interval": max(1, min(int(value.get("interval", 5)), 60)),
             "expires_at": now + max(1, min(int(value.get("expires_in", 900)), 3600)),

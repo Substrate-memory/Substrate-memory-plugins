@@ -299,7 +299,7 @@ def test_register_matches_native_hermes_context_and_has_no_side_effect(monkeypat
     ctx = Context()
     thread_before = plugin._CAPTURE_WORKER._thread
     plugin.register(ctx)
-    assert set(ctx.hooks) == {"pre_llm_call", "post_llm_call"}
+    assert set(ctx.hooks) == {"pre_llm_call", "post_llm_call", "on_session_reset", "on_session_finalize"}
     assert set(ctx.tools) == {"memory_search", "memory_expand", "memory_evidence"}
     assert ctx.prompts == {
         "substrate.memory": (plugin.STATIC_MEMORY_PROMPT, "after_memory", 2000)
