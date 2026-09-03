@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 import sys
 import threading
 from pathlib import Path
@@ -13,8 +14,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins"))
 
+from substrate import client
 from substrate import contract
 from substrate import plugin
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_origins(monkeypatch):
+    monkeypatch.setenv("SUBSTRATE_DEVELOPMENT_MODE", "1")
 
 
 class Response:
@@ -58,7 +65,7 @@ def test_pre_llm_call_posts_exact_contract_request(monkeypatch):
 
     monkeypatch.setenv("SUBSTRATE_API_URL", "https://memory.example/")
     monkeypatch.setenv("SUBSTRATE_API_KEY", "secret")
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(client, "_open_request", urlopen)
     history = [
         {"role": "user", "content": "old question"},
         {"role": "assistant", "content": "old answer"},
@@ -192,6 +199,7 @@ def test_sync_turn_is_nonblocking_and_uses_one_daemon_worker(monkeypatch):
     plugin.sync_turn("again", "done", session_id="s", messages=[], turn_id="t2")
     assert worker._thread is first_thread
     release.set()
+    worker._queue.join()
     assert captured[0][0] == "/api/v1/ledger/events"
     assert captured[0][2]["idempotency_key"] == captured[0][1]["event_id"]
 
@@ -297,3 +305,93 @@ def test_register_matches_native_hermes_context_and_has_no_side_effect(monkeypat
         "substrate.memory": (plugin.STATIC_MEMORY_PROMPT, "after_memory", 2000)
     }
     assert plugin._CAPTURE_WORKER._thread is thread_before
+
+
+def test_client_migrates_only_owner_private_active_profile_credentials(monkeypatch, tmp_path):
+    home = tmp_path / "profile"
+    legacy = home / "substrate_wiki" / "credentials" / "access-token"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("legacy-secret", encoding="utf-8")
+    legacy.chmod(0o600)
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("SUBSTRATE_WIKI_ORIGIN", "https://tailnet.example:10000")
+    monkeypatch.delenv("SUBSTRATE_API_URL", raising=False)
+    monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
+
+    resolved = client.SubstrateClient.from_env()
+    assert resolved.api_url == "https://tailnet.example:10000"
+    assert resolved.api_key == "legacy-secret"
+
+    legacy.chmod(0o644)
+    assert client.SubstrateClient.from_env().api_key == ""
+
+
+def test_client_prefers_new_profile_state_and_explicit_environment(monkeypatch, tmp_path):
+    home = tmp_path / "profile"
+    credential = home / "substrate" / "credentials" / "access-token"
+    credential.parent.mkdir(parents=True)
+    credential.write_text("stored-secret", encoding="utf-8")
+    credential.chmod(0o600)
+    config = home / "substrate" / "config.json"
+    config.write_text('{"api_url":"https://stored.example"}', encoding="utf-8")
+    config.chmod(0o600)
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.delenv("SUBSTRATE_API_URL", raising=False)
+    monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
+    monkeypatch.delenv("SUBSTRATE_WIKI_ORIGIN", raising=False)
+
+    resolved = client.SubstrateClient.from_env()
+    assert (resolved.api_url, resolved.api_key) == ("https://stored.example", "stored-secret")
+
+    monkeypatch.setenv("SUBSTRATE_API_URL", "https://explicit.example/")
+    monkeypatch.setenv("SUBSTRATE_API_KEY", "explicit-secret")
+    explicit = client.SubstrateClient.from_env()
+    assert (explicit.api_url, explicit.api_key) == ("https://explicit.example", "explicit-secret")
+
+
+def test_tls_context_adds_bundled_public_roots_without_disabling_verification():
+    context = client.tls_context()
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    assert context.minimum_version == ssl.TLSVersion.TLSv1_2
+    root_dir = Path(client.__file__).resolve().parent / "ca"
+    for name, expected in client._ROOT_FINGERPRINTS.items():
+        pem = (root_dir / name).read_text(encoding="ascii")
+        der = ssl.PEM_cert_to_DER_cert(pem)
+        assert client.hashlib.sha256(der).hexdigest() == expected
+
+
+def test_client_migrates_legacy_secret_service_credential(monkeypatch, tmp_path):
+    class Result:
+        returncode = 0
+        stdout = b"vault-secret\n"
+
+    seen = {}
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
+    monkeypatch.setattr(client.shutil, "which", lambda name: "/usr/bin/secret-tool")
+
+    def run(arguments, **options):
+        seen["arguments"] = arguments
+        seen["options"] = options
+        return Result()
+
+    monkeypatch.setattr(client.subprocess, "run", run)
+    assert client.SubstrateClient.from_env().api_key == "vault-secret"
+    assert "vault-secret" not in repr(seen)
+    assert seen["arguments"][-1] == "access-token"
+    assert seen["options"]["stdin"] is client.subprocess.DEVNULL
+
+
+def test_client_rejects_unapproved_origins_and_redirects(monkeypatch):
+    monkeypatch.delenv("SUBSTRATE_DEVELOPMENT_MODE", raising=False)
+    for origin in (
+        "http://app.trysubstrate.co",
+        "https://attacker.example",
+        "https://app.trysubstrate.co/path",
+        "https://user:pass@app.trysubstrate.co",
+    ):
+        with pytest.raises(client.ClientError):
+            client.SubstrateClient(origin, "token")
+    assert client._NoRedirect().redirect_request(None, None, 302, "", None, "https://attacker.example") is None

@@ -78,12 +78,19 @@ PRODUCTION_PATTERNS = (
 SYNTHETIC_FILE_SHA256_ALLOWLIST: dict[str, frozenset[str]] = {
     "README.md": frozenset(
         {
-            "8510e5bbf41a3e79a6d5fee1f7816db734307fe7e2a7786b6a61c1ba280520a5",
-            "8793ef3bbab749be6e1089034ba627d24c8b733ffd4311951b590dae01d2ca02",
-            "c8eb7c5157ac7027dbf6ae86235e63dea6a2dd1faab46f0cbcbd536fbdd21ecf",
+            "0d74ffbf410fe559478ee6a67e105f275d72d0477c71e86c81531798bc07e599",
             "1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b",
-            "ac62cbf3799a35bbb239a0b951411491aab8ee0f2f2c33e66b8a3380a8c20e88",
+            "20ac49480369c8531e001466a6537a7dae310bbba7e6079bc217a6181e7d69d7",
             "3638d8fc00fb6328b2235dd77c00d9ba937e9b4a13cadac17f15f514f5bb9561",
+            "6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a",
+            "8510e5bbf41a3e79a6d5fee1f7816db734307fe7e2a7786b6a61c1ba280520a5",
+            "87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9",
+            "8793ef3bbab749be6e1089034ba627d24c8b733ffd4311951b590dae01d2ca02",
+            "a5285e1800831e754b648f49f1afd8b37858a2353600db497991579de7e4f323",
+            "ac62cbf3799a35bbb239a0b951411491aab8ee0f2f2c33e66b8a3380a8c20e88",
+            "b92ac5001e533722bd27713a39be232f25d282324179feb3e9315f1524e9c966",
+            "c8eb7c5157ac7027dbf6ae86235e63dea6a2dd1faab46f0cbcbd536fbdd21ecf",
+            "cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b",
         }
     ),
     "scripts/benchmark_migration.py": frozenset(
@@ -241,14 +248,12 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {'COMPATIBILITY.md': frozenset({'1f18a49d55
                                 '9e2f30159b85caf7682e20d5c8abcbb1881eb2a624565ca565b93353d4bb624f',
                                 'e14a7a057ee64449041a2073590641a44cfe648cff696d4d20c58eed9e4509a3'}),
  'README.md': frozenset({'0d74ffbf410fe559478ee6a67e105f275d72d0477c71e86c81531798bc07e599',
-                         '1cce63f45c357df4710e24a8351835c4382a47751d57edf4207e234eb350807b',
                          '20ac49480369c8531e001466a6537a7dae310bbba7e6079bc217a6181e7d69d7',
                          '6361beb1a5153f5dbcfca70740c1905096f3bc32ddfd4cc22157c6576c61b83a',
                          '87734abc087a4267e77aaeae7fb349d4c19f56dea2f7f3d173ab833dfb1da5e9',
                          'a5285e1800831e754b648f49f1afd8b37858a2353600db497991579de7e4f323',
-                         'ac62cbf3799a35bbb239a0b951411491aab8ee0f2f2c33e66b8a3380a8c20e88',
-                         'cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b',
-                         'f139b1328c7884dfa664aa59b47d5d707b2a72894747911b8f99d5e89f6c7eca'}),
+                         'b92ac5001e533722bd27713a39be232f25d282324179feb3e9315f1524e9c966',
+                         'cdc48a8f8dbe1d68dfe329d5106c55895c5345924544c2cc4b3d7190c837705b'}),
  'SECURITY.md': frozenset({'48509dbbefd182381675499ff5636df18073411db580b05a1430e5eec1714df7',
                            '756264bc4dbd9f9df5c6e4bc016545fc1ac0921b384346e40d557706c2137fc5',
                            '7ef28d44f7b82b765e870434542b5b67facc703e2105a40a233de2e12783852e',
@@ -295,7 +300,16 @@ _HOSTED_ONBOARDING_EXACT_ALLOWLIST = {'COMPATIBILITY.md': frozenset({'1f18a49d55
  'tests/test_hardening.py': frozenset({'bb9825c1889d919e29a90e43c2be48b84d846fcad813fa3896d194491cc8f386',
                                        'f5f87125f1edd37bff1d44301d6bb0f44cc7faf3ba6122bdbe7569f349fea7a3'}),
  'tests/test_memory_provider.py': frozenset({'2c4517847dfad341063a69afcc737316a74574471fc98a45eaff21cfe4e271fd',
-                                             'cc967199b8e877a8088937a0c951e80f188ad4c7f29a98067bf649a2f8500b72'})}
+                                             'cc967199b8e877a8088937a0c951e80f188ad4c7f29a98067bf649a2f8500b72'}),
+ 'plugins/substrate/onboarding.py': frozenset({'19708eb1ce0cb4ddc5a64523cad351d0794ce4c8397079add2098c3905a66629'}),
+ 'tests/test_retrieval_onboarding.py': frozenset({'866b7637fcdb8120b22fe2c822b18e7b211d4dc447e702af47cb2bd89b343127'}),
+ 'plugins/substrate/plugin.py': frozenset({'b9004cde31173ad2037c7b21b5975b05b7360efed5ae4f07a78594ed037ff3c7'}),
+ 'plugins/substrate/README.md': frozenset({'dff165ab8024d2788d52e4653e57c425cf98a8f24d1c13a5b3b0bead38287c40'}),
+ 'plugins/substrate/client.py': frozenset({'61ece2e3c21517d34341a1df13fb6782e844100c25c1020c679b62e28c22885b'}),
+ 'plugins/substrate/setup.py': frozenset({'caec7593ba38e6849ec65d4ba1e1951a35e07fdcc68dd5f32df335b75554f202'}),
+ 'tests/test_retrieval_plugin.py': frozenset({'768cbaefad2efcf49eaf24772410ddbf03373b54714113bc392e375626ea5b49'}),
+ 'tests/test_retrieval_setup.py': frozenset({'109b1721f12223493aec3528703c7c65db1b58355efa6c06f04821ddb9c0fe33'}),
+}
 for _path, _digests in _HOSTED_ONBOARDING_EXACT_ALLOWLIST.items():
     SYNTHETIC_FILE_SHA256_ALLOWLIST[_path] = (
         SYNTHETIC_FILE_SHA256_ALLOWLIST.get(_path, frozenset()) | _digests
@@ -306,10 +320,10 @@ for _path, _digests in _HOSTED_ONBOARDING_EXACT_ALLOWLIST.items():
 # only that sorted policy projection, so ordinary byte changes do not change
 # policy. Adding, moving, or reclassifying a file requires explicit review.
 TRUSTED_INVENTORY_POLICY_SHA256 = (
-    "022c4bc0436f6b329d837944a52efd0842ba8b6ca71e7bece46efbb3560a49ae"
+    "a36a7a604d07d2478936c8f614d13adf41a34b41a8873e792338a03579a12884"
 )
 TRUSTED_HISTORICAL_BLOB_POLICY_SHA256 = (
-    "2d626a34afe1d8d1655284be936433a46f31427e3d40ff5d355222443754edec"
+    "a32d829aa4f52f2cb18148c45dabfbad75dee74242bfef177c09e8c936dbf73b"
 )
 SCANNER_PATH = "scripts/verify_public_plugin_candidate.py"
 DESTINATION_MANIFEST_PATH = "docs/extraction-manifest.json"
