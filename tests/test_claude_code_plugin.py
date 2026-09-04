@@ -70,7 +70,7 @@ def test_plugin_manifest():
     manifest = _load_json(PLUGIN / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == "substrate-memory"
     assert manifest["description"]
-    assert manifest["version"] == "0.3.0"
+    assert manifest["version"] == "0.4.0"
     assert manifest["author"]["name"]
 
 

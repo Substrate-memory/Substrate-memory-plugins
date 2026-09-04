@@ -1,8 +1,13 @@
 # Substrate Memory Plugins
 
 This is the official public repository for the Substrate memory plugin for
-Hermes 0.21.x. The current release is
-[`v0.3.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.3.0).
+Hermes 0.21.x. The current Hermes release is
+[`v0.3.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.3.0),
+which keeps working. The next release `v0.4.0` (root `VERSION`, branch
+`feat/multi-host-plugins`) publishes the whole multi-host plugin set — the Hermes
+`substrate` content is unchanged since `v0.3.0` (byte-identical `substrate.zip`)
+while the five host adapters ship at `0.4.0`. New-plugin installs pin `v0.4.0`;
+Hermes installs below keep working on either tag.
 
 ## Install with a Hermes agent
 

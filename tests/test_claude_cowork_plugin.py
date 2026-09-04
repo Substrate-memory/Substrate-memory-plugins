@@ -71,7 +71,7 @@ def _refused(monkeypatch):
 def test_manifests_parse_and_agree():
     plugin_manifest = json.loads((PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text())
     assert plugin_manifest["name"] == "substrate-cowork"
-    assert plugin_manifest["version"] == "0.3.0"
+    assert plugin_manifest["version"] == "0.4.0"
     assert len(plugin_manifest["description"]) >= 20
     entry = json.loads((PLUGIN_DIR / ".claude-plugin" / "marketplace-entry.json").read_text())
     assert entry["name"] == plugin_manifest["name"]

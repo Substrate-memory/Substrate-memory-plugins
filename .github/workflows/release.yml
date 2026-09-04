@@ -57,9 +57,19 @@ jobs:
         id: metadata
         run: |
           set -euo pipefail
-          version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
+          version="$(tr -d ' \t\r\n' < VERSION)"
           test -n "$version"
-          test "$version" = "0.3.0"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          hermes_version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
+          test "$hermes_version" = "0.3.0"
+          for manifest in \
+            plugins/claude-code/.claude-plugin/plugin.json \
+            plugins/claude-cowork/.claude-plugin/plugin.json \
+            plugins/codex/.codex-plugin/plugin.json \
+            plugins/grok-bot/plugin.json \
+            plugins/openclaw/openclaw.plugin.json; do
+            test "$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$manifest")" = "$version"
+          done
           uv run --no-sync ruff check .
           uv run --no-sync python -m compileall -q plugins scripts
           uv run --no-sync python -m pytest -q
@@ -70,10 +80,13 @@ jobs:
         run: |
           set -euo pipefail
           uv run --no-sync python scripts/build_release.py
-          cp dist/substrate.zip "$RUNNER_TEMP/first-substrate.zip"
+          mkdir -p "$RUNNER_TEMP/first-dist"
+          cp dist/*.zip "$RUNNER_TEMP/first-dist/"
           rm -rf dist
           uv run --no-sync python scripts/build_release.py
-          cmp "$RUNNER_TEMP/first-substrate.zip" dist/substrate.zip
+          for archive in substrate.zip claude-code.zip claude-cowork.zip codex.zip grok-bot.zip openclaw.zip; do
+            cmp "$RUNNER_TEMP/first-dist/$archive" "dist/$archive"
+          done
           uv run --no-sync python scripts/build_release.py --check
       - name: Upload exact verified release bytes
         id: release_artifact
@@ -106,7 +119,7 @@ jobs:
           set -euo pipefail
           test -n "${{ needs.verify.outputs.artifact_digest }}"
           test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = \
-            "SHA256SUMS substrate.zip "
+            "SHA256SUMS claude-code.zip claude-cowork.zip codex.zip grok-bot.zip openclaw.zip substrate.zip "
           (cd dist && sha256sum -c SHA256SUMS)
       - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
         with:
@@ -133,8 +146,13 @@ jobs:
           fi
           gh release create "$tag" \
             dist/substrate.zip \
+            dist/claude-code.zip \
+            dist/claude-cowork.zip \
+            dist/codex.zip \
+            dist/grok-bot.zip \
+            dist/openclaw.zip \
             dist/SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "substrate $tag" \
-            --notes "Substrate retrieval plugin for Hermes 0.21.x: one-prompt install, self-contained RFC 8628 device onboarding, memory_search/memory_expand/memory_evidence. See README.md and COMPATIBILITY.md."
+            --title "substrate-plugins $tag" \
+            --notes "Substrate memory plugin set $tag: Hermes substrate content unchanged since v0.3.0 plus Claude Code, Claude Cowork, Codex CLI, Grok Bot, and OpenClaw host adapters (each with memory_search/memory_expand/memory_evidence, bounded recall, and self-contained RFC 8628 device onboarding). See README.md, CHANGELOG.md, and COMPATIBILITY.md."

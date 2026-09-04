@@ -100,7 +100,7 @@ def _read_json(response: Any) -> tuple[int, dict[str, Any]]:
 
 def _request(origin: str, path: str, *, form: dict[str, str] | None = None,
              token: str = "", timeout: float = 60.0) -> tuple[int, dict[str, Any]]:
-    headers = {"Accept": "application/json", "User-Agent": "substrate-hermes-plugin/0.2.0"}
+    headers = {"Accept": "application/json", "User-Agent": "substrate-hermes-plugin/0.4.0"}
     data = None
     method = "GET"
     if form is not None:

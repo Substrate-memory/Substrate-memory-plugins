@@ -3,7 +3,7 @@
 # non-interactive. Safe to re-run.
 set -eu
 REPO_URL="${SUBSTRATE_REPO_URL:-https://github.com/Substrate-memory/Substrate-memory-plugins.git}"
-REF="${SUBSTRATE_REF:-v0.3.0}"
+REF="${SUBSTRATE_REF:-v0.4.0}"
 GROK_HOME_DIR="${GROK_HOME:-${SUBSTRATE_HOME:-$HOME/.grok}}"
 DEST="$GROK_HOME_DIR/plugins/substrate-memory"
 if command -v git >/dev/null 2>&1; then

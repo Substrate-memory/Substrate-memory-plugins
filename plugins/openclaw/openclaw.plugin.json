@@ -1,7 +1,7 @@
 {
   "id": "substrate",
   "name": "Substrate Memory",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Substrate retrieval and completed-turn capture for OpenClaw (memory_search, memory_expand, memory_evidence). Device onboarding plus the 0600 token file is the supported auth path; never store secrets in plugin config (openclaw.json is plaintext).",
   "activation": {
     "onStartup": true

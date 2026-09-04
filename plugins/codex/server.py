@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from substrate_core import runtime  # noqa: E402
 
 SERVER_NAME = "substrate-memory"
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "0.4.0"
 
 _TOOL_ORDER = ("memory_search", "memory_expand", "memory_evidence")
 _TOOL_SCHEMAS = {

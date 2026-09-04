@@ -7,5 +7,5 @@
   "category": "productivity",
   "source": "./plugins/claude-cowork",
   "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
-  "version": "0.3.0"
+  "version": "0.4.0"
 }

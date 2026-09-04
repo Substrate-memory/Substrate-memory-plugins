@@ -100,7 +100,7 @@ def _read_json(response: Any) -> tuple[int, dict[str, Any]]:
 
 def _request(origin: str, path: str, *, form: dict[str, str] | None = None,
              token: str = "", timeout: float = 60.0) -> tuple[int, dict[str, Any]]:
-    headers = {"Accept": "application/json", "User-Agent": "substrate-cowork-plugin/0.3.0"}
+    headers = {"Accept": "application/json", "User-Agent": "substrate-cowork-plugin/0.4.0"}
     data = None
     method = "GET"
     if form is not None:
@@ -143,7 +143,7 @@ def _validate_token(origin: str, token: str) -> bool:
 
 def _request_with_body(origin: str, path: str, *, body: dict[str, Any],
                        token: str = "") -> tuple[int, dict[str, Any]]:
-    headers = {"Accept": "application/json", "User-Agent": "substrate-cowork-plugin/0.3.0"}
+    headers = {"Accept": "application/json", "User-Agent": "substrate-cowork-plugin/0.4.0"}
     data = json.dumps(body, separators=(",", ":")).encode("utf-8")
     headers["Content-Type"] = "application/json"
     if token:

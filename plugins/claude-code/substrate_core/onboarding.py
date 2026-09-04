@@ -144,7 +144,7 @@ def request_json(
     method: str = "GET",
     timeout: float = 10.0,
 ) -> tuple[int, dict[str, Any]]:
-    headers = {"Accept": "application/json", "User-Agent": "substrate-hermes-plugin/0.3.0"}
+    headers = {"Accept": "application/json", "User-Agent": "substrate-hermes-plugin/0.4.0"}
     data = None
     if form is not None:
         data = urllib.parse.urlencode(form).encode("ascii")

@@ -1,6 +1,6 @@
 {
   "name": "@substrate-memory/openclaw-substrate",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Substrate memory plugin for OpenClaw (zero-dependency JS adapter + vendored stdlib-only Python core).",
   "type": "module",
   "main": "./index.js",

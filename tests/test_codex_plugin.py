@@ -141,7 +141,7 @@ def test_plugin_manifest_is_valid() -> None:
     for key in ("name", "version", "description", "skills", "mcpServers", "interface"):
         assert manifest[key], key
     assert manifest["name"] == "substrate"
-    assert manifest["version"] == "0.3.0"
+    assert manifest["version"] == "0.4.0"
     assert manifest["skills"] == "./skills/"
     assert "hooks" not in manifest  # rejected by Codex validation; hooks/ is discovered
     assert manifest["mcpServers"] == "./.mcp.json"

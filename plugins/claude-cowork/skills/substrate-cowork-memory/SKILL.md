@@ -1,7 +1,7 @@
 ---
 name: substrate-cowork-memory
 description: This skill should be used when the user asks to recall saved knowledge, search memory, expand a memory handle, show evidence for a belief, connect Substrate memory, or before any irreversible operation (delete, deploy, send, overwrite). Provides the Substrate memory prompt and the memory_search, memory_expand, memory_evidence tools.
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Substrate Memory

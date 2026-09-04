@@ -14,18 +14,18 @@ round-trip test for `server.py`). It needs only `git`, `sh`, and
 ### 1. Clone the repository
 
 ```sh
-git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.3.0
+git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.4.0
 ```
 
 ```sh
-git clone --branch v0.3.0 --depth 1 https://github.com/Substrate-memory/Substrate-memory-plugins.git
-SUBSTRATE_REF=v0.3.0 sh plugins/grok-bot/install.sh
+git clone --branch v0.4.0 --depth 1 https://github.com/Substrate-memory/Substrate-memory-plugins.git
+SUBSTRATE_REF=v0.4.0 sh plugins/grok-bot/install.sh
 ```
 
 (`install.sh` installs a copy of the repo into
 `$GROK_HOME/plugins/substrate-memory` at `$SUBSTRATE_REF` — that second clone
 is the install, not a redundant download — then registers the MCP server in
-`$GROK_HOME/mcp.json`. The default ref is `v0.3.0`, matching the pin above;
+`$GROK_HOME/mcp.json`. The default ref is `v0.4.0`, matching the pin above;
 export `SUBSTRATE_REF` explicitly when installing any other ref.
 `install.sh` also respects `SUBSTRATE_REPO_URL` and `GROK_HOME`/`SUBSTRATE_HOME`
 (default home is `~/.grok`) and is idempotent: safe to re-run.)

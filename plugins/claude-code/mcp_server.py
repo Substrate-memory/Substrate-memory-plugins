@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import runtime  # noqa: E402
 
 SERVER_NAME = "substrate-memory"
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "0.4.0"
 
 _TOOL_SCHEMAS = (
     runtime.MEMORY_SEARCH_SCHEMA,

@@ -1,6 +1,6 @@
 {
   "name": "substrate-cowork",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Substrate memory: bounded per-turn recall plus nonblocking completed-turn capture",
   "author": {
     "name": "Sightline Technologies Inc"

@@ -8,7 +8,7 @@
     {
       "name": "substrate-memory",
       "description": "Substrate memory: bounded pre-turn recall plus background capture (memory_search, memory_expand, memory_evidence)",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": {
         "name": "Sightline Technologies Inc"
       },
@@ -25,7 +25,7 @@
       "category": "productivity",
       "source": "./plugins/claude-cowork",
       "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   ]
 }

@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from substrate_core import runtime
 
 SERVER_NAME = "substrate-cowork-memory"
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "0.4.0"
 
 
 def _tool_defs() -> list[dict]:

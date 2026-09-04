@@ -8,7 +8,7 @@ The plugin caches no memory and fails closed.
 ## Layout
 
 - `.claude-plugin/plugin.json` — native plugin manifest
-  (`substrate-memory` 0.3.0).
+  (`substrate-memory` 0.4.0).
 - `.mcp.json` — MCP stdio server registration (stdlib-only `mcp_server.py`)
   exposing `memory_search`, `memory_expand`, `memory_evidence`.
 - `hooks/hooks.json` — `SessionStart` (static prompt + onboarding notice +
