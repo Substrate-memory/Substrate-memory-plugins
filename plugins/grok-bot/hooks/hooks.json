@@ -1,0 +1,23 @@
+{
+  "_note": "Repo-local convention consumed by install.sh and the docs in this repo; not a published xAI manifest format. Verified surface is server.py (MCP stdio) + grok-tools.json (function manifest) + bridge.py.",
+  "hooks": [
+    {
+      "event": "pre_turn",
+      "action": "run",
+      "command": "python3 bridge.py pre-turn",
+      "description": "Fetch bounded Substrate memory context before each model request"
+    },
+    {
+      "event": "post_turn",
+      "action": "run",
+      "command": "python3 bridge.py capture-turn",
+      "description": "Queue nonblocking completed-turn capture"
+    },
+    {
+      "event": "session_end",
+      "action": "run",
+      "command": "python3 bridge.py session-end",
+      "description": "Mark the Substrate session complete"
+    }
+  ]
+}

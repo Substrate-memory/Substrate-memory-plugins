@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "command": "python3 ./hooks/substrate_hook.py pre",
+        "timeout_ms": 9000
+      }
+    ],
+    "PostToolUse": [
+      {
+        "command": "python3 ./hooks/substrate_hook.py post",
+        "timeout_ms": 5000
+      }
+    ],
+    "SessionStart": [
+      {
+        "command": "python3 ./hooks/substrate_hook.py session",
+        "timeout_ms": 5000
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "substrate-cowork",
+  "version": "0.3.0",
+  "description": "Substrate memory: bounded per-turn recall plus nonblocking completed-turn capture",
+  "author": {
+    "name": "Sightline Technologies Inc"
+  },
+  "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "repository": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "recall",
+    "capture",
+    "knowledge-base"
+  ]
+}

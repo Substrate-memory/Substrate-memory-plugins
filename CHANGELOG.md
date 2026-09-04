@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Add self-contained host adapters with tool, redaction, envelope, onboarding,
+  and fail-closed parity to the Hermes reference plugin (still `0.3.0`, still
+  frozen under `plugins/substrate/`): `plugins/claude-code/`,
+  `plugins/claude-cowork/`, `plugins/codex/`, `plugins/grok-bot/`, and
+  `plugins/openclaw/`, each with its native manifest, `README.md`, `INSTALL.md`,
+  and offline test file.
+- Merge the Claude marketplace entries (`substrate-memory` for Claude Code,
+  `substrate-cowork` for Cowork) into the root `.claude-plugin/marketplace.json`
+  and add the root `.agents/plugins/marketplace.json` entry for the Codex
+  Git-URL marketplace flow.
+- Isolate the per-host test modules with `tests/_hostload.py` plus
+  `tests/conftest.py` so the full suite is green in any collection order.
+- Cover the new plugins in CI (full pytest suite, `node --check` for the OpenClaw
+  adapter, JSON-parse validation of every manifest).
+
 ## 0.3.0
 
 - First full release of the `substrate` plugin for Hermes 0.21.x: one-prompt install

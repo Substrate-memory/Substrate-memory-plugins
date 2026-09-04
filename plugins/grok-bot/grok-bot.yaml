@@ -1,0 +1,28 @@
+# NOTE: repo-local convention consumed by install.sh and the docs in this repo;
+# not a published xAI manifest format. Verified surface is server.py (MCP stdio)
+# + grok-tools.json (function manifest) + bridge.py.
+# Substrate memory for Grok Bot (xAI Grok agent surface) — repo-local manifest (see NOTE above).
+name: substrate-memory
+version: 0.3.0
+description: Substrate retrieval and completed-turn capture for Grok Bot
+mcp_server:
+  command: python3
+  args: ["server.py"]
+  transport: stdio
+provides_tools:
+  - memory_search
+  - memory_expand
+  - memory_evidence
+provides_hooks:
+  - pre_turn_context
+  - capture_turn
+  - session_reset
+  - session_end
+static_prompt: substrate_core.runtime.STATIC_MEMORY_PROMPT
+optional_env:
+  - SUBSTRATE_API_URL
+  - SUBSTRATE_API_KEY
+  - SUBSTRATE_WIKI_ORIGIN
+  - SUBSTRATE_AGENT_NAME
+  - SUBSTRATE_HOME
+  - GROK_HOME

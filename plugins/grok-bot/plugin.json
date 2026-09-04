@@ -1,0 +1,11 @@
+{
+  "_note": "Repo-local convention consumed by install.sh and the docs in this repo; not a published xAI manifest format. Verified surface is server.py (MCP stdio) + grok-tools.json (function manifest) + bridge.py.",
+  "name": "substrate-memory",
+  "version": "0.3.0",
+  "description": "Substrate retrieval and completed-turn capture for Grok Build",
+  "skills": [
+    "skills/substrate-memory"
+  ],
+  "mcpServers": ".mcp.json",
+  "hooks": "hooks/hooks.json"
+}

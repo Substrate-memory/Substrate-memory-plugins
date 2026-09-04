@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "substrate-memory": {
+      "command": "python3",
+      "args": [
+        "server.py"
+      ]
+    }
+  }
+}

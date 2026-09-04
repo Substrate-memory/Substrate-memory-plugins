@@ -26,3 +26,21 @@ capture events remain queued.
 - Releases are immutable Git tags (`v0.3.0`) with attested `substrate.zip` and `SHA256SUMS` assets.
 - Breaking server behavior requires a new protocol/schema identifier.
 - Rollback preserves profile-local state and credential custody.
+
+## Multi-host plugins (0.3.0)
+
+Each host adapter below vendors the same stdlib-only core and exposes identical
+`memory_search`, `memory_expand`, and `memory_evidence` tools, bounded pre-turn
+`<memory-context>` recall, nonblocking completed-turn capture, session boundary
+markers, and first-use RFC 8628 device onboarding. All are fail-closed with the
+same bounded error classes, and all keep TLS verification enabled with only the
+bundled public ISRG roots.
+
+| Plugin directory | Host | Host version | Status |
+|---|---|---|---|
+| `plugins/substrate/` | Hermes | 0.21.x | Released |
+| `plugins/claude-code/` | Claude Code | 2.x (verified on 2.1.259) | Supported |
+| `plugins/claude-cowork/` | Claude Cowork | Shares the Claude Code plugin surface | Supported |
+| `plugins/codex/` | Codex CLI | 0.144.x (verified on 0.144.5) | Supported |
+| `plugins/grok-bot/` | Grok Build CLI / MCP-capable harness | Best-effort on grok.com web and X bots (no installable tool surface there) | Supported where MCP tools can be registered |
+| `plugins/openclaw/` | OpenClaw | >= 2026.4.24, Node 22+, python3 3.11+ | Supported |

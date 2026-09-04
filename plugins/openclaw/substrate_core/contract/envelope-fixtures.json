@@ -1,0 +1,2072 @@
+{
+  "description": "Substrate <-> Hermes plugin wire contract fixtures. Both validators (contract.py, contract.mjs) must accept every `valid` case, reject every `invalid` case with the listed error, and agree on `expected_event_id`.",
+  "contract_version": 1,
+  "schema_version": 3,
+  "namespace": "6f3a2b1c-9d8e-4f70-a1b2-c3d4e5f60718",
+  "actions": [
+    "duplicate",
+    "queued",
+    "sealed",
+    "stored"
+  ],
+  "kinds": [
+    "capture_session",
+    "capture_turn",
+    "consent",
+    "memory_forget",
+    "memory_write",
+    "page_propose",
+    "upload"
+  ],
+  "plugin_postable_kinds": [
+    "capture_session",
+    "capture_turn",
+    "consent",
+    "memory_forget",
+    "memory_write"
+  ],
+  "action_classes": [
+    "delegate",
+    "delete",
+    "deploy",
+    "execute",
+    "network",
+    "other",
+    "read",
+    "write"
+  ],
+  "error_categories": [
+    "conflict",
+    "forbidden",
+    "internal",
+    "invalid_request",
+    "not_found",
+    "payload_too_large",
+    "rate_limited",
+    "unauthorized",
+    "unsupported_contract",
+    "unsupported_schema"
+  ],
+  "valid": [
+    {
+      "name": "turn_with_tool",
+      "idempotency_key": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "group_chat_turn",
+      "idempotency_key": "7a1c9e2d-0b3f-4c5a-8d6e-2f1a0b9c8d7e",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "7a1c9e2d-0b3f-4c5a-8d6e-2f1a0b9c8d7e",
+        "kind": "capture_turn",
+        "session_id": "tg-supergroup-1001234567890-9b2e",
+        "offset": {
+          "start": 12,
+          "end": 14
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "tg:88213377",
+          "role": "participant",
+          "display": "Marcus"
+        },
+        "created_at": "2026-09-02T11:02:14Z",
+        "payload": {
+          "turn_id": "turn-0007",
+          "messages": [
+            {
+              "index": 12,
+              "role": "user",
+              "timestamp": "2026-09-02T11:02:10Z",
+              "speaker": {
+                "id": "tg:88213377",
+                "role": "participant",
+                "display": "Marcus"
+              },
+              "content": "@hermes when is the Sitescope pilot review with Turner?"
+            },
+            {
+              "index": 13,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "content": "The Sitescope pilot review with Turner is on Thursday 2026-09-04."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "session_end",
+      "idempotency_key": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "session_switch",
+      "idempotency_key": "d1e2f3a4-b5c6-4d7e-8f90-a1b2c3d4e5f6",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "d1e2f3a4-b5c6-4d7e-8f90-a1b2c3d4e5f6",
+        "kind": "capture_session",
+        "session_id": "tg-supergroup-1001234567890-9b2e",
+        "offset": {
+          "start": 14,
+          "end": 14
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T11:30:00Z",
+        "payload": {
+          "boundary": "switch",
+          "session_complete": false,
+          "next_session_id": "tg-supergroup-1001234567890-c04f",
+          "message_high_water": 14,
+          "platform": "telegram",
+          "chat_type": "supergroup",
+          "participants": [
+            {
+              "id": "tg:88213377",
+              "display": "Marcus"
+            },
+            {
+              "id": "tg:4410021",
+              "display": "Pavel"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "memory_write",
+      "idempotency_key": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "kind": "memory_write",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:18:00.5Z",
+        "payload": {
+          "text": "Hermes must never be exposed publicly; Tailscale only.",
+          "about": "hermes deployment",
+          "durability": "durable",
+          "source": "memory_remember"
+        }
+      }
+    },
+    {
+      "name": "memory_forget",
+      "idempotency_key": "1b2c3d4e-5f60-4718-9a2b-3c4d5e6f7081",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "1b2c3d4e-5f60-4718-9a2b-3c4d5e6f7081",
+        "kind": "memory_forget",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:19:11Z",
+        "payload": {
+          "handle": "m:44a1b02e",
+          "reason": "User says the Tailscale-only restriction was lifted on 2026-08-30."
+        }
+      }
+    },
+    {
+      "name": "consent",
+      "idempotency_key": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "kind": "consent",
+        "session_id": "onboarding:7c1f3a9e",
+        "offset": {
+          "start": 0,
+          "end": 0
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:14:02Z",
+        "payload": {
+          "version": 1,
+          "scope": "hermes_history",
+          "decision": "approved",
+          "recorded_at": "2026-09-02T10:14:02Z",
+          "includes_other_profiles": false
+        }
+      }
+    },
+    {
+      "name": "replay_deterministic",
+      "idempotency_key": "5a3a451b-c18c-56cb-a6ac-caa5b92040df",
+      "expected_event_id": "5a3a451b-c18c-56cb-a6ac-caa5b92040df",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "5a3a451b-c18c-56cb-a6ac-caa5b92040df",
+        "kind": "capture_turn",
+        "session_id": "20260815T090000-cli-3e9a1c40",
+        "offset": {
+          "start": 0,
+          "end": 2
+        },
+        "capture_origin": "history_replay",
+        "batch_id": "9b1d4e2f7a3c5068",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:30:00Z",
+        "payload": {
+          "turn_id": "history:20260815T090000-cli-3e9a1c40:0",
+          "messages": [
+            {
+              "index": 0,
+              "role": "user",
+              "timestamp": "2026-08-15T09:00:04Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Remind me what the Sitescope beachhead segment is."
+            },
+            {
+              "index": 1,
+              "role": "assistant",
+              "timestamp": "2026-08-15T09:00:09Z",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "content": "Mid-sized US general contractors."
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "schema_2",
+      "error": "unsupported_schema",
+      "envelope": {
+        "schema_version": 2,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "schema_missing",
+      "error": "unsupported_schema",
+      "envelope": {
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "contract_0",
+      "error": "unsupported_contract",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 0,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "contract_string",
+      "error": "unsupported_contract",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": "1",
+        "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "kind": "memory_write",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:18:00.5Z",
+        "payload": {
+          "text": "Hermes must never be exposed publicly; Tailscale only.",
+          "about": "hermes deployment",
+          "durability": "durable",
+          "source": "memory_remember"
+        }
+      }
+    },
+    {
+      "name": "unknown_kind",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "kind": "note",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:18:00.5Z",
+        "payload": {
+          "text": "Hermes must never be exposed publicly; Tailscale only.",
+          "about": "hermes deployment",
+          "durability": "durable",
+          "source": "memory_remember"
+        }
+      }
+    },
+    {
+      "name": "kind_not_postable",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "kind": "page_propose",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:18:00.5Z",
+        "payload": {
+          "page_id": "pg_01",
+          "title": "Ops",
+          "prompt": "Summarize ops",
+          "session_id": "20260902T101500-cli-7c1f3a9e"
+        }
+      }
+    },
+    {
+      "name": "event_id_not_uuid",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "evt-123",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "idempotency_mismatch",
+      "error": "invalid_request",
+      "idempotency_key": "00000000-0000-4000-8000-000000000000",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "tool_args_over_4k",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "command": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "tool_result_over_8k",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "offset_missing",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "offset_misaligned",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 9
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "unknown_top_level_field",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        },
+        "note": "hi"
+      }
+    },
+    {
+      "name": "speaker_role_invalid",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "system",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "created_at_not_rfc3339",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02 10:22:05",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "batch_id_not_hex",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "5a3a451b-c18c-56cb-a6ac-caa5b92040df",
+        "kind": "capture_turn",
+        "session_id": "20260815T090000-cli-3e9a1c40",
+        "offset": {
+          "start": 0,
+          "end": 2
+        },
+        "capture_origin": "history_replay",
+        "batch_id": "batch-1",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:30:00Z",
+        "payload": {
+          "turn_id": "history:20260815T090000-cli-3e9a1c40:0",
+          "messages": [
+            {
+              "index": 0,
+              "role": "user",
+              "timestamp": "2026-08-15T09:00:04Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Remind me what the Sitescope beachhead segment is."
+            },
+            {
+              "index": 1,
+              "role": "assistant",
+              "timestamp": "2026-08-15T09:00:09Z",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "content": "Mid-sized US general contractors."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "capture_origin_unknown",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "5a3a451b-c18c-56cb-a6ac-caa5b92040df",
+        "kind": "capture_turn",
+        "session_id": "20260815T090000-cli-3e9a1c40",
+        "offset": {
+          "start": 0,
+          "end": 2
+        },
+        "capture_origin": "import",
+        "batch_id": "9b1d4e2f7a3c5068",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:30:00Z",
+        "payload": {
+          "turn_id": "history:20260815T090000-cli-3e9a1c40:0",
+          "messages": [
+            {
+              "index": 0,
+              "role": "user",
+              "timestamp": "2026-08-15T09:00:04Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Remind me what the Sitescope beachhead segment is."
+            },
+            {
+              "index": 1,
+              "role": "assistant",
+              "timestamp": "2026-08-15T09:00:09Z",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "content": "Mid-sized US general contractors."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "message_role_system",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "system",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "tool_message_missing_digest",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "tool_calls_on_user",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000.",
+              "tool_calls": []
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "call_01HZX3Q9K7W2",
+                  "tool_name": "read_file",
+                  "args": {
+                    "path": "/etc/nginx/sites-enabled/substrate.conf"
+                  }
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "truncated_args_with_args",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "kind": "capture_turn",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 4,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:15:42.318000Z",
+        "payload": {
+          "turn_id": "turn-0003",
+          "messages": [
+            {
+              "index": 4,
+              "role": "user",
+              "timestamp": "2026-09-02T10:15:30Z",
+              "speaker": {
+                "id": "owner",
+                "role": "owner",
+                "display": "Pavel"
+              },
+              "content": "Check whether the nginx config on the box still proxies /api to port 3000."
+            },
+            {
+              "index": 5,
+              "role": "assistant",
+              "content": "",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "tool_calls": [
+                {
+                  "id": "c1",
+                  "tool_name": "terminal",
+                  "args": {
+                    "command": "ls"
+                  },
+                  "args_truncated": true,
+                  "args_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "args_preview": "ls"
+                }
+              ]
+            },
+            {
+              "index": 6,
+              "role": "tool",
+              "tool_call_id": "call_01HZX3Q9K7W2",
+              "tool_name": "read_file",
+              "content": "server {\n  listen 443 ssl;\n  server_name app.trysubstrate.co;\n  location /api {\n    proxy_pass http://127.0.0.1:3000;\n  }\n}\n",
+              "result_digest": "6f03d49e1fff6bdecdfe52976ca8a0701ecdc1047959b1fb5ae8a302b03fb42f",
+              "result_bytes": 124,
+              "result_truncated": false
+            },
+            {
+              "index": 7,
+              "role": "assistant",
+              "speaker": {
+                "id": "hermes",
+                "role": "agent",
+                "display": "Hermes"
+              },
+              "timestamp": "2026-09-02T10:15:41Z",
+              "content": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "payload_float",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8.5,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "memory_write_text_over_4k",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "kind": "memory_write",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:18:00.5Z",
+        "payload": {
+          "text": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+          "about": "hermes deployment",
+          "durability": "durable",
+          "source": "memory_remember"
+        }
+      }
+    },
+    {
+      "name": "memory_write_bad_source",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "kind": "memory_write",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:18:00.5Z",
+        "payload": {
+          "text": "Hermes must never be exposed publicly; Tailscale only.",
+          "about": "hermes deployment",
+          "durability": "durable",
+          "source": "user"
+        }
+      }
+    },
+    {
+      "name": "memory_forget_bad_handle",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "1b2c3d4e-5f60-4718-9a2b-3c4d5e6f7081",
+        "kind": "memory_forget",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "hermes",
+          "role": "agent",
+          "display": "Hermes"
+        },
+        "created_at": "2026-09-02T10:19:11Z",
+        "payload": {
+          "handle": "x:44a1b02e",
+          "reason": "User says the Tailscale-only restriction was lifted on 2026-08-30."
+        }
+      }
+    },
+    {
+      "name": "consent_bad_decision",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "kind": "consent",
+        "session_id": "onboarding:7c1f3a9e",
+        "offset": {
+          "start": 0,
+          "end": 0
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:14:02Z",
+        "payload": {
+          "version": 1,
+          "scope": "hermes_history",
+          "decision": "maybe",
+          "recorded_at": "2026-09-02T10:14:02Z",
+          "includes_other_profiles": false
+        }
+      }
+    },
+    {
+      "name": "consent_missing_profiles_flag",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+        "kind": "consent",
+        "session_id": "onboarding:7c1f3a9e",
+        "offset": {
+          "start": 0,
+          "end": 0
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:14:02Z",
+        "payload": {
+          "version": 1,
+          "scope": "hermes_history",
+          "decision": "approved",
+          "recorded_at": "2026-09-02T10:14:02Z"
+        }
+      }
+    },
+    {
+      "name": "session_boundary_unknown",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "close",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    },
+    {
+      "name": "session_payload_with_content",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "20260902T101500-cli-7c1f3a9e",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm",
+          "summary": "we talked about nginx"
+        }
+      }
+    },
+    {
+      "name": "session_id_empty",
+      "error": "invalid_request",
+      "envelope": {
+        "schema_version": 3,
+        "contract_version": 1,
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "kind": "capture_session",
+        "session_id": "",
+        "offset": {
+          "start": 8,
+          "end": 8
+        },
+        "capture_origin": "live",
+        "batch_id": "",
+        "speaker": {
+          "id": "owner",
+          "role": "owner",
+          "display": "Pavel"
+        },
+        "created_at": "2026-09-02T10:22:05Z",
+        "payload": {
+          "boundary": "end",
+          "session_complete": true,
+          "message_high_water": 8,
+          "platform": "cli",
+          "chat_type": "dm"
+        }
+      }
+    }
+  ],
+  "ack": {
+    "valid": [
+      {
+        "name": "stored",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": true,
+          "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+          "action": "stored"
+        }
+      },
+      {
+        "name": "duplicate",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": true,
+          "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+          "action": "duplicate"
+        }
+      },
+      {
+        "name": "sealed",
+        "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+        "ack": {
+          "stored": true,
+          "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+          "action": "sealed"
+        }
+      },
+      {
+        "name": "queued_with_job",
+        "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+        "ack": {
+          "stored": true,
+          "event_id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+          "action": "queued",
+          "job_id": "job_01J6X0K9M3P2Q8R7S5T4V2W1X0"
+        }
+      }
+    ],
+    "reject": [
+      {
+        "name": "stored_false",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": false,
+          "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+          "action": "stored"
+        }
+      },
+      {
+        "name": "stored_string",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": "true",
+          "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+          "action": "stored"
+        }
+      },
+      {
+        "name": "stored_missing",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+          "action": "stored"
+        }
+      },
+      {
+        "name": "event_id_mismatch",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": true,
+          "event_id": "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+          "action": "stored"
+        }
+      },
+      {
+        "name": "event_id_missing",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": true,
+          "action": "stored"
+        }
+      },
+      {
+        "name": "unknown_action",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": true,
+          "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+          "action": "accepted"
+        }
+      },
+      {
+        "name": "action_missing",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "stored": true,
+          "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b"
+        }
+      },
+      {
+        "name": "legacy_v2_ack",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {
+          "ok": true,
+          "id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b"
+        }
+      },
+      {
+        "name": "empty_object",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": {}
+      },
+      {
+        "name": "not_an_object",
+        "event_id": "3f2b8c1e-5a6d-4e7f-9a0b-1c2d3e4f5a6b",
+        "ack": "stored"
+      }
+    ]
+  },
+  "requests": {
+    "turn_context": {
+      "contract_version": 1,
+      "session_id": "20260902T101500-cli-7c1f3a9e",
+      "turn_id": "turn-0004",
+      "turn": 4,
+      "platform": "cli",
+      "chat_type": "dm",
+      "sender_id": "owner",
+      "agent_identity": "hermes",
+      "agent_context": "primary",
+      "parent_session_id": "",
+      "message": "Can you draft the Turner pilot review agenda for Thursday?",
+      "recent_turns": [
+        {
+          "user": "Check whether the nginx config on the box still proxies /api to port 3000.",
+          "assistant": "Yes. substrate.conf still proxies /api to 127.0.0.1:3000 behind TLS on 443."
+        }
+      ],
+      "injected_handles": [
+        "m:e4f2a1c9",
+        "m:0b7d33aa"
+      ],
+      "cited_handles": [
+        "m:0b7d33aa"
+      ],
+      "deadline_ms": 500
+    },
+    "action_cues": {
+      "contract_version": 1,
+      "session_id": "20260902T101500-cli-7c1f3a9e",
+      "turn_id": "turn-0004",
+      "tool_call_id": "call_01HZX3Q9K7W3",
+      "tool_name": "terminal",
+      "action_class": "execute",
+      "artifact_keys": [
+        {
+          "kind": "host",
+          "key": "app.trysubstrate.co"
+        },
+        {
+          "kind": "path",
+          "key": "/etc/nginx/sites-enabled/substrate.conf"
+        }
+      ],
+      "deadline_ms": 100
+    }
+  },
+  "responses": {
+    "capabilities": {
+      "contract_version": 1,
+      "provider": "substrate",
+      "server_commit": "b80e66b",
+      "limits": {
+        "max_event_bytes": 262144,
+        "max_upload_bytes": 262144,
+        "max_tool_call_bytes": 4096,
+        "max_tool_result_bytes": 8192,
+        "turn_context_deadline_ms": 500,
+        "action_cues_deadline_ms": 100,
+        "rules_refresh_seconds": 300
+      },
+      "actions": [
+        "stored",
+        "duplicate",
+        "sealed",
+        "queued"
+      ],
+      "kinds": [
+        "capture_turn",
+        "capture_session",
+        "memory_write",
+        "memory_forget",
+        "consent",
+        "page_propose",
+        "upload"
+      ],
+      "tenant": {
+        "tenant_id": "ten_01J6WZ3R8QK4M2N7P9S1T5V0X3",
+        "brief_version": 7
+      }
+    },
+    "turn_context": {
+      "contract_version": 1,
+      "session_id": "20260902T101500-cli-7c1f3a9e",
+      "turn": 4,
+      "block": "Memory (handles expand with memory_expand; evidence with memory_evidence):\n- Sitescope pilot review with Turner is due Thursday 2026-09-04. [m:0b7d33aa]\n- Last time you spoke with Marcus Hale he asked about the Procore integration. [m:e4f2a1c9]\n- Hermes must never be exposed publicly; Tailscale only. [m:44a1b02e]",
+      "handles": [
+        "m:0b7d33aa",
+        "m:e4f2a1c9",
+        "m:44a1b02e"
+      ],
+      "tail_handles": [
+        "m:0b7d33aa",
+        "m:e4f2a1c9"
+      ],
+      "brief_version": 7,
+      "latency_ms": 41,
+      "empty_reason": ""
+    },
+    "action_cues": {
+      "contract_version": 1,
+      "tool_call_id": "call_01HZX3Q9K7W3",
+      "notes": [
+        {
+          "handle": "m:44a1b02e",
+          "text": "Hermes must never be exposed publicly; Tailscale only.",
+          "enforce": true
+        }
+      ],
+      "latency_ms": 12
+    },
+    "rules": {
+      "contract_version": 1,
+      "rules_version": 3,
+      "rules": [
+        {
+          "handle": "m:44a1b02e",
+          "text": "Hermes must never be exposed publicly; Tailscale only.",
+          "action_classes": [
+            "deploy",
+            "network",
+            "execute"
+          ],
+          "artifact_keys": [
+            {
+              "kind": "host",
+              "key": "app.trysubstrate.co"
+            },
+            {
+              "kind": "path",
+              "key": "/etc/nginx"
+            }
+          ],
+          "enforce": true
+        }
+      ]
+    }
+  }
+}

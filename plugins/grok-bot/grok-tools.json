@@ -1,0 +1,85 @@
+[
+  {
+    "function": {
+      "description": "Search Substrate memory. Use the intended action in the query before irreversible operations.",
+      "name": "memory_search",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "limit": {
+            "default": 8,
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "What to recall or the intended action.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Expand a Substrate memory or page handle into its bounded detail.",
+      "name": "memory_expand",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "pattern": "^[mp]:[0-9a-f]{8,64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Get evidence excerpts for a Substrate memory handle.",
+      "name": "memory_evidence",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "pattern": "^[mp]:[0-9a-f]{8,64}$",
+            "type": "string"
+          },
+          "limit": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "raw": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "handle"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]
