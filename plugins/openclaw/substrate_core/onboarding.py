@@ -29,7 +29,6 @@ try:
     from .client import (
         ClientError,
         SubstrateClient,
-        _profile_homes,
         _stored_api_key,
         _stored_origin,
         tls_context,
@@ -39,7 +38,6 @@ except ImportError:  # standalone script layout
     from client import (
         ClientError,
         SubstrateClient,
-        _profile_homes,
         _stored_api_key,
         _stored_origin,
         tls_context,
@@ -84,10 +82,13 @@ def _clip(value: str, maximum: int) -> str:
 
 def active_home() -> Path:
     """The one active profile home; no other profile is ever inspected."""
-    # OPENCLAW HOST-HOME PATCH (vendored copy): fallback home is the OpenClaw
-    # home. Primary resolution lives in client._profile_homes (hosthome.py).
-    homes = _profile_homes()
-    return (homes[0] if homes else Path.home() / ".openclaw").resolve()
+    # OPENCLAW HOST-HOME PATCH: via hosthome.openclaw_home(); no HERMES_HOME,
+    # no <home>/plugins/substrate walk. All home-derived paths use this home.
+    try:
+        from . import hosthome
+    except ImportError:  # standalone script layout
+        import hosthome
+    return hosthome.openclaw_home().resolve()
 
 
 def resolve_agent_name() -> str:
@@ -99,6 +100,7 @@ def resolve_agent_name() -> str:
 
 
 def resolve_origin() -> str:
+    # OPENCLAW HOST-HOME PATCH: stored fallback is via hosthome; no Hermes home.
     return (
         os.environ.get("SUBSTRATE_API_URL")
         or _stored_origin()
@@ -271,6 +273,7 @@ def _store_token_file(home: Path, token: str) -> None:
 
 
 def _state_path(home: Path) -> Path:
+    # OPENCLAW HOST-HOME PATCH: *home* comes from active_home(); never resolved here.
     return home / "substrate" / "onboarding.json"
 
 

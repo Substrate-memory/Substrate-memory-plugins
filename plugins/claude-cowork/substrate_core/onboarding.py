@@ -98,6 +98,9 @@ def resolve_agent_name() -> str:
 
 
 def resolve_origin() -> str:
+    # HOST-HOME PATCH (claude-cowork): origin's stored fallback comes from
+    # client._stored_origin(), which itself resolves via hosthome (the active
+    # Cowork/Claude home). No Hermes home is ever consulted here.
     return (
         os.environ.get("SUBSTRATE_API_URL")
         or _stored_origin()
@@ -270,6 +273,8 @@ def _store_token_file(home: Path, token: str) -> None:
 
 
 def _state_path(home: Path) -> Path:
+    # HOST-HOME PATCH (claude-cowork): *home* always comes from active_home()
+    # (hosthome.active_home()); this helper never resolves a home itself.
     return home / "substrate" / "onboarding.json"
 
 

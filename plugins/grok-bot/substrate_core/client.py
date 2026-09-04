@@ -29,25 +29,19 @@ class ClientError(RuntimeError):
 
 def _profile_homes() -> list[Path]:
     """Return likely active Grok Bot homes without inspecting other profiles."""
-    # GROK-BOT HOST-HOME PATCH (only intentional difference from plugins/substrate/client.py):
-    # resolve SUBSTRATE_HOME > GROK_HOME, the installed plugins/grok-bot layout,
-    # then the ~/.grok and ~/.config/grok profile homes. HERMES_HOME is
-    # deliberately NOT read here so a Grok session can never pick up a Hermes
-    # profile credential (audit MINOR-3). All server-compatible behavior
-    # (CLIENT allowlist, limits, validation) is unchanged.
-    values: list[Path] = []
-    for override in ("SUBSTRATE_HOME", "GROK_HOME"):
-        configured = os.environ.get(override, "").strip()
-        if configured:
-            values.append(Path(configured).expanduser())
-    location = Path(__file__).resolve()
-    # Installed layout: <GROK_HOME>/plugins/grok-bot/substrate_core/client.py.
-    if location.parent.name == "substrate_core" and location.parent.parent.name == "grok-bot":
-        values.append(location.parents[2])
-    # (No Hermes installed-layout detection and no ~/.hermes fallback: audit
-    # MINOR-3 — a Grok session must never read a Hermes profile credential.)
-    values.append(Path.home() / ".grok")
-    values.append(Path.home() / ".config" / "grok")
+    # GROK-BOT HOST-HOME PATCH (only intentional difference from
+    # plugins/substrate/client.py): resolve via hosthome.grok_home()
+    # (SUBSTRATE_HOME > GROK_HOME > ~/.grok). No HERMES_HOME, no
+    # <home>/plugins/substrate installed-layout walk, no ~/.hermes fallback,
+    # no ~/.config/grok second-profile scan (audit MINOR-3 — a Grok session
+    # must never read another profile's credential). A repo checkout path
+    # must never resolve as a home. All server-compatible behavior (CLIENT
+    # allowlist, limits, validation) is unchanged.
+    try:
+        from .hosthome import grok_home
+    except ImportError:  # standalone script layout
+        from hosthome import grok_home  # type: ignore[no-redef]
+    values: list[Path] = [grok_home()]
     # Never inspect a fallback profile when an active/configured profile is known.
     selected = values[:1]
     result: list[Path] = []

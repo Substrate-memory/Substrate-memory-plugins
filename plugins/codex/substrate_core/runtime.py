@@ -695,7 +695,7 @@ def _onboarding_result(status: dict[str, Any]) -> str:
             "message": (
                 "Substrate memory is not connected yet. Open the link below in a "
                 "browser, sign in by email, and approve the connection to grant "
-                "this Hermes profile a tenant-scoped memory key. The key is "
+                "this Codex profile a tenant-scoped memory key. The key is "  # CODEX HOST-HOME PATCH: host name in user-facing text only.
                 "stored privately in this profile and never needs to be pasted "
                 "into chat. After approving, call memory_search again; "
                 "authorization completes automatically."

@@ -29,7 +29,6 @@ try:
     from .client import (
         ClientError,
         SubstrateClient,
-        _profile_homes,
         _stored_api_key,
         _stored_origin,
         tls_context,
@@ -39,7 +38,6 @@ except ImportError:  # standalone script layout
     from client import (
         ClientError,
         SubstrateClient,
-        _profile_homes,
         _stored_api_key,
         _stored_origin,
         tls_context,
@@ -85,13 +83,17 @@ def _clip(value: str, maximum: int) -> str:
 def active_home() -> Path:
     """The one active profile home; no other profile is ever inspected."""
     # GROK-BOT HOST-HOME PATCH (only intentional difference from
-    # plugins/substrate/onboarding.py): the active home resolves via the
-    # Grok-aware _profile_homes() in substrate_core.client (SUBSTRATE_HOME >
-    # GROK_HOME > installed plugins/grok-bot layout > ~/.grok >
-    # ~/.config/grok). Device-grant, scopes, storage paths, and validation
-    # are unchanged.
-    homes = _profile_homes()
-    return (homes[0] if homes else Path.home() / ".grok").resolve()
+    # plugins/substrate/onboarding.py): the active home resolves via
+    # hosthome.grok_home() (SUBSTRATE_HOME > GROK_HOME > ~/.grok). No
+    # HERMES_HOME, no <home>/plugins/substrate installed-layout walk, no
+    # ~/.hermes fallback. State, credential, env, origin, and CLI paths all
+    # flow from this home. Device-grant, scopes, storage paths, and
+    # validation are unchanged.
+    try:
+        from . import hosthome
+    except ImportError:  # standalone script layout
+        import hosthome
+    return hosthome.grok_home().resolve()
 
 
 def resolve_agent_name() -> str:
@@ -107,6 +109,9 @@ def resolve_agent_name() -> str:
 
 
 def resolve_origin() -> str:
+    # GROK-BOT HOST-HOME PATCH: origin's stored fallback comes from
+    # client._stored_origin(), which itself resolves via hosthome.grok_home().
+    # No Hermes home is ever consulted here.
     return (
         os.environ.get("SUBSTRATE_API_URL")
         or _stored_origin()
@@ -279,6 +284,8 @@ def _store_token_file(home: Path, token: str) -> None:
 
 
 def _state_path(home: Path) -> Path:
+    # GROK-BOT HOST-HOME PATCH: *home* always comes from active_home()
+    # (hosthome.grok_home()); this helper never resolves a home itself.
     return home / "substrate" / "onboarding.json"
 
 

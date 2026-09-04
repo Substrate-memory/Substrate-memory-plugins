@@ -29,20 +29,16 @@ class ClientError(RuntimeError):
 
 def _profile_homes() -> list[Path]:
     """Return likely active Claude Code homes without inspecting other profiles."""
-    values: list[Path] = []
-    # HOST-HOME PATCH (claude-code): Hermes uses HERMES_HOME/~/.hermes; this
-    # host uses SUBSTRATE_HOME (explicit override), CLAUDE_HOME, or ~/.claude.
-    for key in ("SUBSTRATE_HOME", "CLAUDE_HOME"):
-        configured = os.environ.get(key, "").strip()
-        if configured:
-            values.append(Path(configured).expanduser())
-    location = Path(__file__).resolve()
-    # Installed layout: <CLAUDE_HOME>/.../substrate_core/client.py (marketplace
-    # cache copy). The install cache path does not identify a profile, so fall
-    # back to the standard Claude home instead of inspecting ancestors.
-    if location.parent.name == "substrate_core":
-        values.append(Path.home() / ".claude")
-    values.append(Path.home() / ".claude")
+    # HOST-HOME PATCH (claude-code): resolve the Claude Code home (~/.claude)
+    # via hosthome.host_home() instead of the Hermes home. No HERMES_HOME, no
+    # installed-layout walk, no ~/.hermes fallback. Every other rule in this
+    # file (limits, allowed hosts, validation, token-file layout) is unchanged
+    # from the Hermes reference so the server side stays compatible.
+    try:
+        from .hosthome import host_home
+    except ImportError:  # standalone script layout
+        from hosthome import host_home  # type: ignore[no-redef]
+    values: list[Path] = [host_home()]
     # Never inspect a fallback profile when an active/configured profile is known.
     selected = values[:1]
     result: list[Path] = []

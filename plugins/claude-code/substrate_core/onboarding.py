@@ -29,7 +29,6 @@ try:
     from .client import (
         ClientError,
         SubstrateClient,
-        _profile_homes,
         _stored_api_key,
         _stored_origin,
         tls_context,
@@ -39,7 +38,6 @@ except ImportError:  # standalone script layout
     from client import (
         ClientError,
         SubstrateClient,
-        _profile_homes,
         _stored_api_key,
         _stored_origin,
         tls_context,
@@ -84,9 +82,15 @@ def _clip(value: str, maximum: int) -> str:
 
 def active_home() -> Path:
     """The one active profile home; no other profile is ever inspected."""
-    # HOST-HOME PATCH (claude-code): Claude Code home is ~/.claude.
-    homes = _profile_homes()
-    return (homes[0] if homes else Path.home() / ".claude").resolve()
+    # HOST-HOME PATCH (claude-code): resolve via hosthome.host_home()
+    # (SUBSTRATE_HOME > CLAUDE_HOME > ~/.claude). No HERMES_HOME, no
+    # <home>/plugins/substrate installed-layout walk, no ~/.hermes fallback.
+    # State, credential, env, origin, and CLI paths all flow from this home.
+    try:
+        from . import hosthome
+    except ImportError:  # standalone script layout
+        import hosthome
+    return hosthome.host_home().resolve()
 
 
 def resolve_agent_name() -> str:
@@ -104,6 +108,9 @@ def resolve_agent_name() -> str:
 
 
 def resolve_origin() -> str:
+    # HOST-HOME PATCH (claude-code): origin's stored fallback comes from
+    # client._stored_origin(), which itself resolves via hosthome.host_home().
+    # No Hermes home is ever consulted here.
     return (
         os.environ.get("SUBSTRATE_API_URL")
         or _stored_origin()
@@ -276,6 +283,8 @@ def _store_token_file(home: Path, token: str) -> None:
 
 
 def _state_path(home: Path) -> Path:
+    # HOST-HOME PATCH (claude-code): *home* always comes from active_home()
+    # (hosthome.host_home()); this helper never resolves a home itself.
     return home / "substrate" / "onboarding.json"
 
 

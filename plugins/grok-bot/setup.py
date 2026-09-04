@@ -18,8 +18,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# GROK-BOT HOST-HOME PATCH: home resolution flows through
+# substrate_core.hosthome.grok_home() (SUBSTRATE_HOME > GROK_HOME > ~/.grok).
+# No HERMES_HOME, no installed-layout walk.
+from substrate_core import hosthome
 from substrate_core import onboarding
-from substrate_core.client import _profile_homes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,8 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--name", help="display name shown for this agent in Substrate")
     parser.add_argument("--no-wait", action="store_true", help="print the approval link and exit")
     args = parser.parse_args(argv)
-    homes = _profile_homes()
-    active_home = (homes[0] if homes else Path.home() / ".grok").resolve()
+    active_home = hosthome.grok_home().resolve()
     home = (args.grok_home or active_home).resolve()
     if home != active_home:
         print(json.dumps({"status": "failed", "error": "active_profile_mismatch"}), flush=True)

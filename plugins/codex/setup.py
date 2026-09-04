@@ -15,14 +15,20 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+# CODEX HOST-HOME PATCH: home resolution flows through
+# substrate_core.hosthome.codex_home() (SUBSTRATE_HOME > CODEX_HOME >
+# ~/.codex). No HERMES_HOME, no installed-layout walk. _stored_origin() below
+# is likewise hosthome-based via substrate_core.client.
 try:
     from substrate_core import contract
+    from substrate_core import hosthome
     from substrate_core import onboarding
-    from substrate_core.client import _profile_homes, _stored_origin, tls_context
+    from substrate_core.client import _stored_origin, tls_context
 except ImportError:
     from .substrate_core import contract
+    from .substrate_core import hosthome
     from .substrate_core import onboarding
-    from .substrate_core.client import _profile_homes, _stored_origin, tls_context
+    from .substrate_core.client import _stored_origin, tls_context
 
 CLIENT_ID = "substrate-hermes"
 SCOPES = "capture retrieve"
@@ -222,8 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--origin")
     parser.add_argument("--name", help="display name shown for this agent in Substrate")
     args = parser.parse_args(argv)
-    homes = _profile_homes()
-    active_home = (homes[0] if homes else Path.home() / ".codex").resolve()
+    active_home = hosthome.codex_home().resolve()
     home = (args.codex_home or args.hermes_home or active_home).resolve()
     if home != active_home:
         print(json.dumps({"status": "failed", "error": "active_profile_mismatch"}), flush=True)

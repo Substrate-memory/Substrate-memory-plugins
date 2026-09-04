@@ -29,23 +29,18 @@ class ClientError(RuntimeError):
 
 def _profile_homes() -> list[Path]:
     """Return likely active Codex homes without inspecting other profiles."""
-    # CODEX HOST-HOME PATCH (only intentional difference from plugins/substrate/client.py):
-    # resolve SUBSTRATE_HOME > CODEX_HOME, the installed plugins/codex layout,
-    # then the ~/.codex profile home. All server-compatible behavior (CLIENT
-    # allowlist, limits, validation) is unchanged.
-    values: list[Path] = []
-    for override in ("SUBSTRATE_HOME", "CODEX_HOME", "HERMES_HOME"):
-        configured = os.environ.get(override, "").strip()
-        if configured:
-            values.append(Path(configured).expanduser())
-    location = Path(__file__).resolve()
-    # Installed layout: <CODEX_HOME>/plugins/codex/substrate_core/client.py.
-    if location.parent.name == "substrate_core" and location.parent.parent.name == "codex":
-        values.append(location.parents[2])
-    # Installed layout: <HERMES_HOME>/plugins/substrate/client.py (kept for reference).
-    if location.parent.name == "substrate" and location.parent.parent.name == "plugins":
-        values.append(location.parents[2])
-    values.append(Path.home() / ".codex")
+    # CODEX HOST-HOME PATCH (only intentional difference from
+    # plugins/substrate/client.py): resolve via hosthome.codex_home()
+    # (SUBSTRATE_HOME > CODEX_HOME > ~/.codex). No HERMES_HOME, no
+    # <home>/plugins/substrate installed-layout walk, no ~/.hermes fallback.
+    # A repo checkout path must never resolve as a home. All
+    # server-compatible behavior (CLIENT allowlist, limits, validation) is
+    # unchanged.
+    try:
+        from .hosthome import codex_home
+    except ImportError:  # standalone script layout
+        from hosthome import codex_home  # type: ignore[no-redef]
+    values: list[Path] = [codex_home()]
     # Never inspect a fallback profile when an active/configured profile is known.
     selected = values[:1]
     result: list[Path] = []
