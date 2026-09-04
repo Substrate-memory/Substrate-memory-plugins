@@ -24,7 +24,8 @@ def plugin_version() -> str:
 def test_root_readme_describes_the_released_install() -> None:
     readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
     assert "plugins/substrate" in readme
-    assert "--ref v0.3.0" in readme
+    assert "refs/tags/v0.3.0" in readme
+    assert "--ref \"$substrate_ref\"" in readme
     assert "Hermes 0.21" in readme
     assert "PLUGIN_SHA256_PENDING" not in readme
     assert "is not published yet" not in readme
