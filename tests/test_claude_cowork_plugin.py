@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -358,3 +359,67 @@ def test_no_secret_ever_appears_in_output(monkeypatch):
         "verification_uri_complete": "https://x.example/oauth/device?user_code=AB-CD",
         "user_code": "AB-CD", "expires_in": 60, "agent_name": "cowork"})
     assert "AB-CD" in notice
+
+
+# --- credential-location regression (live parity defect) ---------------------
+
+def _cowork_roundtrip_token(suffix):
+    return "roundtrip-cw-" + suffix + "-" + "0123456789abcdef" * 2
+
+
+def test_onboarding_persists_token_file_found_by_client(monkeypatch, tmp_path, capsys, caplog):
+    home = tmp_path / "cred-home"
+    monkeypatch.setenv("SUBSTRATE_HOME", str(home))
+    monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
+    token = _cowork_roundtrip_token("file")
+    monkeypatch.setattr(cowork_onboarding, "token_is_valid", lambda origin, tok: tok == token)
+    cowork_onboarding._save_state(home, {"phase": "pending"})
+    manager = cowork_onboarding.OnboardingManager(home, "https://127.0.0.1:9/")
+    assert manager._complete({"access_token": token, "token_type": "Bearer"}) is False
+    credential = home / "substrate" / "credentials" / "access-token"
+    env_file = home / ".env"
+    assert credential.is_file() and env_file.is_file()
+    assert stat.S_IMODE(os.stat(credential).st_mode) == 0o600
+    assert stat.S_IMODE(os.stat(env_file).st_mode) == 0o600
+    assert stat.S_IMODE(os.stat(credential.parent).st_mode) == 0o700
+    assert credential.read_text(encoding="utf-8").strip() == token
+    os.environ.pop("SUBSTRATE_API_KEY", None)
+    try:
+        assert cowork_client._stored_api_key() == token
+    finally:
+        os.environ.pop("SUBSTRATE_API_KEY", None)
+    state = cowork_onboarding._load_state(home)
+    assert token not in json.dumps(state)
+    assert token not in json.dumps(manager.describe(state))
+    captured = capsys.readouterr()
+    assert token not in captured.out and token not in captured.err
+    assert token not in caplog.text
+
+
+def test_stored_key_falls_back_to_dotenv(monkeypatch, tmp_path, capsys, caplog):
+    home = tmp_path / "env-home"
+    monkeypatch.setenv("SUBSTRATE_HOME", str(home))
+    monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
+    token = _cowork_roundtrip_token("env")
+    cowork_onboarding.write_env_key(home, token)
+    credential = home / "substrate" / "credentials" / "access-token"
+    if credential.exists():
+        credential.unlink()
+    assert cowork_client._stored_api_key() == token
+    env_file = home / ".env"
+    os.chmod(env_file, 0o640)
+    assert cowork_client._stored_api_key() == ""
+    os.chmod(env_file, 0o600)
+    assert cowork_client._stored_api_key() == token
+    env_file.unlink()
+    real = home / "real.env"
+    real.write_text("SUBSTRATE_API_KEY=" + token + "\n", encoding="utf-8")
+    os.chmod(real, 0o600)
+    os.symlink(real, env_file)
+    assert cowork_client._stored_api_key() == ""
+    env_file.unlink()
+    cowork_onboarding.write_env_key(home, token)
+    assert cowork_client._stored_api_key() == token
+    captured = capsys.readouterr()
+    assert token not in captured.out and token not in captured.err
+    assert token not in caplog.text

@@ -108,6 +108,52 @@ def _secret_service_token(home: Path) -> str:
     return value if 0 < len(value) <= _MAX_TOKEN_BYTES else ""
 
 
+def _env_file_token(home: Path) -> str:
+    # CODEX HOST-HOME PATCH: <home>/.env fallback for SUBSTRATE_API_KEY. Hosts here do not
+    # load the profile .env into the plugin environment, while onboarding
+    # persists the key there; without this the plugin re-onboards forever.
+    # Same strict checks as _read_private_token: regular file, not a symlink,
+    # owned by the current uid, no group/other permission bits, bounded size;
+    # only the SUBSTRATE_API_KEY line is parsed and the value is never logged.
+    path = home / ".env"
+    try:
+        info = path.stat(follow_symlinks=False)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or path.is_symlink()
+            or info.st_size > _MAX_TOKEN_BYTES
+        ):
+            return ""
+        getuid = getattr(os, "getuid", None)
+        if callable(getuid) and (
+            info.st_uid != getuid() or stat.S_IMODE(info.st_mode) & 0o077
+        ):
+            return ""
+        text = path.read_text(encoding="utf-8-sig")
+    except (FileNotFoundError, OSError, UnicodeError):
+        return ""
+    value = ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("export"):
+            rest = stripped[len("export"):]
+            if rest[:1] in (" ", "\t"):
+                stripped = rest.strip()
+        name, sep, raw = stripped.partition("=")
+        if not sep or name.strip() != "SUBSTRATE_API_KEY":
+            continue
+        candidate = raw.strip()
+        if (
+            len(candidate) >= 2
+            and candidate[0] == candidate[-1]
+            and candidate[0] in ("'", '"')
+        ):
+            candidate = candidate[1:-1].strip()
+        value = candidate
+    value = value.strip()
+    return value if 0 < len(value) <= _MAX_TOKEN_BYTES else ""
+
+
 def _stored_api_key() -> str:
     """Resolve this plugin's token, then a secure legacy-plugin token for migration."""
     homes = _profile_homes()
@@ -119,6 +165,12 @@ def _stored_api_key() -> str:
             value = _read_private_token(home.joinpath(*relative))
             if value:
                 return value
+    # CODEX HOST-HOME PATCH: fall back to SUBSTRATE_API_KEY in the host profile <home>/.env
+    # written by onboarding. Same strict file checks as _read_private_token.
+    for home in homes:
+        value = _env_file_token(home)
+        if value:
+            return value
     for home in homes:
         value = _secret_service_token(home)
         if value:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -14,6 +16,8 @@ import _hostload  # noqa: E402
 
 _ld = _hostload.begin("grok-bot", [PLUGIN_DIR, _hostload.REPO / "plugins"])
 contract = _ld.core("contract")
+grok_client = _ld.core("client")
+grok_onboarding = _ld.core("onboarding")
 runtime = _ld.core("runtime")
 hermes_plugin = _ld.hermes("plugin")
 bridge = _ld.top("bridge.py")
@@ -142,3 +146,67 @@ def test_bridge_capture_never_blocks_or_raises(monkeypatch):
     bridge.session_end(session_id="s")
     bridge.session_reset(session_id="old", new_session_id="new")
     assert bridge.STATIC_MEMORY_PROMPT == hermes_plugin.STATIC_MEMORY_PROMPT
+
+
+# --- credential-location regression (live parity defect) ---------------------
+
+def _grok_roundtrip_token(suffix):
+    return "roundtrip-gk-" + suffix + "-" + "0123456789abcdef" * 2
+
+
+def test_onboarding_persists_token_file_found_by_client(monkeypatch, tmp_path, capsys, caplog):
+    home = tmp_path / "cred-home"
+    monkeypatch.setenv("SUBSTRATE_HOME", str(home))
+    monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
+    token = _grok_roundtrip_token("file")
+    monkeypatch.setattr(grok_onboarding, "token_is_valid", lambda origin, tok: tok == token)
+    grok_onboarding._save_state(home, {"phase": "pending"})
+    manager = grok_onboarding.OnboardingManager(home, "https://127.0.0.1:9/")
+    assert manager._complete({"access_token": token, "token_type": "Bearer"}) is False
+    credential = home / "substrate" / "credentials" / "access-token"
+    env_file = home / ".env"
+    assert credential.is_file() and env_file.is_file()
+    assert stat.S_IMODE(os.stat(credential).st_mode) == 0o600
+    assert stat.S_IMODE(os.stat(env_file).st_mode) == 0o600
+    assert stat.S_IMODE(os.stat(credential.parent).st_mode) == 0o700
+    assert credential.read_text(encoding="utf-8").strip() == token
+    os.environ.pop("SUBSTRATE_API_KEY", None)
+    try:
+        assert grok_client._stored_api_key() == token
+    finally:
+        os.environ.pop("SUBSTRATE_API_KEY", None)
+    state = grok_onboarding._load_state(home)
+    assert token not in json.dumps(state)
+    assert token not in json.dumps(manager.describe(state))
+    captured = capsys.readouterr()
+    assert token not in captured.out and token not in captured.err
+    assert token not in caplog.text
+
+
+def test_stored_key_falls_back_to_dotenv(monkeypatch, tmp_path, capsys, caplog):
+    home = tmp_path / "env-home"
+    monkeypatch.setenv("SUBSTRATE_HOME", str(home))
+    monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
+    token = _grok_roundtrip_token("env")
+    grok_onboarding.write_env_key(home, token)
+    credential = home / "substrate" / "credentials" / "access-token"
+    if credential.exists():
+        credential.unlink()
+    assert grok_client._stored_api_key() == token
+    env_file = home / ".env"
+    os.chmod(env_file, 0o640)
+    assert grok_client._stored_api_key() == ""
+    os.chmod(env_file, 0o600)
+    assert grok_client._stored_api_key() == token
+    env_file.unlink()
+    real = home / "real.env"
+    real.write_text("SUBSTRATE_API_KEY=" + token + "\n", encoding="utf-8")
+    os.chmod(real, 0o600)
+    os.symlink(real, env_file)
+    assert grok_client._stored_api_key() == ""
+    env_file.unlink()
+    grok_onboarding.write_env_key(home, token)
+    assert grok_client._stored_api_key() == token
+    captured = capsys.readouterr()
+    assert token not in captured.out and token not in captured.err
+    assert token not in caplog.text

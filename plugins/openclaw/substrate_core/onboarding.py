@@ -260,6 +260,15 @@ def write_env_key(home: Path, token: str) -> None:
     # The file now holds a bearer credential; always tighten to owner-only.
     _atomic_private_write(env_path, text, mode=0o600)
 
+# OPENCLAW HOST-HOME PATCH: helper implementing the multi-host spec
+# credential-location rule for this host. Same owner-only atomic write
+# semantics as the token-file save in the Hermes setup flow.
+def _store_token_file(home: Path, token: str) -> None:
+    if not token or len(token) > 16_384:
+        raise OnboardingError("invalid_response")
+    _atomic_private_write(home / "substrate" / "credentials" / "access-token", token)
+
+
 
 def _state_path(home: Path) -> Path:
     return home / "substrate" / "onboarding.json"
@@ -528,6 +537,10 @@ class OnboardingManager:
             return False
         try:
             write_env_key(self.home, token)
+            # OPENCLAW HOST-HOME PATCH: mirror the key into the 0600
+            # token file the vendored client reads first, per the multi-host
+            # spec credential-location rule. The .env write above is unchanged.
+            _store_token_file(self.home, token)
             _save_origin(self.home, self.origin)
         except OnboardingError as exc:
             _save_state(self.home, {**state, "phase": "failed", "error_class": exc.category})
