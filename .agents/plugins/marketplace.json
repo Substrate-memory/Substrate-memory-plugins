@@ -1,0 +1,20 @@
+{
+  "name": "substrate-memory",
+  "interface": {
+    "displayName": "Substrate Memory"
+  },
+  "plugins": [
+    {
+      "name": "substrate",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

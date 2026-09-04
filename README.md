@@ -1,8 +1,13 @@
 # Substrate Memory Plugins
 
 This is the official public repository for the Substrate memory plugin for
-Hermes 0.21.x. The current release is
-[`v0.3.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.3.0).
+Hermes 0.21.x. The current Hermes release is
+[`v0.3.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.3.0),
+which keeps working. The next release `v0.4.0` (root `VERSION`, branch
+`feat/multi-host-plugins`) publishes the whole multi-host plugin set — the Hermes
+`substrate` content is unchanged since `v0.3.0` (byte-identical `substrate.zip`)
+while the five host adapters ship at `0.4.0`. New-plugin installs pin `v0.4.0`;
+Hermes installs below keep working on either tag.
 
 ## Install with a Hermes agent
 
@@ -51,6 +56,34 @@ TLS verification must remain enabled. The plugin supplements the host trust stor
 unmodified public ISRG Root X1 and X2 certificates for current Let's Encrypt chains. It
 never trusts a replacement leaf certificate or a private certificate.
 
+## Install on other hosts
+
+Every supported host installs from this same repository. The user only needs to say:
+
+```text
+Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins
+```
+
+to an agent running on that host. The installing agent follows the linked runbook for
+its host: it installs the plugin subdirectory (never the repository root), lets device
+onboarding run on first use, and verifies with `memory_search` in a new turn.
+
+| Host | Install (one line) | Runbook |
+|---|---|---|
+| Hermes 0.21.x | Say the sentence above to a Hermes agent | `plugins/substrate/README.md` |
+| Claude Code | Say the sentence above in Claude Code (`claude plugin install substrate-memory@substrate-marketplace`) | [plugins/claude-code/INSTALL.md](plugins/claude-code/INSTALL.md) |
+| Claude Cowork | Say the sentence above in Cowork (`claude plugin install substrate-cowork`) | [plugins/claude-cowork/INSTALL.md](plugins/claude-cowork/INSTALL.md) |
+| Codex CLI | `sh plugins/codex/install.sh` from a sparse checkout, then `codex plugin add substrate@substrate-memory` | [plugins/codex/INSTALL.md](plugins/codex/INSTALL.md) |
+| Grok | Say the sentence above to a Grok agent, or run `sh plugins/grok-bot/install.sh` | [plugins/grok-bot/INSTALL.md](plugins/grok-bot/INSTALL.md) |
+| OpenClaw | `openclaw plugins install --link ./Substrate-memory-plugins/plugins/openclaw --force`, then `openclaw plugins enable substrate` | [plugins/openclaw/INSTALL.md](plugins/openclaw/INSTALL.md) |
+
+Behavior is the same on every host: first use starts RFC 8628 device authorization
+and the exact `verification_uri_complete` approval URL is shown through the agent
+(never paste a key into chat), the tenant-scoped key is stored privately in the
+active profile, and every failure is fail-closed with a bounded error class. TLS
+verification stays enabled everywhere, supplemented only by the bundled public ISRG
+roots.
+
 ## Current plugin
 
 The `substrate` plugin is a thin, standard-library-only adapter. It provides:
@@ -89,6 +122,11 @@ uv run --frozen --extra dev python scripts/build_release.py --check
 ## Repository map
 
 - `plugins/substrate/` — the Hermes 0.21.x retrieval plugin and setup flow.
+- `plugins/claude-code/` — the Claude Code host adapter (MCP server plus hooks).
+- `plugins/claude-cowork/` — the Claude Cowork host adapter (MCP server plus hooks).
+- `plugins/codex/` — the Codex CLI host adapter (MCP server, hooks, skill).
+- `plugins/grok-bot/` — the Grok host adapter (MCP server plus turn bridge).
+- `plugins/openclaw/` — the OpenClaw adapter (zero-dependency JS entry plus Python core).
 - `scripts/` — deterministic release builder and public-hygiene check.
 - `tests/` — contract, behavior, transport, onboarding, and packaging tests.
 - `docs/` — architecture, ownership, and threat-model contracts.

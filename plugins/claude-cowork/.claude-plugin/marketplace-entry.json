@@ -1,0 +1,11 @@
+{
+  "name": "substrate-cowork",
+  "description": "Substrate memory for Claude Cowork: bounded per-turn recall plus nonblocking completed-turn capture",
+  "author": {
+    "name": "Sightline Technologies Inc"
+  },
+  "category": "productivity",
+  "source": "./plugins/claude-cowork",
+  "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "version": "0.4.0"
+}

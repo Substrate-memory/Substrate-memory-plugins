@@ -1,0 +1,31 @@
+{
+  "name": "substrate-marketplace",
+  "description": "Substrate memory plugins for Claude Code",
+  "owner": {
+    "name": "Sightline Technologies Inc"
+  },
+  "plugins": [
+    {
+      "name": "substrate-memory",
+      "description": "Substrate memory: bounded pre-turn recall plus background capture (memory_search, memory_expand, memory_evidence)",
+      "version": "0.4.0",
+      "author": {
+        "name": "Sightline Technologies Inc"
+      },
+      "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+      "source": "./plugins/claude-code",
+      "category": "productivity"
+    },
+    {
+      "name": "substrate-cowork",
+      "description": "Substrate memory for Claude Cowork: bounded per-turn recall plus nonblocking completed-turn capture",
+      "author": {
+        "name": "Sightline Technologies Inc"
+      },
+      "category": "productivity",
+      "source": "./plugins/claude-cowork",
+      "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+      "version": "0.4.0"
+    }
+  ]
+}

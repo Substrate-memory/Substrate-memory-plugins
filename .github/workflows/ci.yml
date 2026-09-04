@@ -58,6 +58,19 @@ jobs:
       - run: uv run --frozen --extra dev ruff check .
       - run: uv run --frozen --extra dev python -m compileall -q plugins scripts
       - run: uv run --frozen --extra dev python -m pytest -q
+      - run: node --check plugins/openclaw/index.js
+      - name: Validate every manifest parses as JSON
+        run: |
+          python3 - <<'EOF'
+          import json
+          from pathlib import Path
+          skip = {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", "dist", "htmlcov", "node_modules"}
+          files = sorted(p for p in Path(".").rglob("*.json") if not any(part in skip for part in p.parts))
+          assert files, "no JSON files found"
+          for path in files:
+              json.loads(path.read_text(encoding="utf-8"))
+          print(f"OK: {len(files)} JSON manifests parse")
+          EOF
       - run: uv run --frozen --extra dev python scripts/build_release.py
       - run: uv run --frozen --extra dev python scripts/build_release.py --check
 

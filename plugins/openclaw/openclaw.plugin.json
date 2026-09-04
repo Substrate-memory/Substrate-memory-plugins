@@ -1,0 +1,45 @@
+{
+  "id": "substrate",
+  "name": "Substrate Memory",
+  "version": "0.4.0",
+  "description": "Substrate retrieval and completed-turn capture for OpenClaw (memory_search, memory_expand, memory_evidence). Device onboarding plus the 0600 token file is the supported auth path; never store secrets in plugin config (openclaw.json is plaintext).",
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "memory_search",
+      "memory_expand",
+      "memory_evidence"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "server": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Substrate server connection. Explicit SUBSTRATE_* env vars always win.",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Substrate API origin (maps to SUBSTRATE_API_URL)."
+          },
+          "agentName": {
+            "type": "string",
+            "description": "Agent display name (maps to SUBSTRATE_AGENT_NAME)."
+          }
+        }
+      },
+      "agentName": {
+        "type": "string",
+        "description": "Agent display name (maps to SUBSTRATE_AGENT_NAME)."
+      },
+      "python": {
+        "type": "string",
+        "description": "Python interpreter for the vendored core (default: python3). Lowest precedence: SUBSTRATE_PYTHON env wins, then this key."
+      }
+    }
+  }
+}

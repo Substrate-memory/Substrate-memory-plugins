@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.4.0
+
+- First multi-host release of the plugin set (release version `0.4.0`, read from
+  the root `VERSION` file): one immutable tag publishes six deterministic
+  archives (`substrate.zip`, `claude-code.zip`, `claude-cowork.zip`, `codex.zip`,
+  `grok-bot.zip`, `openclaw.zip`) plus a single `SHA256SUMS`.
+- Ship the five new host adapters at manifest version `0.4.0`: `plugins/claude-code/`
+  (Claude Code), `plugins/claude-cowork/` (Claude Cowork), `plugins/codex/`
+  (Codex CLI), `plugins/grok-bot/` (Grok Build CLI / MCP-capable harness), and
+  `plugins/openclaw/` (OpenClaw).
+- Keep the Hermes reference plugin (`plugins/substrate/`) frozen at content
+  version `0.3.0`: its bytes and its `substrate.zip` archive are identical to
+  the `v0.3.0` release.
+- Include the two live fixes found against checkouts without explicit home
+  variables: `78c1549` credential-location parity (persist the token file and
+  read the profile `.env` fallback so first-use onboarding does not loop) and
+  `2b23b52` home resolution (route all vendored home resolution through the
+  per-host `hosthome` modules so state lands in the host home, never the repo
+  checkout).
+
+## Unreleased
+
+- Add self-contained host adapters with tool, redaction, envelope, onboarding,
+  and fail-closed parity to the Hermes reference plugin (still `0.3.0`, still
+  frozen under `plugins/substrate/`): `plugins/claude-code/`,
+  `plugins/claude-cowork/`, `plugins/codex/`, `plugins/grok-bot/`, and
+  `plugins/openclaw/`, each with its native manifest, `README.md`, `INSTALL.md`,
+  and offline test file.
+- Merge the Claude marketplace entries (`substrate-memory` for Claude Code,
+  `substrate-cowork` for Cowork) into the root `.claude-plugin/marketplace.json`
+  and add the root `.agents/plugins/marketplace.json` entry for the Codex
+  Git-URL marketplace flow.
+- Isolate the per-host test modules with `tests/_hostload.py` plus
+  `tests/conftest.py` so the full suite is green in any collection order.
+- Cover the new plugins in CI (full pytest suite, `node --check` for the OpenClaw
+  adapter, JSON-parse validation of every manifest).
+
 ## 0.3.0
 
 - First full release of the `substrate` plugin for Hermes 0.21.x: one-prompt install

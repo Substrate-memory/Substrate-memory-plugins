@@ -1,0 +1,34 @@
+{
+  "name": "substrate",
+  "version": "0.4.0",
+  "description": "Substrate memory: bounded turn context, completed-turn capture, memory_search, memory_expand, memory_evidence",
+  "author": {
+    "name": "Sightline Technologies Inc",
+    "url": "https://github.com/Substrate-memory"
+  },
+  "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "repository": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "retrieval",
+    "substrate",
+    "knowledge-base"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Substrate Memory",
+    "shortDescription": "Cross-session memory: recall facts, capture turns",
+    "longDescription": "Substrate memory for Codex: bounded per-turn context, nonblocking completed-turn capture, and memory_search, memory_expand, and memory_evidence tools.",
+    "developerName": "Sightline Technologies Inc",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+    "defaultPrompt": [
+      "Search Substrate memory before irreversible actions"
+    ]
+  }
+}

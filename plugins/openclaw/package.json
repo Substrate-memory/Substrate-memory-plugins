@@ -1,0 +1,20 @@
+{
+  "name": "@substrate-memory/openclaw-substrate",
+  "version": "0.4.0",
+  "description": "Substrate memory plugin for OpenClaw (zero-dependency JS adapter + vendored stdlib-only Python core).",
+  "type": "module",
+  "main": "./index.js",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {},
+  "scripts": {
+    "test": "node --check index.js && printf '{\"command\": \"bogus\", \"payload\": {}}' | python3 substrate_core/bridge.py"
+  },
+  "license": "MIT"
+}
