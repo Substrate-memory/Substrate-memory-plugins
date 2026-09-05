@@ -90,6 +90,34 @@ def test_plugin_manifest_matches_release_version() -> None:
     assert plugin_version() == "0.4.0"
 
 
+def test_release_metadata_permits_mixed_set_versions() -> None:
+    """0.5.0 set / Hermes 0.4.0 / adapters 0.4.0: pins must match the plan."""
+    import json
+    import re
+
+    version = (REPOSITORY_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+    assert version == "0.5.0"
+    assert plugin_version() == "0.4.0"
+    manifests = [
+        "plugins/claude-code/.claude-plugin/plugin.json",
+        "plugins/claude-cowork/.claude-plugin/plugin.json",
+        "plugins/codex/.codex-plugin/plugin.json",
+        "plugins/grok-bot/plugin.json",
+        "plugins/openclaw/openclaw.plugin.json",
+    ]
+    assert len(manifests) == 5
+    for rel in manifests:
+        data = json.loads((REPOSITORY_ROOT / rel).read_text(encoding="utf-8"))
+        assert data["version"] == "0.4.0", rel
+    # The Release workflow must pin the frozen adapters to 0.4.0 explicitly
+    # and must not require them to equal the repo-level release version.
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert 'test "$hermes_version" = "0.4.0"' in workflow
+    assert ')" = "0.4.0"' in workflow
+    assert ')" = "$version"' not in workflow
+
+
 def test_other_host_archives_stay_byte_identical_to_0_4_0() -> None:
     """The five non-Hermes adapters are frozen: 0.5.0 must not alter them."""
     from build_release import build_archive_bytes_for, digest
