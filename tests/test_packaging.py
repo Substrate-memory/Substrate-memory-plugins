@@ -24,9 +24,10 @@ def plugin_version() -> str:
 def test_root_readme_describes_the_released_install() -> None:
     readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
     assert "plugins/substrate" in readme
-    assert "refs/tags/v0.3.0" in readme
+    assert "refs/tags/v0.5.0" in readme
     assert "--ref \"$substrate_ref\"" in readme
     assert "Hermes 0.21" in readme
+    assert "verification_uri_complete" in readme
     assert "PLUGIN_SHA256_PENDING" not in readme
     assert "is not published yet" not in readme
 
@@ -66,7 +67,17 @@ def test_archive_is_deterministic_and_release_clean(tmp_path: Path) -> None:
         assert names == sorted(names)
         assert f"{PREFIX}LICENSE" in names
         assert f"{PREFIX}plugin.yaml" in names
-        assert f"{PREFIX}plugin.py" in names
+        assert f"{PREFIX}__init__.py" in names
+        assert f"{PREFIX}onboard.py" in names
+        assert f"{PREFIX}setup.py" in names
+        assert f"{PREFIX}CONTRACT.md" in names
+        assert f"{PREFIX}src/substrate/plugin.py" in names
+        assert f"{PREFIX}src/substrate/spool.py" in names
+        assert f"{PREFIX}src/substrate/onboarding.py" in names
+        assert f"{PREFIX}src/substrate/credentials.py" in names
+        assert f"{PREFIX}src/substrate/client.py" in names
+        assert f"{PREFIX}src/substrate/contract.py" in names
+        assert f"{PREFIX}src/substrate/contract/envelope-fixtures.json" in names
         for info in archive.infolist():
             assert info.date_time == FIXED_TIMESTAMP
             assert info.create_system == 3
@@ -76,4 +87,85 @@ def test_archive_is_deterministic_and_release_clean(tmp_path: Path) -> None:
 
 
 def test_plugin_manifest_matches_release_version() -> None:
-    assert plugin_version() == "0.3.0"
+    assert plugin_version() == "0.4.0"
+
+
+def test_release_metadata_permits_mixed_set_versions() -> None:
+    """0.5.0 set / Hermes 0.4.0 / adapters 0.4.0: pins must match the plan."""
+    import json
+    import re
+
+    version = (REPOSITORY_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+    assert version == "0.5.0"
+    assert plugin_version() == "0.4.0"
+    manifests = [
+        "plugins/claude-code/.claude-plugin/plugin.json",
+        "plugins/claude-cowork/.claude-plugin/plugin.json",
+        "plugins/codex/.codex-plugin/plugin.json",
+        "plugins/grok-bot/plugin.json",
+        "plugins/openclaw/openclaw.plugin.json",
+    ]
+    assert len(manifests) == 5
+    for rel in manifests:
+        data = json.loads((REPOSITORY_ROOT / rel).read_text(encoding="utf-8"))
+        assert data["version"] == "0.4.0", rel
+    # The Release workflow must pin the frozen adapters to 0.4.0 explicitly
+    # and must not require them to equal the repo-level release version.
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert 'test "$hermes_version" = "0.4.0"' in workflow
+    assert ')" = "0.4.0"' in workflow
+    assert ')" = "$version"' not in workflow
+
+
+def test_other_host_archives_stay_byte_identical_to_0_4_0() -> None:
+    """The five non-Hermes adapters are frozen: 0.5.0 must not alter them."""
+    from build_release import build_archive_bytes_for, digest
+
+    frozen = {
+        "claude-code": "84d4b87e4e6ce713630bbd78fbea5f606768a66920fb2e3d88819e4965aff6ff",
+        "claude-cowork": "c1d3d60c8dcb993c42046a4241c4a569a70ff3142760199a32dc2e3b44465b3e",
+        "codex": "8bb96b72d217bde9bf5403185547fd8f51ebbf01cfbbfc0438672888f25bf416",
+        "grok-bot": "e37e67daca5de58eca4057b0119889b9d12deb2f5364a8e046562cfbb316ab21",
+        "openclaw": "0059fd81135b1eacd7f36801caa54533605400f2e6374909158cfe9e3dd55976",
+    }
+    for name, sha in frozen.items():
+        assert digest(build_archive_bytes_for(name)) == sha, name
+
+
+def test_archives_never_ship_private_or_generated_files(tmp_path: Path) -> None:
+    from build_release import PLUGINS, build_archive_bytes_for
+
+    forbidden_fragments = (
+        "__pycache__/",
+        ".pytest_cache/",
+        ".ruff_cache/",
+        ".venv/",
+        "/tests/",
+        "/test/",
+        "htmlcov/",
+        "node_modules/",
+        "/dist/",
+        "/build/",
+        ".env",
+    )
+    for name in PLUGINS:
+        # Tests must work on a clean checkout before the release build exists.
+        archive_path = tmp_path / f"{name}.zip"
+        archive_path.write_bytes(build_archive_bytes_for(name))
+        with zipfile.ZipFile(archive_path) as archive:
+            members = archive.namelist()
+        for member in members:
+            assert not member.endswith((".pyc", ".pyo")), member
+            for fragment in forbidden_fragments:
+                assert fragment not in member, member
+        # No absolute filesystem literals or build-machine checkout paths
+        # inside shipped code (doc comments may still show example paths).
+        with zipfile.ZipFile(archive_path) as archive:
+            for member in members:
+                assert not member.startswith("/"), member
+                payload = archive.read(member)
+                if member.endswith(".py"):
+                    text = payload.decode("utf-8")
+                    assert 'Path("/' not in text, member
+                    assert str(REPOSITORY_ROOT) not in text, member

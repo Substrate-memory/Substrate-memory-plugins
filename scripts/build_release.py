@@ -49,6 +49,43 @@ PLUGINS: dict[str, str] = {
 ARCHIVE_NAMES: list[str] = [f"{name}.zip" for name in PLUGINS]
 
 
+# Directory and file names that must never ship in a release archive
+# (caches, test trees, private files, env files, VCS metadata). This is a
+# deny-list on top of the per-plugin source directory: the release under
+# test must still enumerate its exact allowed members.
+EXCLUDED_DIR_NAMES = frozenset({
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "venv",
+    ".git",
+    ".hg",
+    "tests",
+    "test",
+    "htmlcov",
+    "node_modules",
+    "dist",
+    "build",
+})
+EXCLUDED_SUFFIXES = (".pyc", ".pyo")
+EXCLUDED_FILE_NAMES = frozenset({".env"})
+
+
+def _excluded(path: Path, source_dir: Path) -> bool:
+    if path.is_symlink():
+        return True
+    if path.name in EXCLUDED_FILE_NAMES:
+        return True
+    if path.name.endswith(EXCLUDED_SUFFIXES):
+        return True
+    try:
+        relative_parts = path.relative_to(source_dir).parts
+    except ValueError:
+        return True
+    return any(part in EXCLUDED_DIR_NAMES for part in relative_parts)
+
+
 def collect_members_for(source_dir: Path, prefix: str) -> list[tuple[str, bytes]]:
     members: list[tuple[str, bytes]] = []
     license_path = REPOSITORY_ROOT / "LICENSE"
@@ -58,7 +95,7 @@ def collect_members_for(source_dir: Path, prefix: str) -> list[tuple[str, bytes]
         if not path.is_file():
             continue
         relative = path.relative_to(source_dir).as_posix()
-        if "__pycache__" in path.parts or relative.endswith((".pyc", ".pyo")):
+        if _excluded(path, source_dir):
             continue
         members.append((prefix + relative, path.read_bytes()))
     members.sort(key=lambda item: item[0])

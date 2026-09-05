@@ -151,7 +151,7 @@ def test_core_constants_parity():
 
 
 def test_vendored_files_byte_identical():
-    reference = REPO / "plugins" / "substrate"
+    reference = REPO / "tests" / "_hermes_030"
     for name in ("contract.py", "ca/isrg-root-x1.pem", "ca/isrg-root-x2.pem",
                  "contract/envelope-fixtures.json"):
         assert (PLUGIN_DIR / "substrate_core" / name).read_bytes() == (

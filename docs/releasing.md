@@ -5,14 +5,15 @@ One tag publishes the whole multi-host plugin set.
 
 ## Versioning
 
-- The repo-level release version lives in the root `VERSION` file (currently `0.4.0`).
+- The repo-level release version lives in the root `VERSION` file (currently `0.5.0`).
   The Release workflow reads the tag version from `VERSION`, never from a hard-coded string.
-- `plugins/substrate/` (the Hermes plugin) is frozen at content version `0.3.0`:
-  its `plugin.yaml` version and its `substrate.zip` bytes are unchanged by the `0.4.0`
-  release. The release version covers the plugin set, not the Hermes plugin content.
+- `plugins/substrate/` (the Hermes plugin) is at content version `0.4.0`:
+  its `plugin.yaml` version and its `substrate.zip` bytes are new in the `0.5.0`
+  release (durable v5 port). The release version covers the plugin set, not
+  the Hermes plugin content.
 - The five host adapters (`plugins/claude-code/`, `plugins/claude-cowork/`,
   `plugins/codex/`, `plugins/grok-bot/`, `plugins/openclaw/`) carry the release
-  version in their native manifests (currently `0.4.0`).
+  version in their native manifests (currently `0.4.0`, byte-identical to `v0.4.0`).
 
 ## Process
 
@@ -40,6 +41,10 @@ One tag publishes the whole multi-host plugin set.
 - `v0.4.0` provides all six plugins. The `substrate.zip` bytes inside `v0.4.0`
   are identical to the `v0.3.0` asset; the other five archives are new at `0.4.0`.
   New-plugin installs pin `v0.4.0`; Hermes installs may use either tag.
+- `v0.5.0` provides all six plugins. The `substrate.zip` bytes are new
+  (Hermes content `0.4.0`, durable v5); the other five archives are
+  byte-identical to the `v0.4.0` assets. New installs pin `v0.5.0`; the
+  `v0.3.0` and `v0.4.0` tags stay published for rollback.
 
 ## Local verification
 

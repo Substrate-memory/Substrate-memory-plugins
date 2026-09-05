@@ -249,3 +249,40 @@ The plugin shapes every response through a per-route allowlist of top-level fiel
 - `responses.capabilities`, `responses.turn_context`, `responses.action_cues`, `responses.rules` — valid response bodies.
 
 Both test suites: every `valid` passes, every `invalid` fails with the listed category, the ACK table holds, `deterministic_event_id` reproduces `expected_event_id`, and `FIXTURE_SHA256 == sha256(file)`.
+
+## 12. Spool durability and ACK retirement (plugin appendix)
+
+Plugin-side operational rules. The wire contract above is unchanged
+(`contract_version: 1`); this section only states when the plugin retires a
+locally spooled item. The server copy of this file needs the same append.
+
+- LEDGER ACK (server -> plugin), additive to section 6:
+  `{"event_id": ..., "accepted": true, "stored": true, "status": "accepted",
+  "action": <published enum>, "handle": "m:<8-64 hex>"}`.
+  `handle` is present for kinds `memory_write` and `memory_forget`.
+- The plugin retires a spool item **iff** HTTP status is 200 **and**
+  `stored` is boolean `true` **and** `event_id` equals the posted id **and**
+  `action` is one of `stored | duplicate | sealed | queued`
+  (`contract.ack_ok` / `ackOk`). Anything else — including a bare 200 with
+  another shape — is a transient failure: the claim is released and the
+  sender backs off. The item is never retired on a bare 200.
+- Priorities: explicit operations (`memory_write`, `memory_forget`,
+  `consent`) first, live turn/boundary capture next, catch-up next, history
+  replay last. Higher priority before lower; FIFO within a priority.
+- Eviction selects the oldest queued item at the lowest importance level
+  that the arrival may displace (same-or-lower for ordinary arrivals,
+  strictly-lower for explicit arrivals), never an in-flight (claimed) item.
+  An explicit arrival is never silently dropped: with no lower-priority room
+  the caller gets a durable `spool_full` failure and the operation stays
+  unacknowledged.
+- Durable SQLite `spool_counters(kind, capture_origin, priority, outcome,
+  item_count, byte_count, updated_at)`, updated in the same transaction as
+  enqueue, eviction, quarantine, claim, release, and ACK retirement, where
+  `outcome` is one of `enqueued | evicted | quarantined | delivered |
+  claimed | released | spool_full`. Every retired item therefore has a
+  matching ACK or an atomic durable eviction/quarantine counter.
+- Permanent delivery failures (400/404/409/413, bad responses) quarantine
+  the item with a durable counter; transient failures (timeout, transport,
+  401/403, 429, 5xx, malformed/mismatched ACKs) release the claim and back
+  off from 1 s (30 s for auth errors), doubling to 300 s with jitter,
+  honoring `Retry-After`.

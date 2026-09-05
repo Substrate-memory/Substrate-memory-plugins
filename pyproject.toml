@@ -24,6 +24,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "disk: durability validation that must run on real disk (not tmpfs)",
+]
 
 [tool.ruff]
 target-version = "py311"

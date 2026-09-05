@@ -1,54 +1,83 @@
-# Substrate memory for Hermes 0.21.x
+# Substrate memory for Hermes 0.21.0
 
-This is the current Substrate v5 retrieval plugin. The server owns storage, ranking,
-the associative editor, and evidence. The plugin caches no memory and fails closed.
+Durable v5 retrieval plugin. The server owns storage, ranking, the
+associative editor, and evidence. The plugin caches no retrieved memory and
+fails closed. Delivery is durable: capture and boundary events enqueue into
+a profile-local write-ahead spool (`<profile>/substrate/spool`, owner-only)
+at live priority, and explicit writes enqueue at explicit priority. Nothing
+is fire-and-forget. Captured turns include bounded redacted tool traffic
+(tool call arguments up to 4096 bytes, tool result excerpts up to 8192 bytes
+plus digest); system messages are never captured.
 
 ## Installing agents
 
 Install this directory, not the repository root:
 
 ```sh
-substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.3.0 | awk '{print $1}')"
+substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.5.0 | awk '{print $1}')"
 printf '%s\n' "$substrate_ref" | grep -Eq '^[0-9a-f]{40}$'
 hermes plugins install \
   Substrate-memory/Substrate-memory-plugins/plugins/substrate \
   --ref "$substrate_ref" --no-enable
 ```
 
-No manual credential setup is required. The plugin connects itself on first use:
+No manual credential setup is required. Connect the active profile with the
+bundled login CLI (standard library only, no `PYTHONPATH` needed):
 
-- it reuses a valid existing profile credential when one is present;
-- otherwise it starts RFC 8628 device authorization and shows the browser
-  approval link through the agent (`memory_search` or the first turn);
-- it polls for the tenant-scoped key, validates it with an authenticated
-  capabilities and search health check, and stores it privately as
-  `SUBSTRATE_API_KEY` in the active profile's `.env`;
-- it never asks the user to paste a key into chat;
-- TLS verification stays enabled, supplemented only by the pinned public
-  ISRG Root X1 and X2 trust anchors.
+```sh
+python <plugin-dir>/onboard.py start --json
+```
 
-Never print an access token. Never disable TLS verification. Never inspect another Hermes
-profile. After setup succeeds, disable `substrate_wiki`, clear `memory.provider`, enable
-`substrate`, restart the gateway, and verify `memory_search` in a new turn.
+When a `verification_uri_complete` link appears (from the login CLI, from
+`memory_search`, or on the first turn), present that exact clickable URL to
+the user. The user approves in their browser; the agent must never approve
+it for them or ask for a pasted key. Then wait for approval:
+
+```sh
+python <plugin-dir>/onboard.py poll --json
+python <plugin-dir>/onboard.py status --json
+```
+
+The plugin stores the tenant-scoped key privately in the active profile
+only (`<profile>/.env` plus `<profile>/substrate/credentials/access-token`,
+both owner-only). It never asks the user to paste a key into chat. If
+`memory_search` reports `authorization_required`, run the commands above
+and retry.
+
+TLS verification stays enabled with the host trust store. Never disable
+TLS verification, install a private certificate, or inspect another Hermes
+profile.
+
+After setup succeeds, disable `substrate_wiki` (if an old provider is
+installed), enable `substrate`, restart the gateway, and verify
+`memory_search` in a new turn. Do not change `memory.provider` before a
+memory call succeeds.
 
 ## Runtime
 
 The plugin registers:
 
 - `pre_llm_call` for validated turn context;
-- `post_llm_call` for nonblocking full completed-turn capture;
-- `memory_search`, `memory_expand`, and `memory_evidence`.
+- `post_llm_call`, fired once per turn by the host with the finalized
+  conversation (the sole live-capture entry point);
+- `on_session_end`, which fires at the end of every turn and intentionally
+  emits nothing;
+- `on_session_finalize` for the true content-free session-end boundary;
+- `on_session_reset`, fired with the new session id after rotation;
+- `subagent_start` / `subagent_stop` for parent-routed capture;
+- `memory_search`, `memory_expand`, and `memory_evidence`;
+- `memory_remember` (`text` plus `durability` in `durable`,
+  `time_bounded`, `transient`), which returns the server's `m:` handle;
+- `memory_forget` (exactly one handle plus a required non-empty reason),
+  which marks one memory atom as no longer true without deleting its
+  record or evidence.
 
-Optional overrides are `SUBSTRATE_API_URL`, `SUBSTRATE_API_KEY`,
-`SUBSTRATE_WIKI_ORIGIN`, and `SUBSTRATE_AGENT_NAME`. The agent name is what
-you and your agents see in the Substrate agent pane; the approval page lets
-you edit it before approving, and it can be renamed there later. The active profile's secure plugin state is used when these are
-unset.
+Optional overrides are `SUBSTRATE_API_URL`, `SUBSTRATE_API_KEY`, and
+`SUBSTRATE_AGENT_NAME`. The agent name is what you and your agents see in
+the Substrate agent pane; the approval page lets you edit it before
+approving, and it can be renamed there later.
 
-The bundled CA files are unmodified public ISRG roots, loaded in addition to system trust:
-
-- ISRG Root X1 SHA-256: `96:BC:EC:06:26:49:76:F3:74:60:77:9A:CF:28:C5:A7:CF:E8:A3:C0:AA:E1:1A:8F:FC:EE:05:C0:BD:DF:08:C6`
-- ISRG Root X2 SHA-256: `69:72:9B:8E:15:A8:6E:FC:17:7A:57:AF:B7:17:1D:FC:64:AD:D2:8C:2F:CA:8C:F1:50:7E:34:45:3C:CB:14:70`
-
-Wire schemas and limits are defined in [`CONTRACT.md`](CONTRACT.md). Runtime code uses only
-the Python standard library.
+Wire schemas and limits are defined in [`CONTRACT.md`](CONTRACT.md).
+Runtime code uses only the Python standard library. Supported host:
+Hermes 0.21.0 exactly (the tested version); do not install on an unverified
+host version and do not upgrade Hermes automatically.

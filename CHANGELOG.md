@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+- Durable v5 Hermes `substrate` plugin at content version `0.4.0`
+  (`substrate.zip` rebuilt from the new `src/`-layout tree with a
+  namespace-loader root scaffold): write-ahead spool with strict ACK
+  retirement, `memory_remember`/`memory_forget` write tools, true session
+  boundaries (`on_session_finalize`), session rotation
+  (`on_session_reset`), parent-routed subagent capture
+  (`subagent_start`/`subagent_stop`), and install-friendly device login
+  (`onboard.py start`/`status`/`poll --json` plus the `setup.py` compat
+  entry point) against the canonical `https://app.trysubstrate.co` origin.
+  Pre-login capture stays pending (never quarantined) until browser
+  approval; the tenant-scoped key is stored owner-only in the active
+  profile. No API key is requested or pasted at any step.
+- Keep the five host adapters (`claude-code`, `claude-cowork`, `codex`,
+  `grok-bot`, `openclaw`) byte-identical to the `v0.4.0` release assets.
+- Preserve the `v0.3.0` and `v0.4.0` tags and assets for rollback.
+
 ## 0.4.0
 
 - First multi-host release of the plugin set (release version `0.4.0`, read from
