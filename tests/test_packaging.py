@@ -133,8 +133,8 @@ def test_other_host_archives_stay_byte_identical_to_0_4_0() -> None:
         assert digest(build_archive_bytes_for(name)) == sha, name
 
 
-def test_archives_never_ship_private_or_generated_files() -> None:
-    from build_release import PLUGINS
+def test_archives_never_ship_private_or_generated_files(tmp_path: Path) -> None:
+    from build_release import PLUGINS, build_archive_bytes_for
 
     forbidden_fragments = (
         "__pycache__/",
@@ -150,7 +150,9 @@ def test_archives_never_ship_private_or_generated_files() -> None:
         ".env",
     )
     for name in PLUGINS:
-        archive_path = REPOSITORY_ROOT / "dist" / f"{name}.zip"
+        # Tests must work on a clean checkout before the release build exists.
+        archive_path = tmp_path / f"{name}.zip"
+        archive_path.write_bytes(build_archive_bytes_for(name))
         with zipfile.ZipFile(archive_path) as archive:
             members = archive.namelist()
         for member in members:
