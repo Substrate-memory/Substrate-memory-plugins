@@ -6,15 +6,20 @@ Compatibility has three independent axes: Hermes host, hosted Substrate capabili
 
 | Release | Plugin content | Host | Required hosted capabilities | Status |
 |---|---|---|---|---|
+| Release | Plugin content | Host | Required hosted capabilities | Status |
+|---|---|---|---|---|
 | v0.3.0 | Hermes `substrate` 0.3.0 | Hermes 0.21.x | contract v1 capabilities, device authorization, memory turn-context/search/expand/evidence, session completion | Released |
-| v0.4.0 | Hermes `substrate` 0.3.0 (bytes unchanged) + five host adapters at 0.4.0 | Hermes 0.21.x plus the multi-host table below | contract v1 capabilities, device authorization, memory turn-context/search/expand/evidence, session completion | Pending tag (branch `feat/multi-host-plugins`) |
+| v0.4.0 | Hermes `substrate` 0.3.0 (bytes unchanged) + five host adapters at 0.4.0 | Hermes 0.21.x plus the multi-host table below | contract v1 capabilities, device authorization, memory turn-context/search/expand/evidence, session completion | Released |
+| v0.5.0 | Hermes `substrate` 0.4.0 (durable v5: spool, write tools, login CLI) + five host adapters at 0.4.0 (bytes unchanged) | Hermes 0.21.x plus the multi-host table below | contract v1 capabilities, device authorization, memory turn-context/search/expand/evidence, memory write/forget ledger, session completion | Pending tag (branch `release/hermes-durability-v5`) |
 
 The `substrate` plugin installs with
-`hermes plugins install Substrate-memory/Substrate-memory-plugins/plugins/substrate --ref v0.3.0 --no-enable`,
-which keeps working: the `v0.4.0` tag carries the byte-identical `substrate.zip`,
-so Hermes installs may use `--ref v0.3.0` or the `v0.4.0` commit instead.
-It runs RFC 8628 device onboarding by itself, and registers `memory_search`, `memory_expand`,
-and `memory_evidence`. It never requires a pre-existing API key.
+`hermes plugins install Substrate-memory/Substrate-memory-plugins/plugins/substrate --ref v0.5.0 --no-enable`.
+Older installs pinned to `v0.3.0` or `v0.4.0` keep working and are preserved
+for rollback.
+It runs RFC 8628 device onboarding by itself (bundled `onboard.py`, or
+automatically on first use), and registers `memory_search`, `memory_expand`,
+`memory_evidence`, `memory_remember`, and `memory_forget`. It never requires
+a pre-existing API key.
 
 ## Failure behavior
 
@@ -26,10 +31,12 @@ capture events remain queued.
 ## Versioning
 
 - Plugin behavior follows semantic versioning.
-- The repo-level release version lives in the root `VERSION` file (currently `0.4.0`)
-  and covers the whole plugin set; the Hermes plugin content stays at `0.3.0`.
+- The repo-level release version lives in the root `VERSION` file (currently `0.5.0`)
+  and covers the whole plugin set; the Hermes plugin content is at `0.4.0`,
+  the host adapters at `0.4.0` (byte-identical to `v0.4.0`).
 - Releases are immutable Git tags (`v0.3.0` with attested `substrate.zip` and
-  `SHA256SUMS`; `v0.4.0` with all six attested archives plus `SHA256SUMS`).
+  `SHA256SUMS`; `v0.4.0` and `v0.5.0` with all six attested archives plus
+  `SHA256SUMS`).
 - Breaking server behavior requires a new protocol/schema identifier.
 - Rollback preserves profile-local state and credential custody.
 
@@ -44,7 +51,7 @@ bundled public ISRG roots.
 
 | Plugin directory | Host | Host version | Plugin version | Status |
 |---|---|---|---|---|
-| `plugins/substrate/` | Hermes | 0.21.x | 0.3.0 (frozen, unchanged since v0.3.0) | Released |
+| `plugins/substrate/` | Hermes | 0.21.x | 0.4.0 (durable v5) | Supported |
 | `plugins/claude-code/` | Claude Code | 2.x (verified on 2.1.259) | 0.4.0 | Supported |
 | `plugins/claude-cowork/` | Claude Cowork | Shares the Claude Code plugin surface | 0.4.0 | Supported |
 | `plugins/codex/` | Codex CLI | 0.144.x (verified on 0.144.5) | 0.4.0 | Supported |

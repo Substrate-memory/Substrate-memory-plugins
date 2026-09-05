@@ -61,7 +61,7 @@ jobs:
           test -n "$version"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           hermes_version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
-          test "$hermes_version" = "0.3.0"
+          test "$hermes_version" = "0.4.0"
           for manifest in \
             plugins/claude-code/.claude-plugin/plugin.json \
             plugins/claude-cowork/.claude-plugin/plugin.json \
@@ -155,4 +155,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "substrate-plugins $tag" \
-            --notes "Substrate memory plugin set $tag: Hermes substrate content unchanged since v0.3.0 plus Claude Code, Claude Cowork, Codex CLI, Grok Bot, and OpenClaw host adapters (each with memory_search/memory_expand/memory_evidence, bounded recall, and self-contained RFC 8628 device onboarding). See README.md, CHANGELOG.md, and COMPATIBILITY.md."
+            --notes "Substrate memory plugin set $tag: durable v5 Hermes substrate 0.4.0 (write-ahead spool, memory_remember/memory_forget, true session boundaries, subagent capture, onboard.py device login) plus the unchanged 0.4.0 Claude Code, Claude Cowork, Codex CLI, Grok Bot, and OpenClaw host adapters (byte-identical to v0.4.0). See README.md, CHANGELOG.md, and COMPATIBILITY.md."

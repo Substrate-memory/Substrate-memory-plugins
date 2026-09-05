@@ -15,7 +15,9 @@ import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 CODEX_DIR = REPOSITORY_ROOT / "plugins" / "codex"
-HERMES_DIR = REPOSITORY_ROOT / "plugins" / "substrate"
+# Frozen 0.3.0 reference (see tests/_hostload.py): the Codex adapter is
+# unchanged at 0.4.0 and keeps its parity against the 0.3.0 sources.
+HERMES_DIR = REPOSITORY_ROOT / "tests" / "_hermes_030"
 
 
 def _load_package(alias: str, directory: Path) -> ModuleType:

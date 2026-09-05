@@ -16,7 +16,7 @@ import pytest
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1] / "plugins" / "openclaw"
 CORE_DIR = PLUGIN_DIR / "substrate_core"
-REF_DIR = Path(__file__).resolve().parents[1] / "plugins" / "substrate"
+REF_DIR = Path(__file__).resolve().parents[1] / "tests" / "_hermes_030"
 
 import _hostload  # noqa: E402
 

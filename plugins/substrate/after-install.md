@@ -1,20 +1,31 @@
 # Complete Substrate setup
 
-No manual credential step is required. The plugin runs device onboarding by itself
-on the first turn or first `memory_search` call: it shows a browser approval link
-through the agent, and after approval the tenant-scoped key is stored privately in
-the active profile's `.env`. Never ask the user to paste a key into chat.
+No manual credential step is required. Connect the active profile with the
+bundled login CLI:
 
-Optionally, to connect during installation instead of on first use, run:
+```sh
+python "$profile_home/plugins/substrate/onboard.py" start --json
+```
+
+Show the printed `verification_uri_complete` URL to the user and ask them
+to approve it in a browser. Do not expose or request an access token. Then:
+
+```sh
+python "$profile_home/plugins/substrate/onboard.py" poll --json
+```
+
+Optionally, to connect during installation instead of on first use, run the
+compat entry point (same link, waits for approval, then stores the key):
 
 ```sh
 profile_home="${HERMES_HOME:-$(dirname "$(hermes config path)")}"
-HERMES_HOME="$profile_home" python3 "$profile_home/plugins/substrate/setup.py" \
+python3 "$profile_home/plugins/substrate/setup.py" \
   --hermes-home "$profile_home"
 ```
 
-If it prints `verification_uri_complete`, show that exact URL to the user and ask them
-to approve it in a browser. Do not expose or request an access token.
+If it prints `verification_uri_complete`, show that exact URL to the user
+and ask them to approve it in a browser. Do not expose or request an
+access token.
 
 Then complete the cutover (only after a memory call succeeds):
 
@@ -44,5 +55,4 @@ In a new agent turn, call `memory_search`. Do not use the legacy `wiki_search` t
 Report success only when `memory_search` reaches the authenticated Substrate API.
 
 Do not disable TLS verification, install a private certificate, or inspect a different
-Hermes profile. The plugin supplements system trust only with the bundled public ISRG
-roots.
+Hermes profile.

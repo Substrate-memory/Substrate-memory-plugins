@@ -29,7 +29,12 @@ from pathlib import Path
 from types import ModuleType
 
 REPO = Path(__file__).resolve().parents[1]
-HERMES_DIR = REPO / "plugins" / "substrate"
+# Frozen Hermes 0.3.0 reference for host-adapter parity tests. The live
+# reference (plugins/substrate/) moved to the durable v5 src-layout at
+# 0.4.0 while the five host adapters stay byte-identical at 0.4.0, so
+# parity assertions keep loading the exact 0.3.0 sources they shipped
+# against. Test-only fixture: never packaged (see build_release.py).
+HERMES_DIR = REPO / "tests" / "_hermes_030"
 
 # Plain top-level module names any host test module may claim.
 TOP_LEVELS = frozenset({
@@ -132,8 +137,8 @@ class HostLoader:
         return module
 
     def hermes(self, modname: str):
-        # Load the frozen reference plugins/substrate/<modname>.py once
-        # under a session-shared alias (same frozen source for every host).
+        # Load the frozen reference <modname>.py once under a session-shared
+        # alias (same frozen source for every host).
         alias = _HERMES_ALIAS + "." + modname
         if alias not in sys.modules:
             _exec(alias, HERMES_DIR / (modname + ".py"))

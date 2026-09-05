@@ -43,7 +43,10 @@ ALLOWED_HOSTS = frozenset({
     "localhost",
 })
 
-ALLOWED_SUFFIXES = (".example",)
+# RFC 2606 reserved names (documentation and test fixtures only, never
+# production endpoints): .example, .test, .invalid, example.com/.net/.org.
+ALLOWED_SUFFIXES = (".example", ".test", ".invalid")
+ALLOWED_HOSTS = ALLOWED_HOSTS | frozenset({"example.com", "example.net", "example.org"})
 
 
 def host_allowed(host: str) -> bool:

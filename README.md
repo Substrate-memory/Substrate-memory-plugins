@@ -1,13 +1,13 @@
 # Substrate Memory Plugins
 
 This is the official public repository for the Substrate memory plugin for
-Hermes 0.21.x. The current Hermes release is
-[`v0.3.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.3.0),
-which keeps working. The next release `v0.4.0` (root `VERSION`, branch
-`feat/multi-host-plugins`) publishes the whole multi-host plugin set — the Hermes
-`substrate` content is unchanged since `v0.3.0` (byte-identical `substrate.zip`)
-while the five host adapters ship at `0.4.0`. New-plugin installs pin `v0.4.0`;
-Hermes installs below keep working on either tag.
+Hermes 0.21.x. The current release is
+[`v0.5.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.5.0):
+durable v5 Hermes `substrate` content at `0.4.0` plus the five host adapters
+at `0.4.0` (byte-identical to the `v0.4.0` release). Older releases
+[`v0.3.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.3.0)
+and [`v0.4.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.4.0)
+keep working and are preserved for rollback. New installs pin `v0.5.0`.
 
 ## Install with a Hermes agent
 
@@ -27,7 +27,7 @@ hashes, API keys, or TLS workarounds.
 2. Install the plugin subdirectory at the released tag, not the repository root:
 
    ```sh
-   substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.3.0 | awk '{print $1}')"
+   substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.5.0 | awk '{print $1}')"
    printf '%s\n' "$substrate_ref" | grep -Eq '^[0-9a-f]{40}$'
    hermes plugins install \
      Substrate-memory/Substrate-memory-plugins/plugins/substrate \
@@ -36,25 +36,40 @@ hashes, API keys, or TLS workarounds.
 
 3. Run `hermes plugins doctor substrate --ci`. Stop without changing the legacy provider
    if installation or doctor fails.
-4. Enable the plugin and let device onboarding run on first use. When a
-   `verification_uri_complete` link appears (from `memory_search` or the first turn),
-   present that exact clickable URL to the user. The user approves in their browser;
-   the agent must never approve it for them or ask for a pasted key.
-5. The plugin stores the tenant-scoped key privately in the active profile's `.env` and
-   retries automatically. No manual credential migration is required.
+4. Enable the plugin and connect the active profile with the bundled login CLI
+   (or let first use start it automatically). When a
+   `verification_uri_complete` link appears (from `onboard.py start --json`,
+   from `memory_search`, or on the first turn), present that exact clickable
+   URL to the user:
+
+   ```sh
+   python <plugin-dir>/onboard.py start --json
+   python <plugin-dir>/onboard.py poll --json
+   ```
+
+   The user approves in their browser; the agent must never approve it for
+   them or ask for a pasted key. No API key is ever requested, shown, or
+   pasted into chat.
+5. The plugin stores the tenant-scoped key privately in the active profile
+   (`<profile>/.env` plus `<profile>/substrate/credentials/access-token`,
+   both owner-only) and retries automatically. No manual credential migration
+   is required. Login connects recall and capture only; it never uploads
+   prior conversation history.
 6. Only after a memory call succeeds, disable `substrate_wiki` (if an old provider is
    installed), clear an old `memory.provider: substrate_wiki` selection with
    `hermes memory off`, and restart the gateway. This prevents duplicate capture while
    preserving built-in local memory.
-7. The optional `setup.py` can pre-connect during installation, but it is not required.
+7. The `setup.py` compat entry point can pre-connect during installation
+   (`python <plugin-dir>/setup.py --hermes-home <home>`), but it is not required.
 8. Verify the new `memory_search` tool in a new turn. `wiki_search` is legacy and is not a
    valid verification of the current plugin.
 9. Report success only after `memory_search` reaches the authenticated Substrate API.
    Fail closed and report the exact safe error class otherwise.
 
-TLS verification must remain enabled. The plugin supplements the host trust store with
-unmodified public ISRG Root X1 and X2 certificates for current Let's Encrypt chains. It
-never trusts a replacement leaf certificate or a private certificate.
+TLS verification must remain enabled with the host trust store. The plugin
+never trusts a replacement leaf certificate or a private certificate, never
+disables certificate or hostname checks, and never inspects another Hermes
+profile.
 
 ## Install on other hosts
 
@@ -81,21 +96,27 @@ Behavior is the same on every host: first use starts RFC 8628 device authorizati
 and the exact `verification_uri_complete` approval URL is shown through the agent
 (never paste a key into chat), the tenant-scoped key is stored privately in the
 active profile, and every failure is fail-closed with a bounded error class. TLS
-verification stays enabled everywhere, supplemented only by the bundled public ISRG
-roots.
+verification stays enabled everywhere.
 
 ## Current plugin
 
-The `substrate` plugin is a thin, standard-library-only adapter. It provides:
+The `substrate` plugin (content `0.4.0`) is a durable, standard-library-only
+adapter. It provides:
 
 - bounded next-turn memory context through `pre_llm_call`;
-- nonblocking completed-turn capture through `post_llm_call`;
-- session completion markers through `on_session_reset` and `on_session_finalize`, so
-  ended sessions are materialized into the extraction pipeline automatically;
+- durable completed-turn capture through `post_llm_call` into a write-ahead
+  spool (live priority; nothing is fire-and-forget);
+- true session completion markers through `on_session_finalize`, session
+  rotation through `on_session_reset`, and parent-routed subagent capture
+  through `subagent_start`/`subagent_stop`, so ended sessions are
+  materialized into the extraction pipeline automatically;
 - `memory_search`, `memory_expand`, and `memory_evidence`;
-- active-profile credential reuse and passwordless device authorization;
-- agent display names, selectable on the approval page and visible in the agent pane;
-- additive public-root TLS trust without disabling certificate or hostname checks.
+- `memory_remember` (explicit durable writes) and `memory_forget`
+  (single-handle retraction with reason, record and evidence retained);
+- passwordless device authorization through the bundled `onboard.py` login
+  CLI (`start`/`status`/`poll --json`), with pre-login capture held pending
+  (never quarantined) until approval;
+- agent display names, selectable on the approval page and visible in the agent pane.
 
 The Substrate server remains the source of truth for storage, ranking, the associative
 editor, and evidence.
@@ -105,6 +126,8 @@ editor, and evidence.
 Visible prompts and assistant output may be sent to the configured Substrate server after
 redaction. The current plugin does not upload tool results or system messages. It caches no
 retrieved memory locally and returns empty context on any retrieval failure.
+Login connects recall and capture only; prior conversation history is never
+uploaded by installation or login.
 
 Read [SECURITY.md](SECURITY.md) and [the threat model](docs/threat-model.md) before
 deployment.
