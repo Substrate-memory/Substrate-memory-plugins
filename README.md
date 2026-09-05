@@ -1,7 +1,7 @@
 # Substrate Memory Plugins
 
 This is the official public repository for the Substrate memory plugin for
-Hermes 0.21.x. The current release is
+Hermes 0.21.0. The current release is
 [`v0.5.0`](https://github.com/Substrate-memory/Substrate-memory-plugins/releases/tag/v0.5.0):
 durable v5 Hermes `substrate` content at `0.4.0` plus the five host adapters
 at `0.4.0` (byte-identical to the `v0.4.0` release). Older releases
@@ -23,7 +23,7 @@ Treat the sentence above as approval to install and configure the current Substr
 for the active Hermes profile. Do not ask the user for repository paths, commands, commit
 hashes, API keys, or TLS workarounds.
 
-1. Confirm `hermes --version` is 0.21.x. Do not upgrade Hermes automatically.
+1. Confirm `hermes --version` is exactly 0.21.0 (the tested version). Stop on any other version. Do not upgrade Hermes automatically.
 2. Install the plugin subdirectory at the released tag, not the repository root:
 
    ```sh
@@ -57,7 +57,8 @@ hashes, API keys, or TLS workarounds.
    prior conversation history.
 6. Only after a memory call succeeds, disable `substrate_wiki` (if an old provider is
    installed), clear an old `memory.provider: substrate_wiki` selection with
-   `hermes memory off`, and restart the gateway. This prevents duplicate capture while
+   `hermes memory off` (disables the external provider only; built-in local
+   memory stays), and restart the gateway. This prevents duplicate capture while
    preserving built-in local memory.
 7. The `setup.py` compat entry point can pre-connect during installation
    (`python <plugin-dir>/setup.py --hermes-home <home>`), but it is not required.
@@ -85,7 +86,7 @@ onboarding run on first use, and verifies with `memory_search` in a new turn.
 
 | Host | Install (one line) | Runbook |
 |---|---|---|
-| Hermes 0.21.x | Say the sentence above to a Hermes agent | `plugins/substrate/README.md` |
+| Hermes 0.21.0 (tested) | Say the sentence above to a Hermes agent | `plugins/substrate/README.md` |
 | Claude Code | Say the sentence above in Claude Code (`claude plugin install substrate-memory@substrate-marketplace`) | [plugins/claude-code/INSTALL.md](plugins/claude-code/INSTALL.md) |
 | Claude Cowork | Say the sentence above in Cowork (`claude plugin install substrate-cowork`) | [plugins/claude-cowork/INSTALL.md](plugins/claude-cowork/INSTALL.md) |
 | Codex CLI | `sh plugins/codex/install.sh` from a sparse checkout, then `codex plugin add substrate@substrate-memory` | [plugins/codex/INSTALL.md](plugins/codex/INSTALL.md) |
@@ -124,10 +125,15 @@ editor, and evidence.
 ## Privacy boundary
 
 Visible prompts and assistant output may be sent to the configured Substrate server after
-redaction. The current plugin does not upload tool results or system messages. It caches no
-retrieved memory locally and returns empty context on any retrieval failure.
-Login connects recall and capture only; prior conversation history is never
-uploaded by installation or login.
+redaction. Completed turns also carry bounded redacted tool traffic: tool call
+arguments (canonical JSON, at most 4096 bytes, or a truncated digest form) and
+tool result excerpts (at most 8192 bytes plus a SHA-256 digest of the full
+redacted result). System messages are never captured or uploaded. Retrieved
+memory is never cached locally; the plugin returns empty context on any
+retrieval failure. Unsent capture waits only in the profile-local durable
+spool (`<profile>/substrate/spool`, owner-only files) until delivery or
+bounded eviction. Login connects recall and capture only; prior conversation
+history is never uploaded by installation or login.
 
 Read [SECURITY.md](SECURITY.md) and [the threat model](docs/threat-model.md) before
 deployment.
@@ -144,7 +150,7 @@ uv run --frozen --extra dev python scripts/build_release.py --check
 
 ## Repository map
 
-- `plugins/substrate/` — the Hermes 0.21.x retrieval plugin and setup flow.
+- `plugins/substrate/` — the Hermes 0.21.0 retrieval plugin and setup flow.
 - `plugins/claude-code/` — the Claude Code host adapter (MCP server plus hooks).
 - `plugins/claude-cowork/` — the Claude Cowork host adapter (MCP server plus hooks).
 - `plugins/codex/` — the Codex CLI host adapter (MCP server, hooks, skill).

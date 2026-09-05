@@ -1,10 +1,13 @@
-# Substrate memory for Hermes 0.21.x
+# Substrate memory for Hermes 0.21.0
 
 Durable v5 retrieval plugin. The server owns storage, ranking, the
-associative editor, and evidence. The plugin caches no memory and fails
-closed. Delivery is durable: capture and boundary events enqueue into a
-write-ahead spool at live priority, and explicit writes enqueue at
-explicit priority. Nothing is fire-and-forget.
+associative editor, and evidence. The plugin caches no retrieved memory and
+fails closed. Delivery is durable: capture and boundary events enqueue into
+a profile-local write-ahead spool (`<profile>/substrate/spool`, owner-only)
+at live priority, and explicit writes enqueue at explicit priority. Nothing
+is fire-and-forget. Captured turns include bounded redacted tool traffic
+(tool call arguments up to 4096 bytes, tool result excerpts up to 8192 bytes
+plus digest); system messages are never captured.
 
 ## Installing agents
 
@@ -76,4 +79,5 @@ approving, and it can be renamed there later.
 
 Wire schemas and limits are defined in [`CONTRACT.md`](CONTRACT.md).
 Runtime code uses only the Python standard library. Supported host:
-Hermes 0.21.x.
+Hermes 0.21.0 exactly (the tested version); do not install on an unverified
+host version and do not upgrade Hermes automatically.

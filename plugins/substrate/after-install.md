@@ -44,6 +44,7 @@ if [ -d "$profile_home/plugins/substrate_wiki" ]; then
   hermes plugins disable substrate_wiki
 fi
 if [ "$(hermes config get memory.provider 2>/dev/null || true)" = "substrate_wiki" ]; then
+  # 'memory off' disables the external provider only; built-in local memory stays.
   hermes memory off
 fi
 hermes gateway restart
