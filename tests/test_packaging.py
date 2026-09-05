@@ -77,3 +77,39 @@ def test_archive_is_deterministic_and_release_clean(tmp_path: Path) -> None:
 
 def test_plugin_manifest_matches_release_version() -> None:
     assert plugin_version() == "0.3.0"
+
+
+def test_archives_never_ship_private_or_generated_files() -> None:
+    from build_release import PLUGINS
+
+    forbidden_fragments = (
+        "__pycache__/",
+        ".pytest_cache/",
+        ".ruff_cache/",
+        ".venv/",
+        "/tests/",
+        "/test/",
+        "htmlcov/",
+        "node_modules/",
+        "/dist/",
+        "/build/",
+        ".env",
+    )
+    for name in PLUGINS:
+        archive_path = REPOSITORY_ROOT / "dist" / f"{name}.zip"
+        with zipfile.ZipFile(archive_path) as archive:
+            members = archive.namelist()
+        for member in members:
+            assert not member.endswith((".pyc", ".pyo")), member
+            for fragment in forbidden_fragments:
+                assert fragment not in member, member
+        # No absolute filesystem literals or build-machine checkout paths
+        # inside shipped code (doc comments may still show example paths).
+        with zipfile.ZipFile(archive_path) as archive:
+            for member in members:
+                assert not member.startswith("/"), member
+                payload = archive.read(member)
+                if member.endswith(".py"):
+                    text = payload.decode("utf-8")
+                    assert 'Path("/' not in text, member
+                    assert str(REPOSITORY_ROOT) not in text, member
