@@ -1,56 +1,40 @@
-# Install Substrate memory in Cowork
+# Install Substrate memory
 
-The exact install request is:
+Use the same setup experience as Hermes:
+**Install → Sign in → Review → Approve connection → Return to the agent →
+Connected to Substrate.**
+
+Start with:
 
 ```text
 Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins
 ```
 
-This package configures Cowork to use the Substrate backend's MCP endpoint and
-browser OAuth. It does not install a server on the user's machine. Check the
-endpoint and report success only after an authenticated memory smoke test.
+The shared [installation and recovery guide](https://github.com/Substrate-memory/Substrate-memory-plugins/blob/main/docs/installation.md)
+is the source of truth for both integrations. This package configures
+`https://app.trysubstrate.co/mcp` using remote **Streamable HTTP**; it does not
+install another server.
 
-## Preferred automated path
+Open the exact browser link returned by the client. Both integrations use
+**Connect your agent to Substrate**. Sign in if needed, review the connection
+name, permissions and proof details, then choose **Approve connection** or deny.
+Only the user can approve. **Connection approved** means consent was accepted;
+the client must still finish its handoff and make an authenticated memory request.
+Only then report **Connected to Substrate.** Empty authenticated search results
+are valid. Never request API keys, manual tokens or client secrets.
 
-1. Confirm the active host is Cowork. If the host is unknown, ask the user
-   which host they want; do not guess.
-2. Add the repository as a Cowork/Claude marketplace and install
-   `substrate-mcp` from the current reviewed release. Use the host's native
-   automation. Do not ask for a repository path, API key, token, client
-   secret, or manual credential configuration.
-3. Let the browser OAuth flow open. Show the exact consent URL if the host
-   returns one. The user must approve in their browser. Never approve it for
-   them and never request a pasted secret.
-4. Start a new turn and call the exposed memory recall tool (normally
-   `memory_search`). A successful authenticated response, including an empty
-   result set, is required before reporting success.
-5. If the smoke test fails, report the safe error class and leave the previous
-   configuration unchanged. Do not claim that installation succeeded.
+## Cowork actions the agent cannot automate
 
-## Other MCP-capable hosts
+1. Open **Cowork → Customize → Plugins → Personal plugins → + → Add marketplace**.
+2. Choose **Add from a repository (GitHub URL)** and enter the repository URL above.
+3. Choose **Browse**, then install `substrate-mcp`.
+4. Confirm the endpoint and **Streamable HTTP** transport above.
+5. Complete the common Substrate browser flow, then verify from the agent.
 
-If the active host is not Cowork, ask which host is intended and use its native
-remote **Streamable HTTP** MCP configuration. Set the server URL to
-`https://app.trysubstrate.co/mcp`, use browser OAuth, and run an authenticated
-recall smoke test. Do not assume a marketplace, create a local server, or ask
-for manual credentials.
+For another MCP-capable host, use its documented configuration interface instead
+of these Cowork menu names. Provide precise steps if it cannot edit its own MCP
+settings. Do not bypass client permissions or create a manual-token alternative.
 
-## Exact Cowork UI fallback
-
-If native marketplace automation is unavailable:
-
-1. Open the **Cowork** tab.
-2. Choose **Customize → Plugins → Personal plugins → + → Add marketplace**.
-3. Choose **Add from a repository (GitHub URL)** and enter
-   `https://github.com/Substrate-memory/Substrate-memory-plugins`.
-4. Choose **Browse**, then install `substrate-mcp`.
-5. In the plugin's MCP panel, confirm the URL is exactly
-   `https://app.trysubstrate.co/mcp` and transport is **Streamable HTTP**.
-6. Start a new chat/turn and run the memory recall tool. Complete browser OAuth
-   consent if prompted, then rerun the tool and require an authenticated
-   response before reporting success.
-
-Do not create a local stdio server. Do not add hooks. Do not paste API keys,
-OAuth tokens, or client secrets into Cowork or chat. The plugin does not promise
-automatic full-transcript capture; use explicit memory writes when the host
-provides them and when the user intends a durable write.
+For an expired link, return to the agent and start connecting again. On a
+transient error, preserve existing settings and retry; never claim success before
+verification. This package has no hooks or full-transcript capture guarantee.

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — unified onboarding
+
+- Use one Substrate connection journey for Hermes and MCP: sign in, review the
+  connection name, permissions and proof details, approve, then verify from the agent.
+- Centralize installation and recovery guidance in `docs/installation.md`.
+- Distinguish browser consent (**Connection approved**) from a verified client
+  connection (**Connected to Substrate.**). No manual credential setup is added.
+- Preserve the golden Hermes runtime and the thin remote MCP manifest.
+
 ## 0.6.0 (review-stage)
 
 - Replace the five host adapters with one thin Cowork-compatible
@@ -7,8 +16,8 @@
   `https://app.trysubstrate.co/mcp`, a generic best-effort usage skill, and
   installation docs only. It has no local MCP server, hooks, or automatic
   full-transcript guarantee.
-- Preserve the Hermes `plugins/substrate` runtime from v0.5.0. The only change
-  is the install-document pin to the v0.6.0 release.
+- Preserve the complete golden Hermes `plugins/substrate` tree from v0.5.0,
+  including its published v0.5.0 installation pin during the rollout.
 - Stage deterministic Hermes and thin-MCP archives for review. No tag, public
   release, deployment, or backend claim is made by this candidate.
 

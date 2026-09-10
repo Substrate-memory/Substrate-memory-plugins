@@ -1,23 +1,25 @@
 # Agent installation contract
 
-When the user says:
+For the request:
 
 ```text
 Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins
 ```
 
-Identify the host first. Ask if it is unknown. Route Hermes 0.21.0 to the
-golden `plugins/substrate` runtime. Route Cowork to the shared remote MCP
-plugin at `plugins/substrate-mcp`; do not create local servers or hooks.
-Automate supported setup. If Cowork automation is unavailable, give this
-exact fallback: **Cowork tab → Customize → Plugins → Personal plugins → + → Add marketplace →
-Add from a repository (GitHub URL) → `https://github.com/Substrate-memory/Substrate-memory-plugins`
-→ Browse → install `substrate-mcp`**.
+Follow [the single installation and recovery guide](docs/installation.md).
+Target the current host: Hermes uses `plugins/substrate`; Cowork uses the thin
+`plugins/substrate-mcp` package; other compatible agents use the shared MCP URL.
+Ask which host only when it cannot be determined safely. Do not select a host
+merely because its executable happens to be installed.
 
-Use browser OAuth consent only. Show the exact consent URL and ask the user to
-approve it. Never ask for or accept manual tokens, API keys, or client secrets.
-Run an authenticated memory smoke test in a new turn before reporting success.
-An empty authenticated result is success; an auth failure is not. Check the live
-endpoint instead of assuming availability from the repository or release status.
+Keep the user-facing sequence the same: **Install → Sign in → Review → Approve
+connection → Return to the agent → Connected to Substrate.** Open the exact
+returned browser link. The user approves on **Connect your agent to Substrate**.
+Do not approve for the user or ask for keys, manual tokens, or client secrets.
+The browser's **Connection approved** message is not an installation success.
+Run an authenticated memory smoke test before saying **Connected to Substrate.**
 
-For other MCP-capable hosts, ask which host and use its native remote Streamable HTTP MCP setup with browser OAuth; do not guess host commands.
+Automate client setup where supported. For client-owned actions you cannot perform,
+give precise instructions from the shared guide, then resume the same flow.
+Never invent a local MCP server, bypass permissions, or use a pasted-token fallback.
+Preserve the golden Hermes runtime and active-profile credential isolation.
