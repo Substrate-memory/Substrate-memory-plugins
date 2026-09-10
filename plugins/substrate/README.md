@@ -14,7 +14,7 @@ plus digest); system messages are never captured.
 Install this directory, not the repository root:
 
 ```sh
-substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.6.0 | awk '{print $1}')"
+substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.5.0 | awk '{print $1}')"
 printf '%s\n' "$substrate_ref" | grep -Eq '^[0-9a-f]{40}$'
 hermes plugins install \
   Substrate-memory/Substrate-memory-plugins/plugins/substrate \

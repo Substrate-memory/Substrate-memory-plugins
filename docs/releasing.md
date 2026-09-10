@@ -4,8 +4,9 @@ Release `0.6.0` is a review-stage redesign. The repository now ships exactly
 two deterministic archives:
 
 - `substrate.zip`: the Hermes `substrate` plugin. Its runtime files are
-  preserved from the v0.5.0 golden tree. The only intentional v0.6.0 change is
-  the install-document pin from `v0.5.0` to `v0.6.0`.
+  preserved byte-for-byte from the v0.5.0 golden tree. Hermes installation stays
+  pinned to the already-published `v0.5.0` tag while the v0.6.0 release is a draft,
+  so merging this repository does not break new Hermes installations.
 - `substrate-mcp.zip`: the thin Cowork-compatible plugin with a remote HTTP
   `.mcp.json`, generic skill, and installation documentation. It has no local
   server and no hooks.
