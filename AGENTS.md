@@ -17,7 +17,7 @@ Add from a repository (GitHub URL) → `https://github.com/Substrate-memory/Subs
 Use browser OAuth consent only. Show the exact consent URL and ask the user to
 approve it. Never ask for or accept manual tokens, API keys, or client secrets.
 Run an authenticated memory smoke test in a new turn before reporting success.
-An empty authenticated result is success; an auth failure is not. The staged
-Cowork backend is not deployed yet, so state that limitation honestly.
+An empty authenticated result is success; an auth failure is not. Check the live
+endpoint instead of assuming availability from the repository or release status.
 
 For other MCP-capable hosts, ask which host and use its native remote Streamable HTTP MCP setup with browser OAuth; do not guess host commands.

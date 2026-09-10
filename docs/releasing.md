@@ -12,7 +12,7 @@ two deterministic archives:
   server and no hooks.
 
 The remote MCP service at `https://app.trysubstrate.co/mcp` and browser OAuth
-backend are backend-owned and not deployed by this repository yet. Release docs
+backend are operated separately from this client repository. Release docs
 must not claim live Cowork support until an authenticated smoke test succeeds.
 
 ## Review staging

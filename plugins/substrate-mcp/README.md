@@ -4,8 +4,8 @@ This is the thin Cowork-compatible Substrate MCP plugin. It registers one
 remote HTTP MCP server and one generic usage skill. It contains no local MCP
 server, hooks, transcript bridge, credentials, or host-specific runtime.
 
-The remote service and browser OAuth consent flow are backend-owned and are
-not deployed by this repository yet. This directory is release-staged; do not
+The remote service and browser OAuth consent flow are backend-owned. This
+repository configures the connection; it does not deploy the server. Do not
 report an installation as successful until the endpoint is live and an
 authenticated memory smoke test passes.
 

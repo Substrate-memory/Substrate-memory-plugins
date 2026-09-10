@@ -6,9 +6,9 @@ The exact install request is:
 Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins
 ```
 
-This plugin is staged for Cowork. The remote MCP endpoint and browser OAuth
-backend are not deployed yet. Install only when the service is announced live,
-and report success only after an authenticated smoke test.
+This package configures Cowork to use the Substrate backend's MCP endpoint and
+browser OAuth. It does not install a server on the user's machine. Check the
+endpoint and report success only after an authenticated memory smoke test.
 
 ## Preferred automated path
 

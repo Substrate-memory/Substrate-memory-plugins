@@ -4,7 +4,7 @@
 
 | Release | Hermes | Cowork | Status |
 |---|---|---|---|
-| v0.6.0 | Hermes 0.21.0 exactly; golden `substrate` runtime from v0.5.0 | Thin remote HTTP MCP plugin (`substrate-mcp`); backend and browser OAuth not deployed yet | Review-stage only |
+| v0.6.0 | Hermes 0.21.0 exactly; golden `substrate` runtime from v0.5.0 | Thin remote HTTP MCP plugin (`substrate-mcp`); requires backend MCP/browser OAuth and authenticated client verification | Review-stage only |
 
 Hermes uses `plugins/substrate` and retains its in-process hooks, durable spool,
 and memory tools. Cowork uses `plugins/substrate-mcp`, which contains only a

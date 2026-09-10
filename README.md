@@ -3,9 +3,9 @@
 Release `0.6.0` is staged for review. It contains two deterministic archives:
 `substrate.zip` (the golden Hermes runtime from v0.5.0) and
 `substrate-mcp.zip` (a thin Cowork-compatible remote MCP plugin).
-The remote MCP service and browser OAuth backend are not deployed yet. Do not
-claim a live installation until the service is announced and an authenticated
-smoke test succeeds.
+The MCP server and browser OAuth are provided by the Substrate backend, not
+installed from this repository. Check endpoint availability and report a working
+installation only after an authenticated memory smoke test succeeds.
 
 ## Exact install request
 
@@ -43,8 +43,8 @@ For any other MCP-capable host, ask which host and use its supported remote
 **Streamable HTTP** MCP configuration with the same URL and browser OAuth flow.
 Do not assume a native marketplace or invent host-specific commands.
 
-The Cowork remote MCP endpoint is backend-owned and is not deployed by this
-repository yet. The Cowork plugin makes only best-effort recall/write claims.
+The Cowork remote MCP endpoint is backend-owned; this repository configures the
+client connection and does not deploy the service. The Cowork plugin makes only best-effort recall/write claims.
 It has no hooks and does not guarantee automatic full-transcript capture.
 Use explicit memory writes when the host exposes them and the user intends a
 durable write. Never send secrets to memory tools.
