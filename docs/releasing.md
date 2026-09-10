@@ -1,52 +1,47 @@
 # Releasing
 
-Releases are immutable Git tags cut from protected `main` through the Release workflow.
-One tag publishes the whole multi-host plugin set.
+Release `0.6.0` is a review-stage redesign. The repository now ships exactly
+two deterministic archives:
 
-## Versioning
+- `substrate.zip`: the Hermes `substrate` plugin. Its runtime files are
+  preserved from the v0.5.0 golden tree. The only intentional v0.6.0 change is
+  the install-document pin from `v0.5.0` to `v0.6.0`.
+- `substrate-mcp.zip`: the thin Cowork-compatible plugin with a remote HTTP
+  `.mcp.json`, generic skill, and installation documentation. It has no local
+  server and no hooks.
 
-- The repo-level release version lives in the root `VERSION` file (currently `0.5.0`).
-  The Release workflow reads the tag version from `VERSION`, never from a hard-coded string.
-- `plugins/substrate/` (the Hermes plugin) is at content version `0.4.0`:
-  its `plugin.yaml` version and its `substrate.zip` bytes are new in the `0.5.0`
-  release (durable v5 port). The release version covers the plugin set, not
-  the Hermes plugin content.
-- The five host adapters (`plugins/claude-code/`, `plugins/claude-cowork/`,
-  `plugins/codex/`, `plugins/grok-bot/`, `plugins/openclaw/`) carry the release
-  version in their native manifests (currently `0.4.0`, byte-identical to `v0.4.0`).
+The remote MCP service at `https://app.trysubstrate.co/mcp` and browser OAuth
+backend are backend-owned and not deployed by this repository yet. Release docs
+must not claim live Cowork support until an authenticated smoke test succeeds.
 
-## Process
+## Review staging
 
-1. Land the release contents on `main` through a reviewed pull request. Every commit
-   must carry a DCO sign-off and pass all CI checks.
-2. Dispatch the **Release** workflow with `candidate_sha` set to the exact reviewed
-   `main` commit.
-3. The workflow re-verifies the candidate (hygiene scan before dependency install,
-   DCO sign-off grep, candidate-sha binding to protected `main`, pinned action SHAs,
-   version checks, full tests, deterministic double-build of all six archives with
-   byte-compare plus `scripts/build_release.py --check`) and publishes tag
-   `v<VERSION>` with all six archives (`substrate.zip`, `claude-code.zip`,
-   `claude-cowork.zip`, `codex.zip`, `grok-bot.zip`, `openclaw.zip`) and the single
-   `SHA256SUMS` covering all six, plus build attestation for every artifact.
-4. The workflow refuses to mutate an existing tag or release: if the tag already
-   exists it must point at the same candidate commit, and if the release already
-   exists the run fails instead of overwriting immutable assets.
-5. Never mutate a published tag or its assets. Fixes ship as a new reviewed commit
-   and a new tag.
+1. Prepare a review branch and draft pull request. Every commit needs DCO sign-off.
+   Do not merge it before the owner's review acceptance.
+2. Run the repository-native checks and build the archives twice.
+3. Dispatch `.github/workflows/release-staging.yml` with the candidate for short-lived
+   draft artifacts. For a protected-main candidate, `.github/workflows/release.yml`
+   may also run with `publish_approval=REVIEW`; it scans, tests, double-builds,
+   and uploads artifacts without publication.
+4. Inspect the draft artifact and verify the archive hashes. Do not tag, publish,
+   deploy, or advertise the release from this branch.
+5. The protected release workflow may promote only an owner-created matching draft
+   after explicit approval (`publish_approval=PUBLISH`) and exact protected-main
+   candidate binding. It verifies the exact draft asset set and every byte,
+   then creates the immutable tag at the reviewed main commit (or verifies an
+   existing tag points there) and promotes the draft without replacing its notes.
+   It refuses missing drafts, published releases, different assets or conflicting
+   tags. The staging workflow has no publication job and cannot create tags or
+   GitHub releases.
 
-## Tag history
+An owner may prepare a GitHub draft targeting the review-branch commit and attach
+`substrate.zip`, `substrate-mcp.zip`, and `SHA256SUMS` before review. This does not
+create a public tag. After code review, separately approved backend deployment and
+Cowork acceptance, merge the reviewed changes into main. If archive bytes changed
+since draft preparation, rebuild and re-review the draft assets before selecting
+`PUBLISH`. Merely creating a draft is never deployment or publication approval.
 
-- `v0.3.0` provides the Hermes `substrate` plugin only (`substrate.zip` +
-  `SHA256SUMS`). Hermes installs pinned to `v0.3.0` keep working.
-- `v0.4.0` provides all six plugins. The `substrate.zip` bytes inside `v0.4.0`
-  are identical to the `v0.3.0` asset; the other five archives are new at `0.4.0`.
-  New-plugin installs pin `v0.4.0`; Hermes installs may use either tag.
-- `v0.5.0` provides all six plugins. The `substrate.zip` bytes are new
-  (Hermes content `0.4.0`, durable v5); the other five archives are
-  byte-identical to the `v0.4.0` assets. New installs pin `v0.5.0`; the
-  `v0.3.0` and `v0.4.0` tags stay published for rollback.
-
-## Local verification
+## Deterministic local check
 
 ```sh
 uv run --frozen --extra dev ruff check .
@@ -54,7 +49,12 @@ uv run --frozen --extra dev python -m pytest -q
 python3 scripts/check_public_hygiene.py --root .
 rm -rf dist && python3 scripts/build_release.py
 cp dist/substrate.zip /tmp/first-substrate.zip
+cp dist/substrate-mcp.zip /tmp/first-substrate-mcp.zip
 rm -rf dist && python3 scripts/build_release.py
 cmp /tmp/first-substrate.zip dist/substrate.zip
+cmp /tmp/first-substrate-mcp.zip dist/substrate-mcp.zip
 python3 scripts/build_release.py --check
 ```
+
+Older immutable releases (`v0.3.0`, `v0.4.0`, `v0.5.0`) remain available for
+rollback. Never rebuild or mutate their assets.

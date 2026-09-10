@@ -2,21 +2,17 @@
 
 Packages each plugin directory as ``dist/<name>.zip`` with fixed
 timestamps and sorted members so two builds of the same tree are
-byte-identical, plus a single ``dist/SHA256SUMS`` covering all six
+byte-identical, plus a single ``dist/SHA256SUMS`` covering both
 archives. ``--check`` rebuilds every archive in memory and compares
 against the on-disk files.
 
 Release layout (repo-level release version in the root ``VERSION`` file
 covers the whole plugin set):
 
-- ``substrate.zip`` from ``plugins/substrate`` (Hermes reference plugin,
-  content frozen at 0.3.0; bytes must stay identical across releases that
-  do not touch it) with ``substrate/`` prefix.
-- ``claude-code.zip`` from ``plugins/claude-code`` with ``claude-code/`` prefix.
-- ``claude-cowork.zip`` from ``plugins/claude-cowork`` with ``claude-cowork/`` prefix.
-- ``codex.zip`` from ``plugins/codex`` with ``codex/`` prefix.
-- ``grok-bot.zip`` from ``plugins/grok-bot`` with ``grok-bot/`` prefix.
-- ``openclaw.zip`` from ``plugins/openclaw`` with ``openclaw/`` prefix.
+- ``substrate.zip`` from ``plugins/substrate`` (Hermes reference plugin;
+  golden runtime bytes from v0.5.0) with ``substrate/`` prefix.
+- ``substrate-mcp.zip`` from ``plugins/substrate-mcp`` (thin Cowork-compatible
+  remote MCP manifest, skill, and docs) with ``substrate-mcp/`` prefix.
 
 Each archive also carries the root ``LICENSE`` as ``<prefix>/LICENSE``.
 """
@@ -39,11 +35,7 @@ FIXED_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 # SHA256SUMS lines are sorted by archive name.
 PLUGINS: dict[str, str] = {
     "substrate": "substrate",
-    "claude-code": "claude-code",
-    "claude-cowork": "claude-cowork",
-    "codex": "codex",
-    "grok-bot": "grok-bot",
-    "openclaw": "openclaw",
+    "substrate-mcp": "substrate-mcp",
 }
 
 ARCHIVE_NAMES: list[str] = [f"{name}.zip" for name in PLUGINS]
@@ -173,7 +165,7 @@ def check() -> bool:
         print("SHA256SUMS does not match a fresh build")
         print(f"--- recorded ---\n{recorded}--- want ---\n{want}")
         return False
-    # Refuse stray files: dist must hold exactly the six archives + SHA256SUMS.
+    # Refuse stray files: dist must hold exactly the two archives + SHA256SUMS.
     present = sorted(p.name for p in DIST_DIR.iterdir() if p.is_file())
     if present != sorted([*ARCHIVE_NAMES, "SHA256SUMS"]):
         print(f"unexpected dist contents: {present}")

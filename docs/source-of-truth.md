@@ -1,21 +1,10 @@
 # Source-of-truth boundary
 
-## Decision
+This repository owns the Hermes `substrate` plugin, the thin Cowork-compatible
+remote MCP package, documentation, deterministic builds, tests, and release
+staging. The Substrate server repository owns the remote MCP endpoint, OAuth
+consent, persistence, and deployment.
 
-`Substrate-memory/Substrate-memory-plugins` is the sole editable source for the Hermes
-`substrate` retrieval plugin. The protected default branch and the immutable
-releases (currently `v0.3.0`, `v0.4.0`, pending `v0.5.0`: tag plus attested
-archives and `SHA256SUMS`) are the only published artifacts.
-
-The server repository owns only the Substrate API, persistence, and deployment; it must
-not vendor or modify plugin source.
-
-## Ownership
-
-### This repository
-
-- Hermes hook and tool registration.
-- Client transport and response validation.
-- Device onboarding and credential custody.
-- Session-completion capture.
-- Build, tests, documentation, and releases.
+The v0.5.0 and older tags are immutable. v0.6.0 is a review candidate until
+explicit release approval; no tag, public release, or deployment is made by
+this branch.
