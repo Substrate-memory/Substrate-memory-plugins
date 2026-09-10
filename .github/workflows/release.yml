@@ -7,6 +7,12 @@ on:
         description: Exact independently reviewed main commit to release
         required: true
         type: string
+      publish_approval:
+        description: Explicit owner approval; leave REVIEW for verification only
+        required: true
+        default: REVIEW
+        type: choice
+        options: [REVIEW, PUBLISH]
 
 permissions:
   contents: read
@@ -15,8 +21,7 @@ jobs:
   verify:
     if: github.ref == 'refs/heads/main' && github.sha == inputs.candidate_sha
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    permissions: {contents: read}
     outputs:
       release_version: ${{ steps.metadata.outputs.release_version }}
       artifact_digest: ${{ steps.release_artifact.outputs.artifact-digest }}
@@ -26,71 +31,47 @@ jobs:
           ref: ${{ inputs.candidate_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Bind workflow and release to the exact protected-main candidate
+      - name: Bind to protected main candidate and require DCO
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_SHA" = "$CANDIDATE_SHA"
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           git fetch --no-tags origin main
           test "$(git rev-parse origin/main)" = "$CANDIDATE_SHA"
-          git show --no-patch --format='%B' "$CANDIDATE_SHA" | \
-            grep -Eq '^Signed-off-by: .+ <[^>]+>$'
-      - name: Scan the pristine candidate before installing dependencies
-        run: |
-          set -euo pipefail
-          python3 scripts/check_public_hygiene.py --root .
+          git show --no-patch --format='%B' "$CANDIDATE_SHA" | grep -Eq '^Signed-off-by: .+ <[^>]+>$'
+      - name: Scan pristine candidate
+        run: python3 scripts/check_public_hygiene.py --root .
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.11"
+        with: {python-version: '3.11'}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: '0.11.32'
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - name: Install only frozen verification dependencies
-        run: uv sync --frozen --extra dev --no-install-project
-      - name: Verify version and all release-critical behavior
+      - run: uv sync --frozen --extra dev --no-install-project
+      - name: Verify and build exact candidate
         id: metadata
         run: |
           set -euo pipefail
           version="$(tr -d ' \t\r\n' < VERSION)"
-          test -n "$version"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test -n "$version"; [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           hermes_version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
-          test "$hermes_version" = "0.4.0"
-          # The five host adapters are frozen at 0.4.0 (byte-identical to the
-          # v0.4.0 assets); only the repo-level release version advances.
-          for manifest in \
-            plugins/claude-code/.claude-plugin/plugin.json \
-            plugins/claude-cowork/.claude-plugin/plugin.json \
-            plugins/codex/.codex-plugin/plugin.json \
-            plugins/grok-bot/plugin.json \
-            plugins/openclaw/openclaw.plugin.json; do
-            test "$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$manifest")" = "0.4.0"
-          done
+          test "$hermes_version" = 0.4.0
           uv run --no-sync ruff check .
           uv run --no-sync python -m compileall -q plugins scripts
           uv run --no-sync python -m pytest -q
-          printf 'release_version=%s\n' "$version" >> "$GITHUB_OUTPUT"
-      - name: Build and verify exact release bytes twice
-        env:
-          HERMES_PLUGIN_SOURCE_COMMIT: ${{ inputs.candidate_sha }}
-        run: |
-          set -euo pipefail
           uv run --no-sync python scripts/build_release.py
-          mkdir -p "$RUNNER_TEMP/first-dist"
-          cp dist/*.zip "$RUNNER_TEMP/first-dist/"
-          rm -rf dist
-          uv run --no-sync python scripts/build_release.py
-          for archive in substrate.zip claude-code.zip claude-cowork.zip codex.zip grok-bot.zip openclaw.zip; do
-            cmp "$RUNNER_TEMP/first-dist/$archive" "dist/$archive"
-          done
+          cp dist/*.zip "$RUNNER_TEMP/"
+          rm -rf dist; uv run --no-sync python scripts/build_release.py
+          cmp "$RUNNER_TEMP/substrate.zip" dist/substrate.zip
+          cmp "$RUNNER_TEMP/substrate-mcp.zip" dist/substrate-mcp.zip
           uv run --no-sync python scripts/build_release.py --check
-      - name: Upload exact verified release bytes
+          printf 'release_version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - name: Upload exact verified bytes
         id: release_artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -102,7 +83,7 @@ jobs:
 
   publish:
     needs: verify
-    if: github.ref == 'refs/heads/main' && github.sha == inputs.candidate_sha
+    if: github.ref == 'refs/heads/main' && github.sha == inputs.candidate_sha && inputs.publish_approval == 'PUBLISH'
     runs-on: ubuntu-latest
     environment: public-release
     permissions:
@@ -111,8 +92,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - name: Download exact verified release bytes
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-${{ inputs.candidate_sha }}
           path: dist
@@ -120,41 +100,37 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${{ needs.verify.outputs.artifact_digest }}"
-          test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = \
-            "SHA256SUMS claude-code.zip claude-cowork.zip codex.zip grok-bot.zip openclaw.zip substrate.zip "
+          test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = 'SHA256SUMS substrate-mcp.zip substrate.zip '
           (cd dist && sha256sum -c SHA256SUMS)
       - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
         with:
-          subject-path: "dist/*"
-      - name: Create immutable tag and GitHub release
+          subject-path: dist/*
+      - name: Promote only a matching owner-created draft
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_SHA" = "$CANDIDATE_SHA"
           tag="v$RELEASE_VERSION"
+          release_json="$RUNNER_TEMP/release.json"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,tagName,targetCommitish,assets > "$release_json"
+          python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["isDraft"] is True; assert sorted(a["name"] for a in r["assets"]) == ["SHA256SUMS", "substrate-mcp.zip", "substrate.zip"]' "$release_json"
+          rm -rf "$RUNNER_TEMP/existing-release"; mkdir -p "$RUNNER_TEMP/existing-release"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/existing-release"
+          for archive in substrate.zip substrate-mcp.zip SHA256SUMS; do
+            cmp "dist/$archive" "$RUNNER_TEMP/existing-release/$archive"
+          done
+          # A review draft has no public tag. Create one only after the owner
+          # selects PUBLISH and all candidate/draft/byte checks have passed.
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
             test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)" = "$CANDIDATE_SHA"
           else
             gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
               -f ref="refs/tags/$tag" -f sha="$CANDIDATE_SHA" >/dev/null
           fi
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "release already exists; refusing to mutate immutable assets" >&2
-            exit 1
-          fi
-          gh release create "$tag" \
-            dist/substrate.zip \
-            dist/claude-code.zip \
-            dist/claude-cowork.zip \
-            dist/codex.zip \
-            dist/grok-bot.zip \
-            dist/openclaw.zip \
-            dist/SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --title "substrate-plugins $tag" \
-            --notes "Substrate memory plugin set $tag: durable v5 Hermes substrate 0.4.0 (write-ahead spool, memory_remember/memory_forget, true session boundaries, subagent capture, onboard.py device login) plus the unchanged 0.4.0 Claude Code, Claude Cowork, Codex CLI, Grok Bot, and OpenClaw host adapters (byte-identical to v0.4.0). See README.md, CHANGELOG.md, and COMPATIBILITY.md."
+          # Preserve the detailed reviewed notes; only promote the verified draft.
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target "$CANDIDATE_SHA" --draft=false

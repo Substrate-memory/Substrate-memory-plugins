@@ -14,8 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
+        with: {fetch-depth: 0}
       - name: Require DCO sign-off on every PR commit
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -23,62 +22,60 @@ jobs:
         run: |
           set -euo pipefail
           for commit in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
-            git show --no-patch --format='%B' "$commit" | \
-              grep -Eq '^Signed-off-by: .+ <[^>]+>$'
+            git show --no-patch --format='%B' "$commit" | grep -Eq '^Signed-off-by: .+ <[^>]+>$'
           done
 
   hygiene:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-      - name: Check the tree for real secrets and unexpected endpoints
-        run: python3 scripts/check_public_hygiene.py --root .
+      - run: python3 scripts/check_public_hygiene.py --root .
 
   test:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12"]
+        python: ['3.11', '3.12']
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python }}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.32"
+          version: '0.11.32'
           enable-cache: true
           cache-dependency-glob: uv.lock
       - run: uv sync --frozen --extra dev
       - run: uv run --frozen --extra dev ruff check .
       - run: uv run --frozen --extra dev python -m compileall -q plugins scripts
       - run: uv run --frozen --extra dev python -m pytest -q
-      - run: node --check plugins/openclaw/index.js
-      - name: Validate every manifest parses as JSON
+      - name: Validate JSON manifests
         run: |
           python3 - <<'EOF'
           import json
           from pathlib import Path
-          skip = {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", "dist", "htmlcov", "node_modules"}
-          files = sorted(p for p in Path(".").rglob("*.json") if not any(part in skip for part in p.parts))
-          assert files, "no JSON files found"
-          for path in files:
-              json.loads(path.read_text(encoding="utf-8"))
-          print(f"OK: {len(files)} JSON manifests parse")
+          for path in sorted(Path('.').rglob('*.json')):
+              if any(part in {'.git','.venv','__pycache__','dist'} for part in path.parts):
+                  continue
+              json.loads(path.read_text())
+          print('JSON manifests parse')
           EOF
       - run: uv run --frozen --extra dev python scripts/build_release.py
       - run: uv run --frozen --extra dev python scripts/build_release.py --check
+      - name: Validate Cowork plugin with native CLI when available
+        run: |
+          if command -v claude >/dev/null 2>&1; then
+            claude plugin validate --strict plugins/substrate-mcp
+          else
+            echo "claude CLI unavailable; schema regression tests cover plugin metadata"
+          fi
 
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    permissions: {contents: read}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0 (review-stage)
+
+- Replace the five host adapters with one thin Cowork-compatible
+  `plugins/substrate-mcp` package. It contains a remote HTTP MCP manifest at
+  `https://app.trysubstrate.co/mcp`, a generic best-effort usage skill, and
+  installation docs only. It has no local MCP server, hooks, or automatic
+  full-transcript guarantee.
+- Preserve the Hermes `plugins/substrate` runtime from v0.5.0. The only change
+  is the install-document pin to the v0.6.0 release.
+- Stage deterministic Hermes and thin-MCP archives for review. No tag, public
+  release, deployment, or backend claim is made by this candidate.
+
 ## 0.5.0
 
 - Durable v5 Hermes `substrate` plugin at content version `0.4.0`
