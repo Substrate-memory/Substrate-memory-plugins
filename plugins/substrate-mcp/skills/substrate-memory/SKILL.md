@@ -29,8 +29,11 @@ Use the remote Substrate MCP tools when they are available.
   up to 1024 bytes. Forget suppresses normal recall; it does not physically erase
   retained evidence. Explicit expand/evidence may show history labelled invalidated;
   never use that history as a current fact. Never send tenant or account IDs; the server owns them.
-- If authentication is required, show the exact browser OAuth consent URL and
-  ask the user to approve it in the browser. Never ask for a pasted token and
-  never report success until an authenticated smoke call succeeds.
+- If authentication is required, follow the same setup sequence as Hermes:
+  sign in, review the connection details and name, choose **Approve connection**,
+  then return to the agent for verification. Show the exact browser URL. Only the
+  user approves. **Connection approved** is not yet proof of a working client;
+  report **Connected to Substrate.** only after an authenticated smoke call succeeds.
+  Never ask for a pasted token or client secret.
 - If the host does not expose the expected MCP tools, say so plainly and do
   not invent a local server or fallback credential flow.

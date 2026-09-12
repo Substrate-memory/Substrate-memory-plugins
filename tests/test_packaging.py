@@ -64,3 +64,22 @@ def test_release_metadata_and_mcp_manifest() -> None:
 def test_only_two_release_archives() -> None:
     assert set(PLUGINS) == {"substrate", "substrate-mcp"}
     assert len(PLUGINS) == 2
+
+
+def test_onboarding_has_one_shared_user_facing_contract() -> None:
+    guide = (REPOSITORY_ROOT / "docs/installation.md").read_text()
+    for phrase in (
+        "Connect your agent to Substrate", "Approve connection", "Connection approved",
+        "Connected to Substrate.", "authenticated memory smoke test", "manual tokens",
+        "Verification",  # checked case-insensitively below
+    ):
+        assert phrase.lower() in guide.lower()
+    for path in ("README.md", "AGENTS.md", "plugins/substrate-mcp/INSTALL.md"):
+        text = (REPOSITORY_ROOT / path).read_text()
+        assert "docs/installation.md" in text
+        assert "Connection approved" in text
+        assert "Connected to Substrate." in text
+    assert "not proof" in guide
+    assert "published v0.5.0 install pin" in guide
+    assert "Do not select Hermes merely" in guide
+    assert "automatically" in guide

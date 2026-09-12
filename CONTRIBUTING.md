@@ -2,10 +2,12 @@
 
 ## Scope
 
-This repository owns the Hermes `substrate` retrieval plugin (`plugins/substrate`), its
-device onboarding, session-completion capture, response validation, release builder,
-tests, and user documentation. Server routes, persistence, deployment, and production
-data belong in the Substrate server repository.
+This repository owns the golden Hermes client (`plugins/substrate`), the thin
+remote MCP installation package (`plugins/substrate-mcp`), their shared installation
+guide, deterministic release builder, tests and user documentation. Server routes,
+the shared browser connection screen, authentication services, persistence and
+deployment belong in the Substrate server repository. Do not add another per-agent
+server or credential implementation here.
 
 ## Workflow
 

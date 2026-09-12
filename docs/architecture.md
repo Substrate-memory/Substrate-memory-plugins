@@ -21,6 +21,12 @@ plugins/substrate-mcp (thin package)
   - no local server, hooks, or transcript bridge
 ```
 
-The Cowork MCP endpoint and browser OAuth service are backend-owned and not
-deployed by this repository yet. The Cowork package must not imply automatic
-full-transcript capture.
+Both integrations use the same Substrate browser connection screen and consent
+model. Account, entitlement, credential registration and revocation are backend
+services shared by both. Device polling and MCP authorization-code/PKCE remain
+protocol adapters underneath that common user-facing journey.
+
+The backend owns the remote MCP endpoint and browser connection service; this
+repository configures clients. See [the single installation guide](installation.md).
+The Cowork package must not imply automatic full-transcript capture or claim a
+working connection before an authenticated memory request succeeds.

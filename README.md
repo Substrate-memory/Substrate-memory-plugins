@@ -1,66 +1,49 @@
 # Substrate Memory Plugins
 
-Release `0.6.0` is staged for review. It contains two deterministic archives:
-`substrate.zip` (the golden Hermes runtime from v0.5.0) and
-`substrate-mcp.zip` (a thin Cowork-compatible remote MCP plugin).
-The MCP server and browser OAuth are provided by the Substrate backend, not
-installed from this repository. Check endpoint availability and report a working
-installation only after an authenticated memory smoke test succeeds.
+One connection experience, with two supported implementations:
 
-## Exact install request
+- `plugins/substrate`: the golden Hermes plugin, unchanged from v0.5.0.
+- `plugins/substrate-mcp`: a thin Cowork-compatible client for the shared backend
+  MCP server. Other compatible agents use that same server.
 
-Say exactly:
+## Install
 
 ```text
 Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins
 ```
 
-The installing agent must:
+For both Hermes and MCP: **Install → Sign in → Review → Approve connection →
+Return to the agent → Connected to Substrate.**
 
-1. Identify the host. If it is unknown, ask the user which host to target.
-2. For Hermes 0.21.0, route to the golden `plugins/substrate` Hermes plugin.
-   Do not use the Cowork MCP plugin on Hermes. Automate the supported Hermes
-   install and enablement without asking for paths, tokens, API keys, or
-   client secrets.
-3. For Cowork, install the single `plugins/substrate-mcp` plugin. It contains
-   only a remote HTTP MCP manifest and a generic usage skill. Do not create a
-   local MCP server or hooks. Automate the supported marketplace setup.
-4. In Cowork, if marketplace automation is unavailable, provide this exact UI
-   fallback: **Cowork tab → Customize → Plugins → Personal plugins → + → Add marketplace →
-   Add from a repository (GitHub URL) → enter
-   `https://github.com/Substrate-memory/Substrate-memory-plugins` → Browse →
-   install `substrate-mcp`**. Confirm its MCP URL is exactly
-   `https://app.trysubstrate.co/mcp` and transport is Streamable HTTP.
-5. Let browser OAuth consent run. Show the exact consent URL returned by the
-   host and ask the user to approve it in their browser. Never approve it for
-   them. Never request or accept manual tokens, API keys, or pasted client secrets.
-6. Start a new turn and run an authenticated memory smoke test (normally
-   `memory_search`). An empty result set is valid; an authentication error is
-   not. Report success only after this test succeeds. If it fails, report the
-   safe error class and leave the old configuration unchanged.
+Both use **Connect your agent to Substrate** in the browser. Only report
+**Connected to Substrate.** after an authenticated memory smoke test succeeds.
+The browser's **Connection approved** state is not proof that the agent has
+finished connecting. Never request API keys, manual tokens, or client secrets.
 
-For any other MCP-capable host, ask which host and use its supported remote
-**Streamable HTTP** MCP configuration with the same URL and browser OAuth flow.
-Do not assume a native marketplace or invent host-specific commands.
+The installing agent identifies its current host and automates supported setup.
+If Cowork needs manual installation, use **Cowork tab → Customize → Plugins → Personal plugins
+→ + → Add marketplace → Add from a repository (GitHub URL)**, then browse and
+install `substrate-mcp`. Client-required permission dialogs still need the user.
 
-The Cowork remote MCP endpoint is backend-owned; this repository configures the
-client connection and does not deploy the service. The Cowork plugin makes only best-effort recall/write claims.
-It has no hooks and does not guarantee automatic full-transcript capture.
-Use explicit memory writes when the host exposes them and the user intends a
-durable write. Never send secrets to memory tools.
+Follow the single [installation and recovery guide](docs/installation.md).
+The endpoint is `https://app.trysubstrate.co/mcp`; use remote **Streamable HTTP**
+and browser OAuth. This repository configures clients, not a second server.
+
+Hermes retains automatic durable capture. MCP clients have explicit/best-effort
+memory tools, not a universal full-transcript capture guarantee.
 
 ## Releases and development
 
-Old immutable releases (`v0.3.0`, `v0.4.0`, and `v0.5.0`) remain available for
-rollback. Release `v0.6.0` must be reviewed before any tag or public release.
-The release workflow supports draft staging only and cannot publish until an
-explicit approval input is provided.
+The v0.6.0 GitHub release remains gated separately from code changes and deployment.
+Older immutable releases remain available. Hermes installation stays pinned to the
+already-published v0.5.0 tag. No release status replaces live connection verification.
 
 ```bash
 uv sync --frozen --extra dev
 uv run --frozen --extra dev ruff check .
 uv run --frozen --extra dev python -m pytest -q
 python3 scripts/check_public_hygiene.py --root .
+uv run --frozen --extra dev python scripts/build_release.py
 uv run --frozen --extra dev python scripts/build_release.py --check
 ```
 
