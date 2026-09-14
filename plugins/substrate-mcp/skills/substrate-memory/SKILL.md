@@ -39,6 +39,13 @@ Use the remote Substrate MCP tools when they are available.
   one operation ID per intended assertion and reuse the exact ID and payload
   only for retries. After a forget, use a new operation ID for a new assertion.
   Confirm the returned handle when the tool succeeds.
+- After the first successful smoke test, ask exactly once whether the user wants
+  to import past conversations. Use only history this agent can read on this
+  host (its own transcripts or an export file the user provides). Extract
+  durable facts, show the list, and write each confirmed item with
+  `memory_remember` (one item per call, new `operation_id` per item). Never
+  import secrets. If the user says no, do not ask again. If no history is
+  accessible, say so and stop.
 - Do not claim that every user turn or the full conversation transcript was
   captured. This plugin has no hooks and does not provide automatic transcript
   capture guarantees.

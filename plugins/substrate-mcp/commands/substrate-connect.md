@@ -24,3 +24,9 @@ Run the Substrate self-check before changing configuration:
 
 Do not report **Connection approved** as **Connected to Substrate.** without a
 successful authenticated smoke call.
+
+5. After the first successful smoke call, ask exactly once: "Do you want to
+   import past conversations into Substrate?" Use only history this agent can
+   read on this host. Extract durable facts, show the list, and write confirmed
+   items with `memory_remember` (one item per call, new `operation_id` each).
+   Never import secrets. If the user says no, do not ask again.

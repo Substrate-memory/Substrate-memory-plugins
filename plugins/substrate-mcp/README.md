@@ -101,6 +101,34 @@ details, then choose **Approve connection** or deny. Only the user can approve.
 Only after the authenticated request succeeds report **Connected to Substrate.**
 Never request API keys, manual tokens, or client secrets.
 
+## Import past conversations (asked once)
+
+After **Connected to Substrate.**, the agent asks exactly once:
+
+```text
+Do you want to import past conversations into Substrate? I will only use
+conversations I can access on this host, show you what I extracted, and write
+nothing until you confirm.
+```
+
+If the user says no, do not ask again. If yes:
+
+1. Use only history this agent can read on this host: its own local session
+   transcripts, or an export file the user places where the agent can read it.
+   The agent has no access to another app's chat history. If nothing is
+   accessible, say so plainly and stop.
+2. Extract durable facts, decisions, preferences, and people/projects. Skip
+   small talk. Never extract secrets, API keys, tokens, passwords, or private
+   credentials.
+3. Show the list to the user before writing. Let the user remove items.
+4. After confirmation, write each item with the host's `memory_remember` tool:
+   one item per call, one new `operation_id` per item, at most 4096 bytes of
+   text, `durability` set to `durable` unless the item is clearly time-bound.
+   Report the count written and any failures.
+
+Raw transcripts are not uploaded. This step is the same for every host; only
+the readable history differs.
+
 ## Legacy plugins
 
 The API-key based Claude Code, Codex, and Cowork plugins shipped in August 2026
