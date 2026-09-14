@@ -3,8 +3,21 @@
 One connection experience, with two supported implementations:
 
 - `plugins/substrate`: the golden Hermes plugin, unchanged from v0.5.0.
-- `plugins/substrate-mcp`: a thin Cowork-compatible client for the shared backend
-  MCP server. Other compatible agents use that same server.
+- `plugins/substrate-mcp`: a thin remote MCP client for Cowork, Claude Code, Codex,
+  and other compatible agents.
+
+## Host support
+
+| Host | Package | Setup and session note |
+|---|---|---|
+| Hermes | `plugins/substrate` | Device login and verification in the active agent. |
+| Claude Code | `plugins/substrate-mcp` | Use the confirmed host interface; do not use the deprecated API-key plugin. |
+| Claude Cowork | `plugins/substrate-mcp` | Install through the marketplace, then start a **new session** before tools appear. |
+| Codex | `plugins/substrate-mcp` | Use the confirmed host interface; do not use the deprecated API-key plugin. |
+| Other MCP clients | `plugins/substrate-mcp` | Use the host's documented remote Streamable HTTP interface. |
+
+See [docs/installation.md](docs/installation.md) for the self-check protocol and
+legacy-plugin migration.
 
 ## Install
 

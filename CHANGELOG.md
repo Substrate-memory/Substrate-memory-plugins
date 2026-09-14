@@ -8,6 +8,11 @@
 - Distinguish browser consent (**Connection approved**) from a verified client
   connection (**Connected to Substrate.**). No manual credential setup is added.
 - Preserve the golden Hermes runtime and the thin remote MCP manifest.
+- Add host mechanics, a self-check protocol, and Cowork's required new-session
+  step before MCP tools appear.
+- Document Claude Code and Codex migration from deprecated August 2026 API-key
+  plugins (`substrate_capture` and local spool paths); legacy spool data is not
+  migrated and users never set `SUBSTRATE_API_KEY` by hand.
 
 ## 0.6.0 (review-stage)
 
