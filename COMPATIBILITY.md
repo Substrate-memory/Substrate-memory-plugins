@@ -1,10 +1,10 @@
 # Compatibility
 
-## Current review candidate
+## Current release
 
 | Release | Hermes | Claude Code | Cowork | Codex / other MCP clients | Status |
 |---|---|---|---|---|---|
-| v0.6.0 | Hermes 0.21.0 exactly; golden `substrate` runtime from v0.5.0 | Thin remote HTTP MCP plugin (`substrate-mcp`); use the host's confirmed MCP interface | Thin remote HTTP MCP plugin (`substrate-mcp`); new session required in the current build (observed) for server registration | Thin remote HTTP MCP plugin (`substrate-mcp`); use the host's confirmed MCP interface | Review-stage only |
+| v0.6.0 | Hermes 0.21.0 exactly; golden `substrate` runtime from v0.5.0 | Thin remote HTTP MCP plugin (`substrate-mcp`); use the host's confirmed MCP interface | Thin remote HTTP MCP plugin (`substrate-mcp`); new session required in the current build (observed) for server registration | Thin remote HTTP MCP plugin (`substrate-mcp`); use the host's confirmed MCP interface | Released |
 
 Hermes uses `plugins/substrate` and retains its in-process hooks, durable spool,
 and memory tools. Cowork uses `plugins/substrate-mcp`, which contains only a

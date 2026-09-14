@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased — unified onboarding
+## 0.6.0
+
+Unified onboarding and install parity:
 
 - Use one Substrate connection journey for Hermes and MCP: sign in, review the
   connection name, permissions and proof details, approve, then verify from the agent.
@@ -18,7 +20,7 @@
   plugins (`substrate_capture` and local spool paths); legacy spool data is not
   migrated and users never set `SUBSTRATE_API_KEY` by hand.
 
-## 0.6.0 (review-stage)
+Client strategy:
 
 - Replace the five host adapters with one thin Cowork-compatible
   `plugins/substrate-mcp` package. It contains a remote HTTP MCP manifest at
@@ -27,8 +29,9 @@
   full-transcript guarantee.
 - Preserve the complete golden Hermes `plugins/substrate` tree from v0.5.0,
   including its published v0.5.0 installation pin during the rollout.
-- Stage deterministic Hermes and thin-MCP archives for review. No tag, public
-  release, deployment, or backend claim is made by this candidate.
+- Ship deterministic Hermes and thin-MCP archives. The remote MCP endpoint and
+  browser OAuth backend are deployed; a real Cowork installation was verified with
+  an authenticated `memory_search` before publication.
 
 ## 0.5.0
 
