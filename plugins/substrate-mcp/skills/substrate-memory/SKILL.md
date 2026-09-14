@@ -1,9 +1,30 @@
 ---
 name: substrate-memory
-description: Best-effort remote Substrate recall and explicit memory writes for Cowork.
+description: Best-effort remote Substrate recall and explicit memory writes for MCP hosts.
 ---
 
 # Substrate memory usage
+
+## Self-check before installing or reconnecting
+
+Use this decision protocol before changing host configuration:
+
+1. If the expected memory tools are present, run an authenticated `memory_search`
+   smoke test. An empty result is valid. Report **Connected to Substrate.** only
+   when the request succeeds.
+2. If the plugin/server is configured but the tools are absent, say that it is
+   installed but not wired into this session. Start a new session or restart the
+   host as documented; Cowork requires a new session because plugin MCP servers
+   register at session start. Then ask the user to paste:
+
+   ```text
+   Verify my Substrate connection with memory_search and report Connected to Substrate.
+   ```
+3. If nothing is configured, use the host's documented installation interface.
+4. If tools are present but authentication is required, show the exact browser
+   URL. The user signs in, reviews the request, and chooses **Approve connection**.
+   Finish in the agent and rerun the smoke test. **Connection approved** is not
+   **Connected to Substrate.**
 
 Use the remote Substrate MCP tools when they are available.
 
@@ -18,6 +39,13 @@ Use the remote Substrate MCP tools when they are available.
   one operation ID per intended assertion and reuse the exact ID and payload
   only for retries. After a forget, use a new operation ID for a new assertion.
   Confirm the returned handle when the tool succeeds.
+- After the first successful smoke test, ask exactly once whether the user wants
+  to import past conversations. Use only history this agent can read on this
+  host (its own transcripts or an export file the user provides). Extract
+  durable facts, show the list, and write each confirmed item with
+  `memory_remember` (one item per call, new `operation_id` per item). Never
+  import secrets. If the user says no, do not ask again. If no history is
+  accessible, say so and stop.
 - Do not claim that every user turn or the full conversation transcript was
   captured. This plugin has no hooks and does not provide automatic transcript
   capture guarantees.

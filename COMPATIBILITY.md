@@ -2,9 +2,9 @@
 
 ## Current review candidate
 
-| Release | Hermes | Cowork | Status |
-|---|---|---|---|
-| v0.6.0 | Hermes 0.21.0 exactly; golden `substrate` runtime from v0.5.0 | Thin remote HTTP MCP plugin (`substrate-mcp`); requires backend MCP/browser OAuth and authenticated client verification | Review-stage only |
+| Release | Hermes | Claude Code | Cowork | Codex / other MCP clients | Status |
+|---|---|---|---|---|---|
+| v0.6.0 | Hermes 0.21.0 exactly; golden `substrate` runtime from v0.5.0 | Thin remote HTTP MCP plugin (`substrate-mcp`); use the host's confirmed MCP interface | Thin remote HTTP MCP plugin (`substrate-mcp`); new session required in the current build (observed) for server registration | Thin remote HTTP MCP plugin (`substrate-mcp`); use the host's confirmed MCP interface | Review-stage only |
 
 Hermes uses `plugins/substrate` and retains its in-process hooks, durable spool,
 and memory tools. Cowork uses `plugins/substrate-mcp`, which contains only a
@@ -21,7 +21,14 @@ Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memo
 
 Unknown hosts require a clarifying question. Supported setup must use browser
 OAuth consent and an authenticated memory smoke test before success. No manual
-API keys, tokens, or client secrets are accepted.
+API keys, tokens, or client secrets are accepted. If the package is configured but
+tools are absent, the host is not wired into the current session; start a new
+session or restart as documented before retrying. In the current Cowork build, start a
+new session after installation (observed behavior).
+
+The August 2026 API-key plugins (`substrate_capture`, `~/.substrate/*/spool`,
+`SUBSTRATE_API_URL`/`SUBSTRATE_API_KEY`) are deprecated. Their local spool is not
+migrated. Do not set `SUBSTRATE_API_KEY` by hand; the product does not issue API keys.
 
 ## Historical releases
 
