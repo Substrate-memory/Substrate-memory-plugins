@@ -805,6 +805,162 @@ def validate_rules(resp: Any) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
+# MCP memory contract v2 (docs/mcp-contract.md; wire only — envelopes above
+# are unchanged). The plugin speaks MCP JSON-RPC to POST {origin}/mcp:
+# ``initialize`` once per process, then ``tools/call`` per memory operation,
+# with the spool draining through ``memory_import`` batches.
+# --------------------------------------------------------------------------
+
+MCP_CONTRACT_VERSION = 2
+MCP_SERVER_NAME = "substrate-memory"
+MCP_INSTRUCTIONS_PREFIX = "substrate-mcp-contract/2"
+
+MCP_TOOLS = frozenset({
+    "memory_search",
+    "memory_expand",
+    "memory_evidence",
+    "memory_shares",
+    "memory_turn_context",
+    "memory_import_status",
+    "memory_remember",
+    "memory_forget",
+    "memory_capture_tool",
+    "memory_capture_turn",
+    "memory_session_boundary",
+    "memory_import",
+})
+MCP_TOOL_LIST = sorted(MCP_TOOLS)
+
+MCP_ERROR_CATEGORIES = frozenset({
+    "unauthorized",
+    "forbidden",
+    "invalid_request",
+    "payload_too_large",
+    "not_found",
+    "conflict",
+    "rate_limited",
+    "result_too_large",
+    "internal",
+})
+
+# Per-item actions that retire a spooled envelope (contract.ack_ok semantics
+# applied per item of a memory_import batch). ``rejected`` quarantines.
+IMPORT_OK_ACTIONS = frozenset({"stored", "duplicate", "sealed", "queued"})
+IMPORT_BATCH_MAX_ITEMS = 64
+IMPORT_BATCH_MAX_BYTES = 240 * 1024
+
+
+def to_import_item(envelope: Any) -> dict[str, Any]:
+    """Strip a spooled envelope to its ``memory_import`` item form.
+
+    Items carry the envelope without ``schema_version``/``contract_version``
+    and keep ``event_id`` when the spool assigned one (live envelopes),
+    so the server answers ``duplicate`` on replay instead of storing twice.
+    """
+    if not isinstance(envelope, dict):
+        _fail("invalid_request", "item", "expected object")
+    item: dict[str, Any] = {}
+    for key in ("event_id", "kind", "session_id", "offset", "capture_origin",
+                "batch_id", "speaker", "created_at", "payload"):
+        if key in envelope:
+            item[key] = envelope[key]
+    for key in ("kind", "session_id", "offset", "capture_origin", "speaker",
+                "created_at", "payload"):
+        if key not in item:
+            _fail("invalid_request", f"item.{key}", "missing")
+    return item
+
+
+def import_ack_ok(result: Any, event_id: str) -> bool:
+    """True iff a ``memory_import`` per-item result retires the envelope."""
+    if not isinstance(result, dict):
+        return False
+    action = result.get("action")
+    if not isinstance(action, str) or action not in IMPORT_OK_ACTIONS:
+        return False
+    seen = result.get("event_id", None)
+    if seen is not None and seen != event_id:
+        return False
+    return True
+
+
+def validate_mcp_initialize(result: Any) -> dict[str, Any]:
+    """Validate an MCP ``initialize`` result; refuse any other server."""
+    if not isinstance(result, dict):
+        raise ContractError(_R, "initialize: expected object")
+    server_info = result.get("serverInfo")
+    if not isinstance(server_info, dict) or server_info.get("name") != MCP_SERVER_NAME:
+        raise ContractError(_R, "initialize.serverInfo.name: expected 'substrate-memory'")
+    instructions = result.get("instructions", "")
+    if not isinstance(instructions, str) or not instructions.startswith(MCP_INSTRUCTIONS_PREFIX):
+        raise ContractError(_R, "initialize.instructions: expected 'substrate-mcp-contract/2' prefix")
+    return result
+
+
+def validate_mcp_tools(result: Any) -> list[str]:
+    """Validate a ``tools/list`` result; all 12 contract tools must be present."""
+    if not isinstance(result, dict) or not isinstance(result.get("tools"), list):
+        raise ContractError(_R, "tools/list: expected object with tools array")
+    names: list[str] = []
+    for entry in result["tools"]:
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+            names.append(entry["name"])
+    if not MCP_TOOLS.issubset(names):
+        missing = sorted(MCP_TOOLS - set(names))
+        raise ContractError(_R, f"tools/list: missing contract tools: {missing}")
+    return names
+
+
+def validate_mcp_turn_context(structured: Any) -> dict[str, Any]:
+    """Validate a ``memory_turn_context`` structured result (contract v2)."""
+    if not isinstance(structured, dict):
+        raise ContractError(_R, "turn_context: expected object")
+    for key in ("contract_version", "session_id", "turn", "block", "handles",
+                "missing_turns", "brief_version", "latency_ms", "empty_reason"):
+        if key not in structured:
+            _fail(_R, f"turn_context.{key}", "missing or wrong type")
+    if isinstance(structured["contract_version"], bool) or structured["contract_version"] != MCP_CONTRACT_VERSION:
+        _fail(_R, "turn_context.contract_version", "must be 2")
+    _str(structured["session_id"], "turn_context.session_id", max_bytes=MAX_SESSION_ID_BYTES,
+         min_bytes=1, category=_R)
+    _int(structured["turn"], "turn_context.turn", minimum=0, category=_R)
+    block = _str(structured["block"], "turn_context.block", max_bytes=MAX_BLOCK_BYTES, category=_R)
+    if block.count("\n") + (1 if block else 0) > MAX_BLOCK_LINES:
+        _fail(_R, "turn_context.block", f"more than {MAX_BLOCK_LINES} lines")
+    _handles(structured["handles"], "turn_context.handles", _R)
+    _int(structured["missing_turns"], "turn_context.missing_turns", minimum=0, category=_R)
+    _int(structured["brief_version"], "turn_context.brief_version", minimum=0, category=_R)
+    _number(structured["latency_ms"], "turn_context.latency_ms", category=_R)
+    _enum(structured["empty_reason"], "turn_context.empty_reason", EMPTY_REASONS, _R)
+    return structured
+
+
+def validate_mcp_import_response(structured: Any) -> dict[str, Any]:
+    """Validate a ``memory_import`` structured result (contract v2)."""
+    if not isinstance(structured, dict):
+        raise ContractError(_R, "import: expected object")
+    for key in ("contract_version", "accepted", "rejected", "results"):
+        if key not in structured:
+            _fail(_R, f"import.{key}", "missing or wrong type")
+    if isinstance(structured["contract_version"], bool) or structured["contract_version"] != MCP_CONTRACT_VERSION:
+        _fail(_R, "import.contract_version", "must be 2")
+    _int(structured["accepted"], "import.accepted", minimum=0, category=_R)
+    _int(structured["rejected"], "import.rejected", minimum=0, category=_R)
+    results = _list(structured["results"], "import.results", max_items=IMPORT_BATCH_MAX_ITEMS,
+                    category=_R)
+    for i, entry in enumerate(results):
+        if not isinstance(entry, dict):
+            _fail(_R, f"import.results[{i}]", "expected object")
+        _int(entry.get("index"), f"import.results[{i}].index", minimum=0, category=_R)
+        action = entry.get("action")
+        if not isinstance(action, str) or (
+            action not in IMPORT_OK_ACTIONS and action != "rejected"
+        ):
+            _fail(_R, f"import.results[{i}].action", "unknown action")
+    return structured
+
+
+# --------------------------------------------------------------------------
 # Fixtures
 # --------------------------------------------------------------------------
 
@@ -827,10 +983,15 @@ __all__ = [
     "ACTIONS", "ACTION_CLASSES", "ARTIFACT_KEY_KINDS", "BOUNDARIES", "CAPTURE_ORIGINS",
     "CLIENT_ERROR_CATEGORIES", "CONSENT_DECISIONS", "CONTRACT_VERSION", "ContractError",
     "DURABILITIES", "EMPTY_REASONS", "ERROR_CATEGORIES", "FIXTURE_SHA256", "HANDLE_RE",
-    "JOB_STATUSES", "KINDS", "LIMITS", "MEMORY_WRITE_SOURCES", "MESSAGE_ROLES", "NAMESPACE",
+    "IMPORT_BATCH_MAX_BYTES", "IMPORT_BATCH_MAX_ITEMS", "IMPORT_OK_ACTIONS",
+    "JOB_STATUSES", "KINDS", "LIMITS", "MCP_CONTRACT_VERSION", "MCP_ERROR_CATEGORIES",
+    "MCP_INSTRUCTIONS_PREFIX", "MCP_SERVER_NAME", "MCP_TOOLS", "MCP_TOOL_LIST",
+    "MEMORY_WRITE_SOURCES", "MESSAGE_ROLES", "NAMESPACE",
     "PLUGIN_POSTABLE_KINDS", "RESPONSE_FIELDS", "SCHEMA_VERSION", "SPEAKER_ROLES", "UUID_RE",
     "ack_ok", "canonical_bytes", "canonical_json", "deterministic_event_id", "fixture_path",
-    "fixture_sha256", "load_fixtures", "shape_response", "validate_action_cues",
-    "validate_action_cues_request", "validate_capabilities", "validate_envelope",
-    "validate_rules", "validate_turn_context", "validate_turn_context_request",
+    "fixture_sha256", "import_ack_ok", "load_fixtures", "shape_response", "to_import_item",
+    "validate_action_cues", "validate_action_cues_request", "validate_capabilities",
+    "validate_envelope", "validate_mcp_import_response", "validate_mcp_initialize",
+    "validate_mcp_tools", "validate_mcp_turn_context", "validate_rules",
+    "validate_turn_context", "validate_turn_context_request",
 ]

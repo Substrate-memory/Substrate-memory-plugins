@@ -1,12 +1,24 @@
-"""Small stdlib HTTP client for the Substrate API."""
+"""Stdlib MCP Streamable-HTTP client for the Substrate memory server.
+
+Every server call goes to ``POST {origin}/mcp`` as MCP JSON-RPC: one
+``initialize`` per process (verifying ``serverInfo.name ==
+"substrate-memory"`` and the ``substrate-mcp-contract/2`` instructions
+prefix), then ``tools/call`` (and ``tools/list`` for the capabilities
+check). Authentication is the device-grant key
+``Authorization: Bearer sk_sub_...`` with
+``Accept: application/json, text/event-stream``. Both plain-JSON and SSE
+(``data:`` line) response bodies are accepted. Standard library only.
+"""
 
 from __future__ import annotations
 
 import ipaddress
+import itertools
 import json
 import math
 import os
 import socket
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,6 +26,8 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+PLUGIN_VERSION = "0.7.0"
+_MCP_PATH = "/mcp"
 _MAX_REQUEST_BYTES = 512 * 1024
 
 
@@ -127,11 +141,7 @@ def _http_error_category(status: int) -> tuple[str, bool]:
     if status == 400:
         return "invalid_request", False
     if status == 404:
-        # Unknown-handle forget (server 2acadcd: 404 {error:not_found}) is
-        # permanent: kept as transport_error for the tool path (which folds
-        # unknown categories), with status + transient=False so the spool
-        # sender quarantines instead of retrying forever.
-        return "transport_error", False
+        return "not_found", False
     if status == 409:
         return "conflict", False
     if status == 413:
@@ -141,8 +151,64 @@ def _http_error_category(status: int) -> tuple[str, bool]:
     return "transport_error", status == 408
 
 
+# JSON-RPC error codes that map to permanent (non-retryable) failures.
+_PERMANENT_JSONRPC_CODES = frozenset({-32602})
+
+
+def _tool_error_category(structured: Any) -> str:
+    """Extract the contract error category from a failed tool result."""
+    if isinstance(structured, dict):
+        error = structured.get("error")
+        if isinstance(error, str) and error:
+            return error
+    return "transport_error"
+
+
+_PERMANENT_TOOL_ERRORS = frozenset({"invalid_request", "not_found", "forbidden"})
+
+
+def parse_mcp_body(raw: bytes) -> Any:
+    """Parse an MCP Streamable-HTTP body: plain JSON or SSE ``data:`` lines.
+
+    Plain JSON is tried first. Otherwise every ``data:`` line is collected
+    and the last one that decodes as JSON wins (``[DONE]`` is skipped).
+    Anything else raises ``ClientError("invalid_response")``.
+    """
+    if not isinstance(raw, bytes) or not raw:
+        raise ClientError("invalid_response", transient=False)
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        pass
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeError as exc:
+        raise ClientError("invalid_response", transient=False) from exc
+    payloads: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(":"):
+            continue
+        if stripped.startswith("data:"):
+            datum = stripped[5:].strip()
+            if datum and datum != "[DONE]":
+                payloads.append(datum)
+    for datum in reversed(payloads):
+        try:
+            return json.loads(datum)
+        except json.JSONDecodeError:
+            continue
+    raise ClientError("invalid_response", transient=False)
+
+
+# One verified initialize result per origin per process.
+_init_lock = threading.Lock()
+_init_cache: dict[str, dict[str, Any]] = {}
+_id_counter = itertools.count(1)
+
+
 class SubstrateClient:
-    """JSON-over-HTTP client with no work performed at construction time."""
+    """MCP JSON-RPC client with no work performed at construction time."""
 
     def __init__(self, api_url: str, api_key: str) -> None:
         api_url = (api_url or "").rstrip("/")
@@ -164,36 +230,34 @@ class SubstrateClient:
             or _credentials.stored_api_key(),
         )
 
-    def post_json(
-        self,
-        path: str,
-        body: dict[str, Any],
-        *,
-        timeout: float,
-        idempotency_key: str | None = None,
+    # -- low-level JSON-RPC -------------------------------------------
+
+    def _rpc(
+        self, method: str, params: dict[str, Any], *, timeout: float,
         max_response_bytes: int = 1_048_576,
     ) -> Any:
+        """POST one JSON-RPC message to /mcp and return its ``result``."""
         if not self.api_key:
             raise ClientError("invalid_config", transient=False)
-        if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
-            raise ClientError("invalid_request", transient=False)
+        body = {
+            "jsonrpc": "2.0",
+            "id": next(_id_counter),
+            "method": method,
+            "params": params,
+        }
         data = json.dumps(
             body, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
         if len(data) > _MAX_REQUEST_BYTES:
             raise ClientError("invalid_request", transient=False)
         headers = {
-            "Accept": "application/json",
+            "Accept": "application/json, text/event-stream",
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "substrate-hermes-plugin/0.4.0",
+            "User-Agent": f"substrate-hermes-plugin/{PLUGIN_VERSION}",
         }
-        if idempotency_key:
-            if not isinstance(idempotency_key, str) or len(idempotency_key.encode("utf-8")) > 256:
-                raise ClientError("invalid_request", transient=False)
-            headers["Idempotency-Key"] = idempotency_key
         request = urllib.request.Request(
-            f"{self.api_url}{path}", data=data, headers=headers, method="POST"
+            f"{self.api_url}{_MCP_PATH}", data=data, headers=headers, method="POST"
         )
         _ensure_no_redirect_opener()
         try:
@@ -215,7 +279,6 @@ class SubstrateClient:
             raise
         except urllib.error.HTTPError as exc:
             category, transient = _http_error_category(exc.code)
-            # A 503 (or any 5xx) may carry Retry-After just like a 429.
             retry_after = (
                 _retry_after_seconds(exc.headers)
                 if exc.code == 429 or 500 <= exc.code <= 599
@@ -232,7 +295,164 @@ class SubstrateClient:
             raise ClientError("transport_error") from exc
         if len(raw) > max_response_bytes:
             raise ClientError("invalid_response", transient=False)
+        envelope = parse_mcp_body(raw)
+        if not isinstance(envelope, dict):
+            raise ClientError("invalid_response", transient=False)
+        if "error" in envelope and envelope["error"] is not None:
+            detail = envelope["error"]
+            code = detail.get("code") if isinstance(detail, dict) else None
+            message = detail.get("message") if isinstance(detail, dict) else ""
+            if code == -32000 or (isinstance(message, str) and "unauthorized" in message.lower()):
+                raise ClientError("unauthorized")
+            if code == -32003 or (isinstance(message, str) and "forbidden" in message.lower()):
+                raise ClientError("forbidden")
+            transient = code not in _PERMANENT_JSONRPC_CODES
+            raise ClientError("transport_error", transient=transient)
+        if "result" not in envelope:
+            raise ClientError("invalid_response", transient=False)
+        return envelope["result"]
+
+    # -- initialize / tools -------------------------------------------
+
+    def ensure_initialized(self, *, timeout: float = 5.0) -> dict[str, Any]:
+        """Run MCP ``initialize`` once per process; verify the server identity.
+
+        Refuses to run against any server whose ``serverInfo.name`` is not
+        ``"substrate-memory"`` or whose ``instructions`` do not start with
+        ``"substrate-mcp-contract/2"``.
+        """
         try:
-            return json.loads(raw.decode("utf-8"))
-        except (UnicodeError, json.JSONDecodeError) as exc:
-            raise ClientError("invalid_response", transient=False) from exc
+            from . import contract as _contract
+        except ImportError:  # standalone script layout
+            import contract as _contract  # type: ignore[no-redef]
+        with _init_lock:
+            cached = _init_cache.get(self.api_url)
+            if cached is not None:
+                return cached
+        result = self._rpc(
+            "initialize",
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "substrate-hermes-plugin", "version": PLUGIN_VERSION},
+            },
+            timeout=timeout,
+        )
+        _contract.validate_mcp_initialize(result)
+        with _init_lock:
+            _init_cache[self.api_url] = result
+        return result
+
+    def tools_list(self, *, timeout: float = 5.0) -> list[str]:
+        """Return the server's tool names; the capabilities check validates them."""
+        try:
+            from . import contract as _contract
+        except ImportError:  # standalone script layout
+            import contract as _contract  # type: ignore[no-redef]
+        self.ensure_initialized(timeout=timeout)
+        result = self._rpc("tools/list", {}, timeout=timeout)
+        return _contract.validate_mcp_tools(result)
+
+    def check_capabilities(self, *, timeout: float = 5.0) -> list[str]:
+        """``initialize`` + ``tools/list`` containing all 12 contract tools."""
+        return self.tools_list(timeout=timeout)
+
+    def call_tool(
+        self, name: str, arguments: dict[str, Any], *, timeout: float,
+        max_response_bytes: int = 1_048_576,
+    ) -> tuple[dict[str, Any], str]:
+        """Call one MCP tool; return ``(structuredContent, text)``.
+
+        A failed tool call (``isError: true``) raises ``ClientError`` whose
+        category is the contract ``error`` value (``invalid_request``,
+        ``not_found`` and ``forbidden`` are permanent; the rest retryable).
+        """
+        if not isinstance(name, str) or not name or len(name.encode("utf-8")) > 128:
+            raise ClientError("invalid_request", transient=False)
+        if not isinstance(arguments, dict):
+            raise ClientError("invalid_request", transient=False)
+        self.ensure_initialized(timeout=min(timeout, 5.0))
+        result = self._rpc(
+            "tools/call",
+            {"name": name, "arguments": arguments},
+            timeout=timeout,
+            max_response_bytes=max_response_bytes,
+        )
+        if not isinstance(result, dict):
+            raise ClientError("invalid_response", transient=False)
+        if result.get("isError") is True:
+            structured = result.get("structuredContent")
+            if not isinstance(structured, dict):
+                # Fall back to the text payload when the server sends only text.
+                text = ""
+                try:
+                    content = result.get("content")
+                    if isinstance(content, list) and content and isinstance(content[0], dict):
+                        text = str(content[0].get("text", ""))
+                        maybe = json.loads(text)
+                        if isinstance(maybe, dict):
+                            structured = maybe
+                except (ValueError, TypeError):
+                    structured = None
+                if not isinstance(structured, dict):
+                    raise ClientError("transport_error")
+            category = _tool_error_category(structured)
+            transient = category not in _PERMANENT_TOOL_ERRORS
+            if category in ("unauthorized", "forbidden"):
+                transient = True
+            raise ClientError(category, transient=transient)
+        structured = result.get("structuredContent")
+        if not isinstance(structured, dict):
+            raise ClientError("invalid_response", transient=False)
+        text = ""
+        try:
+            content = result.get("content")
+            if isinstance(content, list) and content and isinstance(content[0], dict):
+                candidate = content[0].get("text", "")
+                if isinstance(candidate, str):
+                    text = candidate
+        except (TypeError, AttributeError):
+            text = ""
+        return structured, text
+
+    # -- legacy seam (tests only) --------------------------------------
+
+    def post_json(
+        self,
+        path: str,
+        body: dict[str, Any],
+        *,
+        timeout: float,
+        idempotency_key: str | None = None,
+        max_response_bytes: int = 1_048_576,
+    ) -> Any:
+        """Translate a legacy REST-style call onto its MCP tool equivalent.
+
+        Kept only so older test doubles keep working; new code must use
+        :meth:`call_tool` directly.
+        """
+        _LEGACY_ROUTES = {
+            "/api/v1/memory/turn-context": "memory_turn_context",
+            "/api/v1/memory/search": "memory_search",
+            "/api/v1/memory/expand": "memory_expand",
+            "/api/v1/memory/evidence": "memory_evidence",
+            "/api/v1/ledger/events": None,
+        }
+        if path not in _LEGACY_ROUTES or _LEGACY_ROUTES[path] is None:
+            raise ClientError("invalid_request", transient=False)
+        structured, _text = self.call_tool(
+            _LEGACY_ROUTES[path], body, timeout=timeout,
+            max_response_bytes=max_response_bytes,
+        )
+        return structured
+
+    def reset_init_cache(self) -> None:
+        """Drop the cached ``initialize`` result (tests only)."""
+        with _init_lock:
+            _init_cache.pop(self.api_url, None)
+
+
+def reset_init_cache() -> None:
+    """Drop all cached ``initialize`` results (tests only)."""
+    with _init_lock:
+        _init_cache.clear()
