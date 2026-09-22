@@ -202,25 +202,34 @@ def safe_verification_url(origin: str, value: Any, user_code: str) -> str:
 
 
 def token_is_valid(origin: str, token: str) -> bool:
-    """Authenticated preflight: capabilities plus one bounded search call."""
+    """Authenticated preflight: MCP initialize + tools/list + smoke search.
+
+    The capabilities check is ``initialize`` (verifying
+    ``serverInfo.name == "substrate-memory"`` and the
+    ``substrate-mcp-contract/2`` instructions prefix) plus ``tools/list``
+    containing all 12 contract tools; ``memory_search`` is the connection
+    smoke test (an authenticated call, even with an empty result, proves
+    **Connected to Substrate.**).
+    """
     try:
-        status, value = request_json(origin, "/api/v1/capabilities", token=token)
-        if status != 200:
-            return False
-        contract.validate_capabilities(contract.shape_response("capabilities", value))
-        status, value = request_json(
-            origin,
-            "/api/v1/memory/search",
-            json_body={"query": "Substrate installation health check", "limit": 1},
-            token=token,
+        client = SubstrateClient((origin or "").rstrip("/") or credentials.DEFAULT_ORIGIN, token)
+    except ClientError:
+        return False
+    try:
+        client.check_capabilities(timeout=5.0)
+        structured, _text = client.call_tool(
+            "memory_search",
+            {"query": "Substrate installation health check", "limit": 1},
+            timeout=5.0,
         )
-        shaped = contract.shape_response("search", value)
-    except (OnboardingError, contract.ContractError):
+    except (ClientError, contract.ContractError):
+        return False
+    except Exception:
         return False
     return (
-        status == 200
-        and shaped.get("contract_version") == contract.CONTRACT_VERSION
-        and isinstance(shaped.get("results"), list)
+        isinstance(structured, dict)
+        and structured.get("contract_version") == contract.MCP_CONTRACT_VERSION
+        and isinstance(structured.get("results"), list)
     )
 
 

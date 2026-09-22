@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .contract import ack_ok
+from .contract import import_ack_ok, to_import_item, validate_mcp_import_response
 
 # Priorities: lower number sends first and is evicted last.
 PRIORITY_EXPLICIT = 0  # memory_write, memory_forget, consent
@@ -55,7 +55,11 @@ _MAX_RETRY_EXPONENT = 8
 _RETRY_JITTER_FRACTION = 0.2
 _SEND_TIMEOUT = 5.0
 _SEND_MAX_RESPONSE_BYTES = 65_536
-_LEDGER_PATH = "/api/v1/ledger/events"
+# memory_import batch bounds (docs/mcp-contract.md section 4.7): at most 64
+# items and 240 KiB of items per tools/call so the request stays far below
+# the 262144-byte /mcp body limit.
+_IMPORT_MAX_ITEMS = 64
+_IMPORT_MAX_BYTES = 240 * 1024
 
 # Categories that use the 30 s auth backoff base (token may need reconnect).
 _AUTH_CATEGORIES = frozenset({
@@ -69,6 +73,15 @@ _TRANSIENT_CATEGORIES = frozenset({
     "unauthorized", "forbidden", "rate_limited", "server_error",
     "http_401", "http_403", "http_429",
 })
+
+
+def _transport_error(category: str) -> Exception:
+    """Fabricate a transient client-style failure for a bad import body."""
+    error = RuntimeError(category)
+    error.category = category  # type: ignore[attr-defined]
+    error.retry_after = None  # type: ignore[attr-defined]
+    error.transient = True  # type: ignore[attr-defined]
+    return error
 
 
 class SpoolFull(RuntimeError):
@@ -852,76 +865,261 @@ class Spool:
 
     def _sender_loop(self) -> None:
         while not self._stop.is_set():
-            claimed = self.claim()
-            if claimed is None:
+            batch = self.claim_batch()
+            if not batch:
                 self._wake.wait(0.5)
                 self._wake.clear()
                 continue
-            self._deliver_claimed(claimed)
-        # Do not strand the in-flight reservation on shutdown: release it so a
-        # reopen (or a later start) redelivers instead of losing it.
+            self._deliver_batch(batch)
+        # Do not strand in-flight reservations on shutdown: release them so a
+        # reopen (or a later start) redelivers instead of losing them.
         return
 
-    def _deliver_claimed(self, claimed: dict[str, Any]) -> None:
-        item_id = claimed["item_id"]
-        event_id = claimed["event_id"]
+    def claim_batch(self) -> list[dict[str, Any]]:
+        """Reserve up to 64 queued items within 240 KiB (priority, then FIFO).
+
+        Claimed items are in-flight and can never be evicted. A crash before
+        release/retire leaves rows claimed; reopening the spool releases them.
+        """
+        batch: list[dict[str, Any]] = []
+        batch_bytes = 0
+        while len(batch) < _IMPORT_MAX_ITEMS:
+            claimed = self.claim()
+            if claimed is None:
+                break
+            try:
+                size = len(json.dumps(
+                    claimed["envelope"], sort_keys=True, separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8"))
+            except (TypeError, ValueError):
+                size = claimed.get("byte_count", 0) or 0
+            if batch and batch_bytes + size > _IMPORT_MAX_BYTES:
+                self.release(claimed["item_id"])
+                break
+            batch.append(claimed)
+            batch_bytes += size
+        return batch
+
+    def _release_all(self, batch: list[dict[str, Any]]) -> None:
+        for claimed in batch:
+            try:
+                self.release(claimed["item_id"])
+            except Exception:  # noqa: BLE001 - best effort release
+                pass
+
+    def _import_once(self, client: Any, items: list[dict[str, Any]]) -> dict[str, Any]:
+        """Send one ``memory_import`` tools/call; return its structured result."""
+        structured, _text = client.call_tool(
+            "memory_import",
+            {"items": items},
+            timeout=_SEND_TIMEOUT,
+            max_response_bytes=_SEND_MAX_RESPONSE_BYTES,
+        )
+        return structured
+
+    def _settle_batch(
+        self, batch: list[dict[str, Any]], structured: Any
+    ) -> bool:
+        """Retire/quarantine each item by its per-item action.
+
+        Returns True when every item reached a terminal state (retired or
+        quarantined); items with no usable per-item result are released for
+        a later retry and yield False.
+        """
+        try:
+            checked = validate_mcp_import_response(structured)
+        except Exception:  # noqa: BLE001 - a bad import body is never fatal
+            self._release_all(batch)
+            self._streak += 1
+            self._sleep_interruptible(
+                retry_delay("transport_error", self._streak, rng=self._rand)
+            )
+            return False
+        by_index = {
+            entry.get("index"): entry
+            for entry in checked["results"]
+            if isinstance(entry, dict)
+        }
+        settled_all = True
+        for position, claimed in enumerate(batch):
+            entry = by_index.get(position)
+            if not isinstance(entry, dict):
+                try:
+                    self.release(claimed["item_id"])
+                except Exception:  # noqa: BLE001 - best effort release
+                    pass
+                settled_all = False
+                continue
+            action = entry.get("action")
+            if action == "rejected":
+                try:
+                    self.quarantine(claimed["item_id"])
+                except Exception:  # noqa: BLE001 - best effort quarantine
+                    pass
+                continue
+            try:
+                ok = import_ack_ok(entry, claimed["event_id"])
+            except Exception:  # noqa: BLE001 - a bad entry is never fatal
+                ok = False
+            if ok:
+                try:
+                    self.retire(claimed["item_id"])
+                except Exception:  # noqa: BLE001 - best effort retire
+                    pass
+            else:
+                try:
+                    self.release(claimed["item_id"])
+                except Exception:  # noqa: BLE001 - best effort release
+                    pass
+                settled_all = False
+        if settled_all:
+            self._streak = 0
+        else:
+            self._streak += 1
+            self._sleep_interruptible(
+                retry_delay("transport_error", self._streak, rng=self._rand)
+            )
+        return settled_all
+
+    def _deliver_single(
+        self, client: Any, claimed: dict[str, Any]
+    ) -> str:
+        """Deliver one item alone; isolate poison items from a failed batch.
+
+        Returns "retired", "quarantined", or "retry" (released + backed off).
+        """
+        try:
+            item = to_import_item(claimed["envelope"])
+        except Exception:  # noqa: BLE001 - categories only, never content
+            try:
+                self.quarantine(claimed["item_id"])
+            except Exception:  # noqa: BLE001 - best effort quarantine
+                pass
+            return "quarantined"
+        try:
+            structured = self._import_once(client, [item])
+        except Exception as exc:  # noqa: BLE001 - categories only, never content
+            return self._request_failed([claimed], exc)
+        try:
+            checked = validate_mcp_import_response(structured)
+        except Exception:  # noqa: BLE001 - a bad import body is never fatal
+            return self._request_failed(
+                [claimed], _transport_error("transport_error")
+            )
+        entries = checked["results"]
+        entry = entries[0] if entries else None
+        if not isinstance(entry, dict):
+            try:
+                self.release(claimed["item_id"])
+            except Exception:  # noqa: BLE001 - best effort release
+                pass
+            self._streak += 1
+            self._sleep_interruptible(
+                retry_delay("transport_error", self._streak, rng=self._rand)
+            )
+            return "retry"
+        if entry.get("action") == "rejected":
+            try:
+                self.quarantine(claimed["item_id"])
+            except Exception:  # noqa: BLE001 - best effort quarantine
+                pass
+            return "quarantined"
+        try:
+            ok = import_ack_ok(entry, claimed["event_id"])
+        except Exception:  # noqa: BLE001 - a bad entry is never fatal
+            ok = False
+        if ok:
+            try:
+                self.retire(claimed["item_id"])
+            except Exception:  # noqa: BLE001 - best effort retire
+                pass
+            self._streak = 0
+            return "retired"
+        try:
+            self.release(claimed["item_id"])
+        except Exception:  # noqa: BLE001 - best effort release
+            pass
+        self._streak += 1
+        self._sleep_interruptible(
+            retry_delay("transport_error", self._streak, rng=self._rand)
+        )
+        return "retry"
+
+    def _request_failed(
+        self, batch: list[dict[str, Any]], exc: Exception
+    ) -> str:
+        """Handle a failed ``memory_import`` request; release + backoff or quarantine."""
+        category = getattr(exc, "category", "transport_error")
+        if not isinstance(category, str) or not category:
+            category = "transport_error"
+        retry_after = getattr(exc, "retry_after", None)
+        # The client marks permanent failures (invalid_request, not_found,
+        # bad responses) transient=False; honor that flag so a poison batch
+        # is split into single-item deliveries instead of retried forever.
+        # Endpoint-specific override: this sender only delivers import
+        # batches, where anything but a valid per-item action is a transient
+        # failure. An undecodable 200 (invalid_response) must therefore stay
+        # spooled and retry, never quarantine.
+        flag = getattr(exc, "transient", None)
+        transient = flag if isinstance(flag, bool) else is_transient_category(category)
+        if category == "invalid_response":
+            transient = True
+        if not transient:
+            if len(batch) > 1:
+                return "split"
+            try:
+                self.quarantine(batch[0]["item_id"])
+            except Exception:  # noqa: BLE001 - best effort quarantine
+                pass
+            self._streak = 0
+            return "quarantined"
+        self._release_all(batch)
+        self._streak += 1
+        self._sleep_interruptible(
+            retry_delay(category, self._streak, retry_after=retry_after, rng=self._rand)
+        )
+        return "retry"
+
+    def _deliver_batch(self, batch: list[dict[str, Any]]) -> None:
+        """Deliver one claimed batch through ``memory_import``; never raises."""
         client = self._client
         if client is None:
-            self.release(item_id)
+            self._release_all(batch)
             self._streak += 1
             self._sleep_interruptible(
                 retry_delay("not_configured", self._streak, rng=self._rand)
             )
             return
-        try:
-            ack = client.post_json(
-                _LEDGER_PATH,
-                claimed["envelope"],
-                timeout=_SEND_TIMEOUT,
-                idempotency_key=event_id,
-                max_response_bytes=_SEND_MAX_RESPONSE_BYTES,
-            )
-        except Exception as exc:  # noqa: BLE001 - categories only, never content
-            category = getattr(exc, "category", "transport_error")
-            if not isinstance(category, str) or not category:
-                category = "transport_error"
-            retry_after = getattr(exc, "retry_after", None)
-            # The client marks permanent failures (400/404/409/413, bad
-            # responses) transient=False with the HTTP status attached; honor
-            # that flag so a permanent 404 is quarantined, never retried.
-            # Endpoint-specific override: this sender only posts ledger
-            # events, where the ACK rule says anything but a valid ACK is a
-            # transient failure. An undecodable 200 (invalid_response) must
-            # therefore stay spooled and retry, never quarantine or retire.
-            flag = getattr(exc, "transient", None)
-            transient = flag if isinstance(flag, bool) else is_transient_category(category)
-            if category == "invalid_response":
-                transient = True
-            if not transient:
-                self.quarantine(item_id)
-                self._streak = 0
-                return
-            self.release(item_id)
-            self._streak += 1
-            self._sleep_interruptible(
-                retry_delay(category, self._streak, retry_after=retry_after, rng=self._rand)
-            )
-            return
-        # ACK retirement: stored==true AND matching event_id AND a known
-        # action. A bare 200 (or any other shape) is a transient failure.
-        try:
-            ok = ack_ok(ack, event_id)
-        except Exception:  # noqa: BLE001 - a bad ACK is never fatal
-            ok = False
-        if ok:
-            self.retire(item_id)
+        # One pass: shapeless envelopes quarantine immediately; the rest
+        # stay positionally aligned with their import items.
+        survivors: list[dict[str, Any]] = []
+        survivor_items: list[dict[str, Any]] = []
+        for claimed in batch:
+            try:
+                survivor_items.append(to_import_item(claimed["envelope"]))
+                survivors.append(claimed)
+            except Exception:  # noqa: BLE001 - categories only, never content
+                try:
+                    self.quarantine(claimed["item_id"])
+                except Exception:  # noqa: BLE001 - best effort quarantine
+                    pass
+        if not survivors:
             self._streak = 0
             return
-        self.release(item_id)
-        self._streak += 1
-        self._sleep_interruptible(
-            retry_delay("transport_error", self._streak, rng=self._rand)
-        )
+        try:
+            structured = self._import_once(client, survivor_items)
+        except Exception as exc:  # noqa: BLE001 - categories only, never content
+            outcome = self._request_failed(survivors, exc)
+            if outcome == "split":
+                # Isolate the poison item: redeliver one at a time. A single
+                # transport failure releases the rest with backoff.
+                for claimed in survivors:
+                    if self._deliver_single(client, claimed) == "retry":
+                        break
+            return
+        self._settle_batch(survivors, structured)
+
 
     def close(self) -> None:
         """Stop the sender and close the database handle (reopenable)."""
