@@ -25,25 +25,21 @@ from pathlib import Path
 
 import pytest
 
-from substrate import contract
 from substrate import credentials
 from substrate import onboarding
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PLUGIN_CLI = REPO_ROOT / "plugins" / "substrate" / "onboard.py"
+PLUGIN_CLI = REPO_ROOT / "plugins" / "substrate-hermes" / "onboard.py"
 
 DEVICE_CODE = "a" * 64
 TOKEN = "sk_sub_" + "b" * 32
 
-CAPABILITIES = {
-    "contract_version": 1,
-    "provider": "substrate",
-    "server_commit": "test",
-    "limits": dict(contract.LIMITS),
-    "actions": sorted(contract.ACTIONS),
-    "kinds": sorted(contract.KINDS),
-    "tenant": {"tenant_id": "agent", "brief_version": 0},
-}
+MCP_TOOLS = [
+    "memory_search", "memory_expand", "memory_evidence", "memory_shares",
+    "memory_turn_context", "memory_import_status", "memory_remember",
+    "memory_forget", "memory_capture_tool", "memory_capture_turn",
+    "memory_session_boundary", "memory_import",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -94,24 +90,48 @@ class _DeviceHandler(BaseHTTPRequestHandler):
             pass
 
     def do_GET(self):
-        parsed = urllib.parse.urlsplit(self.path)
-        if parsed.path == "/api/v1/capabilities":
-            if self.headers.get("Authorization") != f"Bearer {self.server.token}":
-                self._send(401, {"error": "unauthorized"})
-                return
-            self._send(200, dict(CAPABILITIES))
-            return
         self._send(404, {"error": "not_found"})
+
+    def _mcp(self, body):
+        """Minimal MCP surface for the token preflight (not the fake_mcp stub)."""
+        if not isinstance(body, dict):
+            return {"jsonrpc": "2.0", "id": None,
+                    "error": {"code": -32600, "message": "invalid request"}}
+        message_id = body.get("id")
+        if self.headers.get("Authorization") != f"Bearer {self.server.token}":
+            return {"jsonrpc": "2.0", "id": message_id,
+                    "error": {"code": -32000, "message": "unauthorized"}}
+        method = body.get("method")
+        params = body.get("params") if isinstance(body.get("params"), dict) else {}
+        if method == "initialize":
+            return {"jsonrpc": "2.0", "id": message_id, "result": {
+                "protocolVersion": "2024-11-05", "capabilities": {},
+                "serverInfo": {"name": "substrate-memory", "version": "test"},
+                "instructions": "substrate-mcp-contract/2 test"}}
+        if method == "tools/list":
+            return {"jsonrpc": "2.0", "id": message_id, "result": {
+                "tools": [{"name": name} for name in MCP_TOOLS]}}
+        if method == "tools/call" and params.get("name") == "memory_search":
+            structured = {"contract_version": 2, "results": []}
+            return {"jsonrpc": "2.0", "id": message_id, "result": {
+                "content": [{"type": "text", "text": json.dumps(structured)}],
+                "structuredContent": structured, "isError": False}}
+        return {"jsonrpc": "2.0", "id": message_id, "result": {
+            "content": [{"type": "text", "text": json.dumps(
+                {"contract_version": 2, "error": "invalid_request"})}],
+            "structuredContent": {"contract_version": 2, "error": "invalid_request"},
+            "isError": True}}
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b""
         parsed = urllib.parse.urlsplit(self.path)
-        if parsed.path == "/api/v1/memory/search":
-            if self.headers.get("Authorization") != f"Bearer {self.server.token}":
-                self._send(401, {"error": "unauthorized"})
-                return
-            self._send(200, {"contract_version": 1, "results": []})
+        if parsed.path == "/mcp":
+            try:
+                body = json.loads(raw.decode("utf-8")) if raw else {}
+            except (UnicodeError, ValueError):
+                body = {}
+            self._send(200, self._mcp(body))
             return
         form = urllib.parse.parse_qs(raw.decode("ascii", errors="replace"))
         first = {key: values[0] for key, values in form.items()}
@@ -547,6 +567,53 @@ const server = http.createServer(async (req, res) => {
     res.end('{"contract_version":1,"results":[]}');
     return;
   }
+  if (req.method === "POST" && url.pathname === "/mcp") {
+    let rpc = {};
+    try {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      rpc = JSON.parse(raw);
+    } catch { rpc = {}; }
+    const mid = (rpc && rpc.id !== undefined) ? rpc.id : null;
+    const reply = (obj) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(obj));
+    };
+    if (!authed(req)) {
+      reply({ jsonrpc: "2.0", id: mid,
+              error: { code: -32000, message: "unauthorized" } });
+      return;
+    }
+    if (rpc.method === "initialize") {
+      reply({ jsonrpc: "2.0", id: mid, result: {
+        protocolVersion: "2024-11-05", capabilities: {},
+        serverInfo: { name: "substrate-memory", version: "e2e" },
+        instructions: "substrate-mcp-contract/2 e2e" } });
+      return;
+    }
+    if (rpc.method === "tools/list") {
+      reply({ jsonrpc: "2.0", id: mid, result: { tools: [
+        "memory_search", "memory_expand", "memory_evidence", "memory_shares",
+        "memory_turn_context", "memory_import_status", "memory_remember",
+        "memory_forget", "memory_capture_tool", "memory_capture_turn",
+        "memory_session_boundary", "memory_import",
+      ].map((name) => ({ name })) } });
+      return;
+    }
+    if (rpc.method === "tools/call"
+        && rpc.params && rpc.params.name === "memory_search") {
+      const structured = { contract_version: 2, results: [] };
+      reply({ jsonrpc: "2.0", id: mid, result: {
+        content: [{ type: "text", text: JSON.stringify(structured) }],
+        structuredContent: structured, isError: false } });
+      return;
+    }
+    const failed = { contract_version: 2, error: "invalid_request" };
+    reply({ jsonrpc: "2.0", id: mid, result: {
+      content: [{ type: "text", text: JSON.stringify(failed) }],
+      structuredContent: failed, isError: true } });
+    return;
+  }
   try {
     if (!await onboarding.handlePublic(req, res, url)) {
       res.writeHead(404, { "content-type": "application/json" });
@@ -713,13 +780,13 @@ def _quarantined_count(spool) -> int:
 
 
 def test_no_credential_capture_stays_pending_then_replays_after_login(
-    monkeypatch, real_spool, stub_ledger, clean_session_state, _isolated_home
+    monkeypatch, real_spool, fake_mcp, clean_session_state, _isolated_home
 ):
     """Missing key: enqueue only (no sender, no quarantine); login replays."""
     import substrate.spool as spool_module
 
     home = _isolated_home
-    origin = f"http://127.0.0.1:{stub_ledger.server_address[1]}"
+    origin = f"http://127.0.0.1:{fake_mcp.server_address[1]}"
     monkeypatch.setenv("SUBSTRATE_API_URL", origin)
     monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
 
@@ -735,26 +802,28 @@ def test_no_credential_capture_stays_pending_then_replays_after_login(
     credentials.store_token(home.resolve(), origin, "k")
     _capture_turn()
     assert _wait_for(lambda: spool_module.get_spool().pending() == 0)
-    assert len(stub_ledger.posts) == 2
+    delivered = [call for call in fake_mcp.calls
+                 if call["method"] == "tools/call" and call["tool"] == "memory_import"]
+    assert len(delivered) == 1
+    assert len(delivered[0]["arguments"]["items"]) == 2
     assert _quarantined_count(spool_module.get_spool()) == 0
 
 
 def test_revoked_credential_retains_pending_through_reconnect(
-    monkeypatch, real_spool, stub_ledger, clean_session_state, _isolated_home
+    monkeypatch, real_spool, fake_mcp, clean_session_state, _isolated_home
 ):
     """401: items stay spooled (never quarantined) across clear + re-login."""
     import substrate.spool as spool_module
 
     home = _isolated_home
-    origin = f"http://127.0.0.1:{stub_ledger.server_address[1]}"
+    origin = f"http://127.0.0.1:{fake_mcp.server_address[1]}"
     monkeypatch.setenv("SUBSTRATE_API_URL", origin)
     monkeypatch.delenv("SUBSTRATE_API_KEY", raising=False)
     credentials.store_token(home.resolve(), origin, "k")
 
-    stub_ledger.mode = "error"
-    stub_ledger.status = 401
+    fake_mcp.http_status = 401
     _capture_turn()
-    assert _wait_for(lambda: len(stub_ledger.posts) >= 1)
+    assert _wait_for(lambda: fake_mcp.hits >= 1)
     time.sleep(0.5)
     assert spool_module.get_spool().pending() == 1
     assert _quarantined_count(spool_module.get_spool()) == 0
@@ -772,8 +841,7 @@ def test_revoked_credential_retains_pending_through_reconnect(
     # Re-login: the next capture updates the sender and replays everything.
     # The sender backs off up to ~36 s after the 401 (spool-owned auth
     # backoff), so this wait is bounded generously but polls out early.
-    stub_ledger.mode = "ack"
-    stub_ledger.status = 200
+    fake_mcp.http_status = 200
     credentials.store_token(home.resolve(), origin, "k")
     _capture_turn()
     assert _wait_for(
@@ -792,13 +860,14 @@ FRESH_TOKEN = "sk_sub_" + "n" * 32
 
 
 def test_stale_env_token_heals_to_stored_login_key(
-    monkeypatch, stub_ledger, clean_session_state, _isolated_home
+    monkeypatch, fake_mcp, clean_session_state, _isolated_home
 ):
     """401 on the stale env token reloads the login-written key in-process."""
     from substrate import plugin as _plugin
 
     home = _isolated_home
-    origin = f"http://127.0.0.1:{stub_ledger.server_address[1]}"
+    fake_mcp.token = FRESH_TOKEN
+    origin = f"http://127.0.0.1:{fake_mcp.server_address[1]}"
     monkeypatch.setenv("SUBSTRATE_API_URL", origin)
     credentials.store_token(home.resolve(), origin, FRESH_TOKEN)
     monkeypatch.setenv("SUBSTRATE_API_KEY", OLD_TOKEN)  # stale host startup env
@@ -816,19 +885,16 @@ def test_stale_env_token_heals_to_stored_login_key(
 
     monkeypatch.setattr(SubstrateClient, "from_env", staticmethod(_spy))
 
-    stub_ledger.mode = "error"
-    stub_ledger.status = 401
     first = json.loads(_plugin.memory_search({"query": "hello"}))
     assert first == {"error": "transport_error"}
     assert presented == [OLD_TOKEN]
     assert os.environ["SUBSTRATE_API_KEY"] == FRESH_TOKEN
 
-    stub_ledger.mode = "ack"
-    stub_ledger.status = 200
     _plugin.memory_search({"query": "hello"})
     assert presented == [OLD_TOKEN, FRESH_TOKEN]
-    last = stub_ledger.posts[-1]
-    assert last["path"] == "/api/v1/memory/search"
+    searches = [call for call in fake_mcp.calls
+                if call["method"] == "tools/call" and call["tool"] == "memory_search"]
+    assert searches and searches[-1]["arguments"] == {"query": "hello", "limit": 8}
 
     assert os.environ["SUBSTRATE_UNRELATED_SENTINEL"] == "keep-me"
     assert FRESH_TOKEN in (home / ".env").read_text(encoding="utf-8")
@@ -836,20 +902,18 @@ def test_stale_env_token_heals_to_stored_login_key(
 
 
 def test_rejected_env_without_stored_key_stops_401_loop(
-    monkeypatch, stub_ledger, clean_session_state, _isolated_home
+    monkeypatch, fake_mcp, clean_session_state, _isolated_home
 ):
     """401 on env token with nothing stored: pop it, instruct login once."""
     from substrate import plugin as _plugin
 
     monkeypatch.setenv(
-        "SUBSTRATE_API_URL", f"http://127.0.0.1:{stub_ledger.server_address[1]}"
+        "SUBSTRATE_API_URL", f"http://127.0.0.1:{fake_mcp.server_address[1]}"
     )
     monkeypatch.setenv("SUBSTRATE_API_KEY", OLD_TOKEN)
     monkeypatch.setenv("SUBSTRATE_UNRELATED_SENTINEL", "keep-me")
     monkeypatch.setattr(onboarding, "ensure_started", lambda *, force=False: None)
 
-    stub_ledger.mode = "error"
-    stub_ledger.status = 401
     first = json.loads(_plugin.memory_search({"query": "hello"}))
     assert first == {"error": "transport_error"}
     assert os.environ.get("SUBSTRATE_API_KEY", "") == ""
