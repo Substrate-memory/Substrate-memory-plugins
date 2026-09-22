@@ -6,7 +6,7 @@
       "out": "api_key: [REDACTED] and more"
     },
     {
-      "in": "Authorization: Bearer sk_sub_ABCDEFGHIJKLMNOP",
+      "in": "Authorization: Bearer sk_sub_FAKEFAKE00",
       "out": "Authorization: [REDACTED]"
     },
     {
