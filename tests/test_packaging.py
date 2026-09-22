@@ -61,9 +61,9 @@ def test_release_metadata_and_mcp_manifest() -> None:
     assert "full conversation transcript" in skill
     assert "API keys" in skill
 
-def test_only_two_release_archives() -> None:
-    assert set(PLUGINS) == {"substrate-hermes", "substrate-mcp"}
-    assert len(PLUGINS) == 2
+def test_exactly_four_release_archives() -> None:
+    assert set(PLUGINS) == {"substrate-hermes", "substrate-claude", "substrate-codex", "substrate-mcp"}
+    assert len(PLUGINS) == 4
 
 
 def test_hermes_archive_keeps_installed_identity() -> None:

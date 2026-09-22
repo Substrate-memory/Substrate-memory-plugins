@@ -16,8 +16,11 @@ covers the whole plugin set):
   cutover scripts from: existing installs keep working, and
   ``hermes plugins install`` of the new path lands in the same
   ``<plugins>/substrate/`` directory.
-- ``substrate-mcp.zip`` from ``plugins/substrate-mcp`` (thin Cowork-compatible
-  remote MCP manifest, skill, and docs) with ``substrate-mcp/`` prefix.
+- ``substrate-claude.zip`` from ``plugins/substrate-claude`` (Claude Cowork
+  and Claude Code) and ``substrate-codex.zip`` from ``plugins/substrate-codex``
+  (ChatGPT Work, Codex app, Codex CLI), each with its own name as prefix.
+- ``substrate-mcp.zip`` from ``plugins/substrate-mcp`` (thin fallback for
+  other MCP-capable agents) with ``substrate-mcp/`` prefix.
 
 Each archive also carries the root ``LICENSE`` as ``<prefix>/LICENSE``.
 """
@@ -42,6 +45,8 @@ FIXED_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 # land; the member prefix always stays the installed plugin identity.
 PLUGINS: dict[str, str] = {
     "substrate-hermes": "substrate-hermes",
+    "substrate-claude": "substrate-claude",
+    "substrate-codex": "substrate-codex",
     "substrate-mcp": "substrate-mcp",
 }
 
@@ -68,7 +73,7 @@ EXCLUDED_DIR_NAMES = frozenset({
     "build",
 })
 EXCLUDED_SUFFIXES = (".pyc", ".pyo")
-EXCLUDED_FILE_NAMES = frozenset({".env"})
+EXCLUDED_FILE_NAMES = frozenset({".env", ".worker-report.md"})
 
 
 def _excluded(path: Path, source_dir: Path) -> bool:

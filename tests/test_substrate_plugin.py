@@ -966,14 +966,14 @@ def test_rejected_items_quarantine_while_rest_retire(
         messages=[{"role": "user", "content": "bye"}],
         turn_id="t2",
     )
+    def _outcome(kind: str) -> bool:
+        return any(
+            key.endswith(f"|{kind}") and value["item_count"] >= 1
+            for key, value in real_spool.counters().items()
+        )
+
     assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
-    counters = real_spool.counters()
-    assert any(
-        key.endswith("|delivered") and value["item_count"] >= 1
-        for key, value in counters.items()
-    ), counters
-    assert any(
-        key.endswith("|quarantined") and value["item_count"] >= 1
-        for key, value in counters.items()
-    ), counters
+    # Counters are written by the sender thread after the item leaves the
+    # queue, so wait for the outcomes rather than sampling once.
+    assert _wait_for(lambda: _outcome("delivered") and _outcome("quarantined"), timeout=15.0), real_spool.counters()
     assert SubstrateClient is not None

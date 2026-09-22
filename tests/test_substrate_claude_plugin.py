@@ -226,7 +226,7 @@ def test_script_after_index_and_deterministic_ids(fixture_homes: Path) -> None:
     tail = _run_at("claude", fixture_homes, "--session", "test-claude-session-01",
                    "--after-index", "3", "--origin", "catchup")
     assert tail.returncode == 0, tail.stderr
-    items = [item for batch in (json.loads(l) for l in tail.stdout.splitlines())
+    items = [item for batch in (json.loads(line) for line in tail.stdout.splitlines())
              for item in batch["items"]]
     assert len(items) == 1
     assert items[0]["payload"]["turn_id"] == "t00001"
