@@ -1,5 +1,5 @@
 name: substrate
-version: 0.4.0
+version: 0.7.0
 description: Substrate retrieval, durable completed-turn capture, session boundaries, and memory write tools for Hermes
 provides_tools:
   - memory_search
