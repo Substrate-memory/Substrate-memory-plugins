@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0
+
+One connection experience for every agent:
+
+- The user pastes one request into their agent (`Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins`). The agent identifies its host and installs the right package: Claude Cowork and Claude Code → `plugins/substrate-claude`; ChatGPT Work, the Codex app and Codex CLI → `plugins/substrate-codex`; Hermes → `plugins/substrate-hermes`; any other MCP-capable agent → the thin `plugins/substrate-mcp` fallback, only when no package fits.
+- Same flow everywhere: **Install → Sign in → Review → Approve connection → Connected to Substrate.** Success is reported only after an authenticated `memory_search`. No API keys, tokens, or secrets are ever requested.
+- All hosts get Hermes-level features through one server-side MCP contract (v2): recall injected before every turn, automatic capture of every completed turn including bounded redacted tool calls and results, session boundaries, subagent capture, durable delivery, explicit remember/forget, and evidence.
+- Durable delivery per host: Hermes keeps its profile-local write-ahead spool; Claude and Codex treat the host transcript as the spool — the server reports missing turns and the plugin sync command re-imports them with deterministic ids, so nothing is stored twice.
+- Import past conversations is asked once, after connection: raw, redacted turns from that host's own transcripts, imported after the user confirms the session list. Nothing is written before confirmation; secrets are redacted client- and server-side.
+- Known limits, stated honestly: Codex has no session-end hook (the server seals idle sessions after 30 minutes); Claude's SessionStart hook at launch runs before MCP connects; if a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered; plugin hooks in Codex must be trusted once via `/hooks`; Cowork needs a new session after install.
+- Legacy: the August 2026 API-key plugins stay deprecated and their spools are not migrated; the `v0.5.0` and `v0.6.0` tags remain for rollback; the server keeps the Hermes `/api/v1` wire during the rollout.
+
+
 ## 0.6.0
 
 Unified onboarding and install parity:
