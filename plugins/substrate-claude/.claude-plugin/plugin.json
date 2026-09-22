@@ -1,0 +1,18 @@
+{
+  "name": "substrate-claude",
+  "description": "Substrate memory for Claude Cowork and Claude Code: recall, automatic capture, and history import over remote MCP",
+  "version": "0.7.0",
+  "author": {
+    "name": "Sightline Technologies Inc"
+  },
+  "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "substrate",
+    "cowork",
+    "claude-code",
+    "mcp"
+  ],
+  "category": "productivity"
+}
