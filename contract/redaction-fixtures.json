@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "text": [
+    {
+      "in": "api_key: abc123def456 and more",
+      "out": "api_key: [REDACTED] and more"
+    },
+    {
+      "in": "Authorization: Bearer sk_sub_ABCDEFGHIJKLMNOP",
+      "out": "Authorization: [REDACTED]"
+    },
+    {
+      "in": "my token=xyz-987; next",
+      "out": "my token=[REDACTED]; next"
+    },
+    {
+      "in": "password = hunter2, ok",
+      "out": "password = [REDACTED], ok"
+    },
+    {
+      "in": "key sk_live_1234567890abcdef in text",
+      "out": "key [REDACTED] in text"
+    },
+    {
+      "in": "sk_short",
+      "out": "sk_short"
+    },
+    {
+      "in": "nothing secret here",
+      "out": "nothing secret here"
+    },
+    {
+      "in": "SECRET: value\ntoken: other",
+      "out": "SECRET: [REDACTED]\ntoken: [REDACTED]"
+    }
+  ],
+  "objects": [
+    {
+      "in": {
+        "Authorization": "Bearer x",
+        "path": "/tmp/a",
+        "nested": {
+          "api-key": "k",
+          "ok": 1
+        }
+      },
+      "out": {
+        "Authorization": "[REDACTED]",
+        "path": "/tmp/a",
+        "nested": {
+          "api-key": "[REDACTED]",
+          "ok": 1
+        }
+      }
+    },
+    {
+      "in": {
+        "cookie": "a=b",
+        "list": [
+          {
+            "private_key": "p"
+          },
+          "sk_abcdefghijk",
+          2.5
+        ]
+      },
+      "out": {
+        "cookie": "[REDACTED]",
+        "list": [
+          {
+            "private_key": "[REDACTED]"
+          },
+          "[REDACTED]",
+          "2.5"
+        ]
+      }
+    },
+    {
+      "in": {
+        "n": 9007199254740993,
+        "f": true,
+        "z": null
+      },
+      "out": {
+        "n": "9007199254740993",
+        "f": true,
+        "z": null
+      }
+    }
+  ]
+}
