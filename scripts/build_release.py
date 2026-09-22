@@ -2,17 +2,25 @@
 
 Packages each plugin directory as ``dist/<name>.zip`` with fixed
 timestamps and sorted members so two builds of the same tree are
-byte-identical, plus a single ``dist/SHA256SUMS`` covering both
-archives. ``--check`` rebuilds every archive in memory and compares
+byte-identical, plus a single ``dist/SHA256SUMS`` covering every
+archive. ``--check`` rebuilds every archive in memory and compares
 against the on-disk files.
 
 Release layout (repo-level release version in the root ``VERSION`` file
 covers the whole plugin set):
 
-- ``substrate.zip`` from ``plugins/substrate`` (Hermes reference plugin;
-  golden runtime bytes from v0.5.0) with ``substrate/`` prefix.
-- ``substrate-mcp.zip`` from ``plugins/substrate-mcp`` (thin Cowork-compatible
-  remote MCP manifest, skill, and docs) with ``substrate-mcp/`` prefix.
+- ``substrate-hermes.zip`` from ``plugins/substrate-hermes`` (Hermes
+  reference plugin) with the ``substrate-hermes/`` prefix. The installed
+  plugin identity is still the ``plugin.yaml`` name (``substrate``), which
+  is what Hermes derives install directories, enable/disable state, and
+  cutover scripts from: existing installs keep working, and
+  ``hermes plugins install`` of the new path lands in the same
+  ``<plugins>/substrate/`` directory.
+- ``substrate-claude.zip`` from ``plugins/substrate-claude`` (Claude Cowork
+  and Claude Code) and ``substrate-codex.zip`` from ``plugins/substrate-codex``
+  (ChatGPT Work, Codex app, Codex CLI), each with its own name as prefix.
+- ``substrate-mcp.zip`` from ``plugins/substrate-mcp`` (thin fallback for
+  other MCP-capable agents) with ``substrate-mcp/`` prefix.
 
 Each archive also carries the root ``LICENSE`` as ``<prefix>/LICENSE``.
 """
@@ -25,16 +33,20 @@ import zipfile
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_DIR = REPOSITORY_ROOT / "plugins" / "substrate"
+SOURCE_DIR = REPOSITORY_ROOT / "plugins" / "substrate-hermes"
 DIST_DIR = REPOSITORY_ROOT / "dist"
-ARCHIVE_NAME = "substrate.zip"
+ARCHIVE_NAME = "substrate-hermes.zip"
 PREFIX = "substrate/"
 FIXED_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 
 # Archive name -> plugin source directory name. Order defines build order;
-# SHA256SUMS lines are sorted by archive name.
+# SHA256SUMS lines are sorted by archive name. Sibling workers extend this
+# map with substrate-claude/substrate-codex when those plugin directories
+# land; the member prefix always stays the installed plugin identity.
 PLUGINS: dict[str, str] = {
-    "substrate": "substrate",
+    "substrate-hermes": "substrate-hermes",
+    "substrate-claude": "substrate-claude",
+    "substrate-codex": "substrate-codex",
     "substrate-mcp": "substrate-mcp",
 }
 
@@ -61,7 +73,7 @@ EXCLUDED_DIR_NAMES = frozenset({
     "build",
 })
 EXCLUDED_SUFFIXES = (".pyc", ".pyo")
-EXCLUDED_FILE_NAMES = frozenset({".env"})
+EXCLUDED_FILE_NAMES = frozenset({".env", ".worker-report.md"})
 
 
 def _excluded(path: Path, source_dir: Path) -> bool:
@@ -95,7 +107,7 @@ def collect_members_for(source_dir: Path, prefix: str) -> list[tuple[str, bytes]
 
 
 def collect_members() -> list[tuple[str, bytes]]:
-    """Members of the frozen Hermes ``substrate.zip`` (kept for compatibility)."""
+    """Members of the Hermes ``substrate-hermes.zip`` (``substrate/`` prefix)."""
     return collect_members_for(SOURCE_DIR, PREFIX)
 
 
@@ -115,8 +127,8 @@ def build_archive_bytes_for(name: str) -> bytes:
 
 
 def build_archive_bytes() -> bytes:
-    """Bytes of the frozen Hermes ``substrate.zip`` (kept for compatibility)."""
-    return build_archive_bytes_for("substrate")
+    """Bytes of the Hermes ``substrate-hermes.zip`` (kept for compatibility)."""
+    return build_archive_bytes_for("substrate-hermes")
 
 
 def digest(data: bytes) -> str:
@@ -165,7 +177,7 @@ def check() -> bool:
         print("SHA256SUMS does not match a fresh build")
         print(f"--- recorded ---\n{recorded}--- want ---\n{want}")
         return False
-    # Refuse stray files: dist must hold exactly the two archives + SHA256SUMS.
+    # Refuse stray files: dist must hold exactly the release archives + SHA256SUMS.
     present = sorted(p.name for p in DIST_DIR.iterdir() if p.is_file())
     if present != sorted([*ARCHIVE_NAMES, "SHA256SUMS"]):
         print(f"unexpected dist contents: {present}")

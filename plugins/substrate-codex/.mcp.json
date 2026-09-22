@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "substrate-memory": {
+      "type": "streamable-http",
+      "url": "https://app.trysubstrate.co/mcp"
+    }
+  }
+}

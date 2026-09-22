@@ -1,7 +1,7 @@
 {
   "name": "substrate-mcp",
-  "description": "Thin Cowork-compatible remote Substrate memory MCP plugin",
-  "version": "0.6.0",
+  "description": "Thin fallback remote Substrate memory MCP plugin for agents without a native package",
+  "version": "0.7.0",
   "author": {
     "name": "Sightline Technologies Inc"
   }

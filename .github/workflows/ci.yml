@@ -68,6 +68,7 @@ jobs:
         run: |
           if command -v claude >/dev/null 2>&1; then
             claude plugin validate --strict plugins/substrate-mcp
+            claude plugin validate --strict plugins/substrate-claude
           else
             echo "claude CLI unavailable; schema regression tests cover plugin metadata"
           fi

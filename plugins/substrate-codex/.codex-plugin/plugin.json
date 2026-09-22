@@ -1,0 +1,38 @@
+{
+  "name": "substrate-codex",
+  "version": "0.6.0",
+  "description": "Substrate long-term memory for ChatGPT Work, Codex in the ChatGPT desktop app, and Codex CLI.",
+  "author": {
+    "name": "Sightline Technologies Inc",
+    "url": "https://trysubstrate.co"
+  },
+  "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "repository": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "recall",
+    "codex",
+    "chatgpt",
+    "productivity"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Substrate Memory",
+    "shortDescription": "Long-term memory for Codex and ChatGPT Work.",
+    "longDescription": "Substrate gives Codex and ChatGPT Work a shared long-term memory: relevant facts surface automatically each turn, and turns are captured for future recall. Connect once with Sign in with Substrate.",
+    "developerName": "Sightline Technologies Inc",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://trysubstrate.co",
+    "defaultPrompt": [
+      "Check my Substrate memory for context on this task.",
+      "Remember this decision in Substrate memory.",
+      "Sync my recent Codex sessions into Substrate."
+    ]
+  }
+}

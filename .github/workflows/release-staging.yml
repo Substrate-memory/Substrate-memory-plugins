@@ -39,8 +39,9 @@ jobs:
           uv run --no-sync python scripts/build_release.py
           cp dist/*.zip "$RUNNER_TEMP/"
           rm -rf dist; uv run --no-sync python scripts/build_release.py
-          cmp "$RUNNER_TEMP/substrate.zip" dist/substrate.zip
-          cmp "$RUNNER_TEMP/substrate-mcp.zip" dist/substrate-mcp.zip
+          for archive in substrate-hermes.zip substrate-claude.zip substrate-codex.zip substrate-mcp.zip; do
+            cmp "$RUNNER_TEMP/$archive" "dist/$archive"
+          done
           uv run --no-sync python scripts/build_release.py --check
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

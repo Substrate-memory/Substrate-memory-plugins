@@ -19,48 +19,42 @@ FORGET_SENTENCE = (
 )
 
 
-class Response:
-    def __init__(self, value, status=200):
-        self.raw = json.dumps(value).encode()
-        self.status = status
+def _mcp_call_double(monkeypatch, handler):
+    """Stub SubstrateClient.call_tool with handler(tool, args, kwargs)."""
+    from substrate.client import SubstrateClient
 
-    def __enter__(self):
-        return self
+    def call(self, name, arguments, **kwargs):
+        return handler(name, arguments, kwargs)
 
-    def __exit__(self, *args):
-        return False
-
-    def read(self, size=-1):
-        return self.raw if size < 0 else self.raw[:size]
+    monkeypatch.setattr(SubstrateClient, "call_tool", call)
 
 
 def test_pre_llm_call_posts_exact_contract_request(monkeypatch):
     seen = {}
 
-    def urlopen(request, timeout):
-        seen["url"] = request.full_url
-        seen["method"] = request.method
-        seen["body"] = json.loads(request.data)
-        seen["timeout"] = timeout
-        seen["auth"] = request.get_header("Authorization")
-        return Response(
+    def handler(name, arguments, kwargs):
+        seen["tool"] = name
+        seen["body"] = arguments
+        seen["timeout"] = kwargs.get("timeout")
+        return (
             {
-                "contract_version": 1,
+                "contract_version": 2,
                 "session_id": "session-1",
-                "turn": 1,
+                "turn": 0,
                 "block": "<memory-context>\n- Keep it private. [m:44a1b02e]\n</memory-context>",
                 "handles": ["m:44a1b02e"],
-                "tail_handles": [],
+                "missing_turns": 0,
                 "brief_version": 2,
                 "latency_ms": 12.5,
                 "empty_reason": "",
                 "ignored_backend_debug": "drop me",
-            }
+            },
+            "<memory-context>\n- Keep it private. [m:44a1b02e]\n</memory-context>",
         )
 
     monkeypatch.setenv("SUBSTRATE_API_URL", "https://memory.example/")
     monkeypatch.setenv("SUBSTRATE_API_KEY", "secret")
-    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    _mcp_call_double(monkeypatch, handler)
     history = [
         {"role": "user", "content": "old question"},
         {"role": "assistant", "content": "old answer"},
@@ -81,56 +75,74 @@ def test_pre_llm_call_posts_exact_contract_request(monkeypatch):
         cited_handles=["p:abcdef12"],
     )
     assert result == {"context": "<memory-context>\n- Keep it private. [m:44a1b02e]\n</memory-context>"}
+    # The v2 contract takes only session/prompt/platform (+ optional ids):
+    # no history, turn number, or identity fields travel on the wire.
     assert seen == {
-        "url": "https://memory.example/api/v1/memory/turn-context",
-        "method": "POST",
+        "tool": "memory_turn_context",
         "body": {
-            "contract_version": 1,
             "session_id": "session-1",
-            "turn_id": "turn-2",
-            "turn": 1,
+            "prompt": "current question",
             "platform": "cli",
-            "chat_type": "direct",
-            "sender_id": "person-1",
-            "agent_identity": "Hermes",
-            "agent_context": "default",
+            "turn_id": "turn-2",
             "parent_session_id": "parent-1",
-            "message": "current question",
-            "recent_turns": [{"user": "old question", "assistant": "old answer"}],
-            "injected_handles": ["m:12345678"],
-            "cited_handles": ["p:abcdef12"],
-            "deadline_ms": 500,
         },
         "timeout": 0.5,
-        "auth": "Bearer secret",
     }
+
+
+def test_pre_llm_call_injects_block_only_and_ignores_sync_line(monkeypatch):
+    """The [substrate] sync line is for spool-less MCP hosts; Hermes ignores it."""
+    structured = {
+        "contract_version": 2,
+        "session_id": "s",
+        "turn": 3,
+        "block": "<memory-context>\n- fact\n</memory-context>",
+        "handles": [],
+        "missing_turns": 2,
+        "brief_version": 0,
+        "latency_ms": 1,
+        "empty_reason": "",
+    }
+    text_with_sync = (
+        "<memory-context>\n- fact\n</memory-context>\n"
+        "[substrate] 2 earlier turn(s) of this session are not saved yet. "
+        "Run the Substrate sync command."
+    )
+    monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
+    _mcp_call_double(monkeypatch, lambda *a: (structured, text_with_sync))
+    assert plugin.pre_llm_call("s", "q", [], turn_id="t") == {
+        "context": "<memory-context>\n- fact\n</memory-context>"
+    }
+    _mcp_call_double(monkeypatch, lambda *a: ({**structured, "block": ""}, ""))
+    assert plugin.pre_llm_call("s", "q", [], turn_id="t") is None
 
 
 def test_pre_llm_rejects_validator_failure_and_every_error(monkeypatch):
     valid = {
-        "contract_version": 1,
+        "contract_version": 2,
         "session_id": "s",
         "turn": 0,
         "block": "unsafe",
         "handles": [],
-        "tail_handles": [],
+        "missing_turns": 0,
         "brief_version": 0,
         "latency_ms": 1,
         "empty_reason": "",
     }
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(plugin.SubstrateClient, "post_json", lambda *a, **k: valid)
+    _mcp_call_double(monkeypatch, lambda *a: (valid, "unsafe"))
+    original = contract.validate_mcp_turn_context
     monkeypatch.setattr(
         contract,
-        "validate_turn_context",
+        "validate_mcp_turn_context",
         lambda value: (_ for _ in ()).throw(contract.ContractError("invalid_response")),
     )
     assert plugin.pre_llm_call("s", "q", [], turn_id="t") is None
+    monkeypatch.setattr(contract, "validate_mcp_turn_context", original)
 
-    monkeypatch.setattr(
-        plugin.SubstrateClient,
-        "post_json",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("backend detail must not escape")),
+    _mcp_call_double(
+        monkeypatch,
+        lambda *a: (_ for _ in ()).throw(RuntimeError("backend detail must not escape")),
     )
     assert plugin.pre_llm_call("s", "q", [], turn_id="t") is None
 
@@ -350,46 +362,55 @@ def test_on_session_reset_without_tracked_old_just_binds(fake_spool, clean_sessi
 def test_three_tools_validate_defaults_shape_and_bound(monkeypatch):
     calls = []
 
-    def post(self, path, body, **kwargs):
-        calls.append((path, body))
-        if path.endswith("search"):
-            return {
-                "contract_version": 1,
-                "results": [
-                    {"handle": "m:12345678", "text": "fact", "score": 0.8, "kind": "fact", "markers": []},
-                    {"handle": "bad", "text": "drop"},
-                ],
-                "debug": "drop",
-            }
-        if path.endswith("expand"):
-            return {
-                "contract_version": 1,
-                "handle": "p:abcdef12",
-                "kind": "page",
-                "title": "Page",
-                "abstract": "Summary",
-                "markdown": "body",
-                "debug": "drop",
-            }
-        return {"contract_version": 1, "excerpts": [{"text": "evidence"}], "raw": "x" * 100_000}
+    def handler(name, arguments, kwargs):
+        calls.append((name, arguments))
+        if name == "memory_search":
+            return (
+                {
+                    "contract_version": 2,
+                    "results": [
+                        {"handle": "m:12345678", "text": "fact", "score": 0.8, "kind": "fact", "markers": []},
+                        {"handle": "bad", "text": "drop"},
+                    ],
+                    "debug": "drop",
+                },
+                "",
+            )
+        if name == "memory_expand":
+            return (
+                {
+                    "contract_version": 2,
+                    "handle": "p:abcdef12",
+                    "kind": "page",
+                    "title": "Page",
+                    "abstract": "Summary",
+                    "markdown": "body",
+                    "debug": "drop",
+                },
+                "",
+            )
+        return (
+            {"contract_version": 2, "excerpts": [{"text": "evidence"}], "raw": "x" * 100_000},
+            "",
+        )
 
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(plugin.SubstrateClient, "post_json", post)
+    _mcp_call_double(monkeypatch, handler)
     search = json.loads(plugin.memory_search({"query": "planned remove"}))
     expand = json.loads(plugin.memory_expand({"handle": "p:abcdef12"}))
     evidence_text = plugin.memory_evidence({"handle": "m:12345678"})
     evidence = json.loads(evidence_text)
     assert search == {
-        "contract_version": 1,
+        "contract_version": 2,
         "results": [{"handle": "m:12345678", "kind": "fact", "markers": [], "score": 0.8, "text": "fact"}],
     }
     assert expand["markdown"] == "body" and "debug" not in expand
     assert evidence["excerpts"] == [{"text": "evidence"}]
     assert len(evidence_text.encode()) <= contract.LIMITS["max_tool_result_bytes"]
     assert calls == [
-        ("/api/v1/memory/search", {"query": "planned remove", "limit": 8}),
-        ("/api/v1/memory/expand", {"handle": "p:abcdef12"}),
-        ("/api/v1/memory/evidence", {"handle": "m:12345678", "raw": False, "limit": 5}),
+        ("memory_search", {"query": "planned remove", "limit": 8}),
+        ("memory_expand", {"handle": "p:abcdef12"}),
+        ("memory_evidence", {"handle": "m:12345678", "raw": False, "limit": 5}),
     ]
 
 
@@ -408,37 +429,31 @@ def test_tools_fail_closed_on_invalid_input(callback, args):
 
 def test_tool_backend_failure_has_no_free_detail(monkeypatch):
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(
-        plugin.SubstrateClient,
-        "post_json",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("secret backend stack")),
+    _mcp_call_double(
+        monkeypatch,
+        lambda *a: (_ for _ in ()).throw(RuntimeError("secret backend stack")),
     )
     result = plugin.memory_search({"query": "q"})
     assert json.loads(result) == {"error": "transport_error"}
     assert "secret" not in result and "stack" not in result
 
 
-def _ledger_ack(posts, handle="m:44a1b02e", action="stored", stored=True):
-    def post(self, path, body, **kwargs):
-        posts.append((path, body, kwargs))
-        assert path == "/api/v1/ledger/events"
-        assert kwargs.get("idempotency_key") == body["event_id"]
-        return {
-            "event_id": body["event_id"],
-            "accepted": True,
-            "stored": stored,
-            "status": "accepted",
-            "action": action,
-            "handle": handle,
-        }
+def _mcp_write(calls, handle="m:44a1b02e"):
+    """Stub MCP write tools: record (tool, args), answer the m: handle."""
 
-    return post
+    def handler(name, arguments, kwargs):
+        calls.append((name, arguments, kwargs))
+        assert name in ("memory_remember", "memory_forget")
+        assert arguments["operation_id"]
+        return ({"contract_version": 2, "handle": handle}, "")
+
+    return handler
 
 
 def test_memory_remember_posts_write_and_returns_handle(monkeypatch, fake_spool):
-    posts = []
+    calls = []
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(plugin.SubstrateClient, "post_json", _ledger_ack(posts))
+    _mcp_call_double(monkeypatch, _mcp_write(calls))
     result = json.loads(
         plugin.memory_remember(
             {"text": "the user prefers tea", "durability": "durable"},
@@ -447,8 +462,20 @@ def test_memory_remember_posts_write_and_returns_handle(monkeypatch, fake_spool)
         )
     )
     assert result == {"handle": "m:44a1b02e"}
-    assert len(posts) == 1
-    envelope = posts[0][1]
+    # One synchronous MCP call; the same operation is spooled durably.
+    assert len(calls) == 1
+    tool, tool_args, _kwargs = calls[0]
+    assert tool == "memory_remember"
+    assert tool_args == {
+        "operation_id": tool_args["operation_id"],
+        "text": "the user prefers tea",
+        "durability": "durable",
+    }
+    assert len(fake_spool.items) == 1
+    assert fake_spool.items[0]["priority"] == PRIORITY_EXPLICIT
+    assert fake_spool.items[0]["kind"] == "memory_write"
+    assert fake_spool.items[0]["capture_origin"] == "live"
+    envelope = fake_spool.items[0]["envelope"]
     assert envelope["kind"] == "memory_write"
     assert envelope["payload"] == {
         "text": "the user prefers tea",
@@ -456,18 +483,20 @@ def test_memory_remember_posts_write_and_returns_handle(monkeypatch, fake_spool)
         "source": "memory_remember",
     }
     contract.validate_envelope(envelope, idempotency_key=envelope["event_id"])
-    assert len(fake_spool.items) == 1
-    assert fake_spool.items[0]["priority"] == PRIORITY_EXPLICIT
-    assert fake_spool.items[0]["kind"] == "memory_write"
-    assert fake_spool.items[0]["capture_origin"] == "live"
+    # The spooled envelope and the sync call share the idempotency key, and
+    # the spooled envelope converts losslessly to a memory_import item.
+    assert tool_args["operation_id"] == envelope["event_id"]
+    item = contract.to_import_item(envelope)
+    assert item["event_id"] == envelope["event_id"]
+    assert "schema_version" not in item and "contract_version" not in item
 
 
 def test_memory_remember_redacts_before_send(monkeypatch, fake_spool):
-    posts = []
+    calls = []
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(plugin.SubstrateClient, "post_json", _ledger_ack(posts))
+    _mcp_call_double(monkeypatch, _mcp_write(calls))
     plugin.memory_remember({"text": "api_key=sk_live_should_not_travel", "durability": "transient"})
-    sent = posts[0][1]["payload"]["text"]
+    sent = calls[0][1]["text"]
     assert "sk_live_should_not_travel" not in sent
     assert "sk_live_should_not_travel" not in json.dumps(fake_spool.items[0]["envelope"])
 
@@ -491,9 +520,9 @@ def test_memory_remember_rejects_bad_input(args):
 
 
 def test_memory_forget_marks_atom_and_returns_handle(monkeypatch, fake_spool):
-    posts = []
+    calls = []
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(plugin.SubstrateClient, "post_json", _ledger_ack(posts))
+    _mcp_call_double(monkeypatch, _mcp_write(calls))
     result = json.loads(
         plugin.memory_forget(
             {"handle": "m:44a1b02e", "reason": "the user corrected this fact"},
@@ -501,11 +530,14 @@ def test_memory_forget_marks_atom_and_returns_handle(monkeypatch, fake_spool):
         )
     )
     assert result == {"handle": "m:44a1b02e"}
-    # Exactly one envelope, one POST: no fan-out to related atoms.
-    assert len(posts) == 1
+    # Exactly one envelope, one MCP call: no fan-out to related atoms.
+    assert len(calls) == 1
     assert len(fake_spool.items) == 1
-    envelope = posts[0][1]
-    assert fake_spool.items[0]["envelope"]["event_id"] == envelope["event_id"]
+    tool, tool_args, _kwargs = calls[0]
+    assert tool == "memory_forget"
+    assert tool_args["handle"] == "m:44a1b02e"
+    envelope = fake_spool.items[0]["envelope"]
+    assert tool_args["operation_id"] == envelope["event_id"]
     assert envelope["kind"] == "memory_forget"
     assert envelope["payload"] == {
         "handle": "m:44a1b02e",
@@ -549,22 +581,44 @@ def test_memory_forget_says_invalidation_not_removal():
 
 @pytest.mark.parametrize("callback", [plugin.memory_remember, plugin.memory_forget])
 @pytest.mark.parametrize(
-    "ack,expected",
+    "structured,expected",
     [
-        ({"stored": False, "action": "stored", "handle": "m:44a1b02e"}, "invalid_response"),
-        ({"stored": True, "action": "mystery", "handle": "m:44a1b02e"}, "invalid_response"),
-        ({"stored": True, "action": "stored", "handle": "p:44a1b02e"}, "invalid_response"),
-        ({"stored": True, "action": "stored"}, "invalid_response"),
+        ({"contract_version": 1, "handle": "m:44a1b02e"}, "invalid_response"),
+        ({"contract_version": 2, "handle": "p:44a1b02e"}, "invalid_response"),
+        ({"contract_version": 2}, "invalid_response"),
+        ({"contract_version": 2, "handle": "m:xyz"}, "invalid_response"),
+        ({"contract_version": 2, "handle": "m:44a1b02e", "extra": "ok"}, None),
     ],
 )
-def test_explicit_tools_reject_bad_ack(monkeypatch, fake_spool, callback, ack, expected):
-    def post(self, path, body, **kwargs):
-        response = {"event_id": body["event_id"], "accepted": True, "status": "accepted"}
-        response.update(ack)
-        return response
+def test_explicit_tools_reject_bad_result(monkeypatch, fake_spool, callback, structured, expected):
+    _mcp_call_double(monkeypatch, lambda *a: (dict(structured), ""))
+    monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
+    if callback is plugin.memory_remember:
+        args = {"text": "fact", "durability": "durable"}
+    else:
+        args = {"handle": "m:44a1b02e", "reason": "no longer true"}
+    if expected is None:
+        assert json.loads(callback(args)) == {"handle": "m:44a1b02e"}
+    else:
+        assert json.loads(callback(args)) == {"error": expected}
+
+
+@pytest.mark.parametrize(
+    "raised,expected",
+    [("timeout", "timeout"), ("rate_limited", "transport_error")],
+)
+@pytest.mark.parametrize("callback", [plugin.memory_remember, plugin.memory_forget])
+def test_explicit_tools_surface_tool_error_category(
+    monkeypatch, fake_spool, callback, raised, expected
+):
+    """A failed MCP tool surfaces its bounded error category."""
+    from substrate.client import ClientError
+
+    def handler(*a):
+        raise ClientError(raised)
 
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(plugin.SubstrateClient, "post_json", post)
+    _mcp_call_double(monkeypatch, handler)
     if callback is plugin.memory_remember:
         args = {"text": "fact", "durability": "durable"}
     else:
@@ -572,35 +626,12 @@ def test_explicit_tools_reject_bad_ack(monkeypatch, fake_spool, callback, ack, e
     assert json.loads(callback(args)) == {"error": expected}
 
 
-def test_explicit_tools_reject_event_id_mismatch(monkeypatch, fake_spool):
-    monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(
-        plugin.SubstrateClient,
-        "post_json",
-        lambda *a, **k: {
-            "event_id": "00000000-0000-4000-8000-000000000000",
-            "accepted": True,
-            "stored": True,
-            "status": "accepted",
-            "action": "stored",
-            "handle": "m:44a1b02e",
-        },
-    )
-    assert json.loads(plugin.memory_remember({"text": "f", "durability": "durable"})) == {
-        "error": "invalid_response"
-    }
-    assert json.loads(plugin.memory_forget({"handle": "m:44a1b02e", "reason": "r"})) == {
-        "error": "invalid_response"
-    }
-
-
 @pytest.mark.parametrize("callback", [plugin.memory_remember, plugin.memory_forget])
 def test_explicit_tools_hide_backend_detail(monkeypatch, fake_spool, callback):
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
-    monkeypatch.setattr(
-        plugin.SubstrateClient,
-        "post_json",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("secret backend stack")),
+    _mcp_call_double(
+        monkeypatch,
+        lambda *a: (_ for _ in ()).throw(RuntimeError("secret backend stack")),
     )
     if callback is plugin.memory_remember:
         args = {"text": "fact", "durability": "durable"}
@@ -671,7 +702,7 @@ def test_register_matches_native_hermes_context_and_has_no_side_effect(
     assert plugin.prefetch() == ""
     assert plugin.sync_turn is not None and plugin.on_session_switch is not None
 # ---------------------------------------------------------------------------
-# Real-spool integration (temp dir + local stub ledger; no live API/DB)
+# Real-spool integration (temp dir + offline fake MCP server; no live API/DB)
 # ---------------------------------------------------------------------------
 
 
@@ -686,9 +717,9 @@ def _wait_for(predicate, timeout=10.0):
     return predicate()
 
 
-def _stub_env(monkeypatch, stub_ledger):
+def _mcp_env(monkeypatch, fake_mcp):
     monkeypatch.setenv(
-        "SUBSTRATE_API_URL", f"http://127.0.0.1:{stub_ledger.server_address[1]}"
+        "SUBSTRATE_API_URL", f"http://127.0.0.1:{fake_mcp.server_address[1]}"
     )
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
     monkeypatch.delenv("SUBSTRATE_SPOOL_DIR", raising=False)
@@ -699,6 +730,13 @@ def _dead_env(monkeypatch):
     monkeypatch.setenv("SUBSTRATE_API_URL", "http://127.0.0.1:9")
     monkeypatch.setenv("SUBSTRATE_API_KEY", "k")
     monkeypatch.delenv("SUBSTRATE_SPOOL_DIR", raising=False)
+
+
+def _tool_calls(fake_mcp, tool=None):
+    calls = [call for call in fake_mcp.calls if call["method"] == "tools/call"]
+    if tool is not None:
+        calls = [call for call in calls if call["tool"] == tool]
+    return calls
 
 
 def test_real_spool_enqueue_and_counters(real_spool, clean_session_state, monkeypatch):
@@ -719,9 +757,9 @@ def test_real_spool_enqueue_and_counters(real_spool, clean_session_state, monkey
 
 
 def test_real_spool_lazy_start_delivers_and_retires(
-    real_spool, stub_ledger, clean_session_state, monkeypatch
+    real_spool, fake_mcp, clean_session_state, monkeypatch
 ):
-    _stub_env(monkeypatch, stub_ledger)
+    _mcp_env(monkeypatch, fake_mcp)
     plugin.sync_turn(
         "hello",
         "world",
@@ -729,66 +767,105 @@ def test_real_spool_lazy_start_delivers_and_retires(
         messages=[{"role": "user", "content": "hello"}, {"role": "assistant", "content": "world"}],
         turn_id="t",
     )
-    assert _wait_for(lambda: len(stub_ledger.posts) >= 1)
-    post = stub_ledger.posts[0]
-    assert post["path"] == "/api/v1/ledger/events"
-    assert post["idempotency_key"] == post["body"]["event_id"]
-    assert post["body"]["kind"] == "capture_turn"
-    # The stub ACK (stored + matching event_id + known action) retires it.
+    assert _wait_for(lambda: len(_tool_calls(fake_mcp, "memory_import")) >= 1)
+    delivered = _tool_calls(fake_mcp, "memory_import")[0]["arguments"]["items"]
+    assert len(delivered) == 1
+    assert delivered[0]["kind"] == "capture_turn"
+    # Import items carry the spool event_id but no envelope versions.
+    assert delivered[0]["event_id"]
+    assert "schema_version" not in delivered[0] and "contract_version" not in delivered[0]
+    # The stored per-item action retires the spooled envelope.
     assert _wait_for(lambda: real_spool.pending() == 0)
 
 
-def test_tool_success_against_stub_ledger(
-    real_spool, stub_ledger, monkeypatch, clean_session_state
+def test_spool_batching_limits(fake_mcp, clean_session_state, monkeypatch, tmp_path):
+    """Batches hold <=64 items and <=240 KiB of import items."""
+    import substrate.spool as spool_module
+
+    _mcp_env(monkeypatch, fake_mcp)
+    root = tmp_path / "batch-spool"
+    spool = spool_module.Spool(root)
+    try:
+        for _ in range(70):
+            plugin.sync_turn(
+                "hello",
+                "world",
+                session_id="s",
+                messages=[{"role": "user", "content": "hello"}],
+                turn_id="t",
+            )
+        # Drain through the fake server one batch at a time.
+        for _ in range(200):
+            batch = spool.claim_batch()
+            if not batch:
+                break
+            assert len(batch) <= 64
+            raw = __import__("json").dumps(
+                [__import__("substrate.contract", fromlist=["to_import_item"]).to_import_item(
+                    claimed["envelope"]) for claimed in batch]
+            ).encode()
+            assert len(raw) <= 240 * 1024
+            for claimed in batch:
+                spool.retire(claimed["item_id"])
+        assert spool.pending() == 0
+    finally:
+        spool.close()
+
+
+def test_tool_success_against_fake_mcp(
+    real_spool, fake_mcp, monkeypatch, clean_session_state
 ):
-    _stub_env(monkeypatch, stub_ledger)
+    _mcp_env(monkeypatch, fake_mcp)
     result = json.loads(
         plugin.memory_remember({"text": "prefers tea", "durability": "durable"})
     )
     assert result == {"handle": "m:44a1b02e"}
-    assert len(stub_ledger.posts) == 1
-    assert stub_ledger.posts[0]["body"]["kind"] == "memory_write"
+    calls = _tool_calls(fake_mcp, "memory_remember")
+    assert len(calls) == 1
+    assert calls[0]["arguments"]["text"] == "prefers tea"
+    assert calls[0]["arguments"]["operation_id"]
+    assert calls[0]["auth"] == "Bearer k"
+    assert calls[0]["accept"] == "application/json, text/event-stream"
     # Explicit tools enqueue durably; the tool path never starts the sender.
     assert real_spool.pending() == 1
 
 
 def test_tool_timeout_against_slow_stub(
-    real_spool, stub_ledger, monkeypatch, clean_session_state
+    real_spool, fake_mcp, monkeypatch, clean_session_state
 ):
-    _stub_env(monkeypatch, stub_ledger)
-    stub_ledger.delay = 4.0  # longer than the 3 s tool POST deadline
+    _mcp_env(monkeypatch, fake_mcp)
+    fake_mcp.delay = 4.0  # longer than the 3 s tool deadline
     result = json.loads(
         plugin.memory_remember({"text": "fact", "durability": "durable"})
     )
     assert result == {"error": "timeout"}
-    assert len(stub_ledger.posts) == 1
+    assert fake_mcp.hits == 1
 
 
 def test_tool_404_carries_permanent_signal(
-    real_spool, stub_ledger, monkeypatch, clean_session_state
+    real_spool, fake_mcp, monkeypatch, clean_session_state
 ):
     # Server 404 (unknown handle) must not retry forever: the client marks
-    # it permanent (status 404, transient False) so the spool sender
-    # quarantines instead of releasing. The tool itself still returns the
-    # bounded transport_error shape.
-    _stub_env(monkeypatch, stub_ledger)
-    stub_ledger.mode = "error"
-    stub_ledger.status = 404
+    # it permanent (transient False) so the spool sender quarantines instead
+    # of releasing. The tool itself still returns the bounded
+    # transport_error shape.
+    _mcp_env(monkeypatch, fake_mcp)
+    fake_mcp.http_status = 404
     result = json.loads(
         plugin.memory_forget({"handle": "m:44a1b02e", "reason": "no longer true"})
     )
     assert result == {"error": "transport_error"}
-    assert len(stub_ledger.posts) == 1
+    assert fake_mcp.hits == 1
     assert real_spool.pending() == 1
     from substrate.client import ClientError, SubstrateClient
 
     try:
-        SubstrateClient.from_env().post_json(
-            "/api/v1/ledger/events", {"probe": True}, timeout=3.0
+        SubstrateClient.from_env().call_tool(
+            "memory_search", {"query": "probe"}, timeout=3.0
         )
         raise AssertionError("stub should answer 404")
     except ClientError as exc:
-        assert exc.status == 404
+        assert exc.category == "not_found"
         assert exc.transient is False
 
 
@@ -828,46 +905,75 @@ def test_spool_reopen_durability_on_disk(tmp_path, clean_session_state, monkeypa
 
 
 def test_sender_quarantines_404_without_retry(
-    real_spool, stub_ledger, monkeypatch, clean_session_state
+    real_spool, fake_mcp, monkeypatch, clean_session_state
 ):
-    """End to end: tool enqueue + sender POST to a 404 stub quarantines.
+    """End to end: tool enqueue + sender batch to a 404 stub quarantines.
 
-    The tool's sync POST fails bounded; the sender's retry of the queued
-    item gets the same 404, sees the permanent signal, and quarantines
-    with a durable counter instead of retrying (spool 8b88008).
+    The tool's sync call fails bounded; the sender's batch gets the same
+    404, sees the permanent signal, and quarantines with a durable counter
+    instead of retrying.
     """
     import time
 
-    _stub_env(monkeypatch, stub_ledger)
-    stub_ledger.mode = "error"
-    stub_ledger.status = 404
+    _mcp_env(monkeypatch, fake_mcp)
+    fake_mcp.http_status = 404
     from substrate.client import SubstrateClient
 
     assert json.loads(
         plugin.memory_forget({"handle": "m:44a1b02e", "reason": "no longer true"})
     ) == {"error": "transport_error"}
-    assert len(stub_ledger.posts) == 1  # tool sync POST only; sender not started
+    assert fake_mcp.hits == 1  # tool sync call only; sender not started
     assert real_spool.pending() == 1
     real_spool.start(SubstrateClient.from_env())
     assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
-    assert len(stub_ledger.posts) == 2  # exactly one sender attempt, never retried
+    assert fake_mcp.hits == 2  # exactly one sender batch, never retried
     counters = real_spool.counters()
     assert any(
         key.endswith("|quarantined") and value["item_count"] >= 1
         for key, value in counters.items()
     ), counters
     time.sleep(1.0)
-    assert len(stub_ledger.posts) == 2
+    assert fake_mcp.hits == 2
 
 
 def test_tool_makes_single_attempt_on_500(
-    real_spool, stub_ledger, monkeypatch, clean_session_state
+    real_spool, fake_mcp, monkeypatch, clean_session_state
 ):
     # No client-side retry: redelivery is the spool sender's job.
-    _stub_env(monkeypatch, stub_ledger)
-    stub_ledger.mode = "error"
-    stub_ledger.status = 500
+    _mcp_env(monkeypatch, fake_mcp)
+    fake_mcp.http_status = 500
     assert json.loads(plugin.memory_remember({"text": "f", "durability": "durable"})) == {
         "error": "transport_error"
     }
-    assert len(stub_ledger.posts) == 1
+    assert fake_mcp.hits == 1
+
+
+def test_rejected_items_quarantine_while_rest_retire(
+    real_spool, fake_mcp, monkeypatch, clean_session_state
+):
+    """Per-item semantics: rejected quarantines, stored/duplicate retire."""
+    from substrate.client import SubstrateClient
+
+    _mcp_env(monkeypatch, fake_mcp)
+    fake_mcp.import_mode = lambda index, item: "stored" if index == 0 else "rejected"
+    plugin.sync_turn(
+        "hello", "world", session_id="s",
+        messages=[{"role": "user", "content": "hello"}],
+        turn_id="t",
+    )
+    plugin.sync_turn(
+        "bye", "moon", session_id="s",
+        messages=[{"role": "user", "content": "bye"}],
+        turn_id="t2",
+    )
+    def _outcome(kind: str) -> bool:
+        return any(
+            key.endswith(f"|{kind}") and value["item_count"] >= 1
+            for key, value in real_spool.counters().items()
+        )
+
+    assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
+    # Counters are written by the sender thread after the item leaves the
+    # queue, so wait for the outcomes rather than sampling once.
+    assert _wait_for(lambda: _outcome("delivered") and _outcome("quarantined"), timeout=15.0), real_spool.counters()
+    assert SubstrateClient is not None

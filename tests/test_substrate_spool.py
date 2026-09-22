@@ -61,9 +61,33 @@ def ack_for(event_id, action="stored"):
     }
 
 
+def import_response(items, action="stored", event_id=None):
+    """Build a memory_import structured result answering every item."""
+    results = []
+    for index, item in enumerate(items):
+        entry = {"index": index, "action": action}
+        echoed = event_id
+        if echoed is None and isinstance(item, dict):
+            echoed = item.get("event_id")
+        if echoed is not None:
+            entry["event_id"] = echoed
+        if action == "rejected":
+            entry["error"] = "invalid_request"
+        results.append(entry)
+    accepted = sum(1 for entry in results if entry["action"] != "rejected")
+    return {
+        "contract_version": 2,
+        "batch_id": "b" * 16,
+        "accepted": accepted,
+        "rejected": len(results) - accepted,
+        "results": results,
+    }
+
+
 class FakeClient:
-    """Scripted stand-in: a list of dicts (ACKs) / ClientErrors / callables,
-    a single catch-all callable, or None (always ACK)."""
+    """Scripted stand-in: a list of dicts (import results or legacy single
+    ACKs) / ClientErrors / callables, a single catch-all callable, or None
+    (every batch stored). Speaks the spool sender's ``call_tool`` seam."""
 
     def __init__(self, script=None):
         if callable(script):
@@ -75,24 +99,36 @@ class FakeClient:
         self.calls = []
         self.lock = threading.Lock()
 
-    def post_json(self, path, body, **kwargs):
+    def call_tool(self, name, arguments, **kwargs):
+        """Mirror the real client: return (structuredContent, text)."""
+        items = arguments.get("items", []) if isinstance(arguments, dict) else []
         with self.lock:
             self.calls.append({
-                "path": path,
-                "event_id": body.get("event_id"),
-                "idempotency_key": kwargs.get("idempotency_key"),
+                "tool": name,
+                "count": len(items),
+                "event_ids": [item.get("event_id") if isinstance(item, dict) else None
+                              for item in items],
                 "timeout": kwargs.get("timeout"),
             })
         if self.func is not None:
-            return self.func(path, body, kwargs)
+            return self.func(name, arguments, kwargs), ""
         if not self.script:
-            return ack_for(body["event_id"])
+            return import_response(items, "stored"), ""
         next_item = self.script.pop(0)
         if isinstance(next_item, BaseException):
             raise next_item
         if callable(next_item):
-            return next_item(path, body, kwargs)
-        return next_item
+            return next_item(name, arguments, kwargs), ""
+        if isinstance(next_item, dict) and "results" in next_item:
+            return next_item, ""
+        if (isinstance(next_item, dict) and next_item.get("stored") is True
+                and isinstance(next_item.get("action"), str)):
+            # Legacy single-ACK shape: one per-item answer for the batch.
+            return import_response(items, next_item["action"], next_item.get("event_id")), ""
+        # Anything else is a bare/malformed 200: no usable per-item result,
+        # so the sender releases and retries (never retires, never quarantines).
+        return ({"contract_version": 2, "batch_id": "b" * 16,
+                 "accepted": 0, "rejected": 0, "results": []}, "")
 
 
 def new_spool(tmp_path, **kwargs):
@@ -131,13 +167,15 @@ def test_enqueue_returns_id_and_sender_delivers_priority_order(tmp_path):
         order = [ids["e"], ids["l"]] + [e["event_id"] for e in extra] + [ids["c"], ids["r"]]
         seen = []
 
-        def record(path, body, kwargs):
-            seen.append(body["event_id"])
-            assert kwargs["idempotency_key"] == body["event_id"]
+        def record(tool, arguments, kwargs):
+            assert tool == "memory_import"
             assert kwargs["timeout"] == 5.0
-            return ack_for(body["event_id"])
+            for item in arguments["items"]:
+                seen.append(item["event_id"])
+                assert "schema_version" not in item and "contract_version" not in item
+            return import_response(arguments["items"], "stored")
 
-        sp.start(FakeClient([record] * 6))
+        sp.start(FakeClient(record))
         assert drain(sp) == 0
         assert seen == order
         counters = sp.counters()
@@ -271,12 +309,14 @@ def test_every_retired_item_has_ack_or_durable_counter(tmp_path):
         sp.enqueue(doomed, priority=PRIORITY_LIVE,
                    kind="capture_turn", capture_origin="live")
 
-        def script(path, body, kwargs):
-            if body["event_id"] == doomed["event_id"]:
+        def script(tool, arguments, kwargs):
+            assert tool == "memory_import"
+            if any(item.get("event_id") == doomed["event_id"]
+                   for item in arguments["items"]):
                 raise ClientError("invalid_request", transient=False)
-            return ack_for(body["event_id"])
+            return import_response(arguments["items"], "stored")
 
-        sp.start(FakeClient([script] * 3))
+        sp.start(FakeClient(script))
         assert drain(sp) == 0
         counters = sp.counters()
         delivered = sum(v["item_count"] for k, v in counters.items() if k.endswith("|delivered"))
@@ -306,7 +346,7 @@ def test_ack_semantics_never_retire_on_bare_200(tmp_path, bad_ack):
             bad["event_id"] = env["event_id"]
         sp.enqueue(env, priority=PRIORITY_LIVE,
                    kind="capture_turn", capture_origin="live")
-        sp.start(FakeClient(lambda path, body, kwargs: dict(bad)))
+        sp.start(FakeClient(lambda tool, arguments, kwargs: dict(bad)))
         time.sleep(1.5)
         # Still spooled: a bad ACK is a transient failure, never a retire.
         assert sp.pending() == 1
@@ -500,14 +540,24 @@ def test_permanent_404_quarantines_instead_of_retrying(tmp_path):
 
 def test_malformed_200_stays_spooled_and_retries(tmp_path):
     """Actual malformed HTTP 200 bodies via the real client: the item stays
-    spooled (transient per the ACK rule) and delivers once valid."""
+    spooled (transient per the import rule) and delivers once valid."""
     import urllib.request as urlrequest
 
     env = make_envelope()
+    state = {"imports": 0}
 
-    class GarbageThenAck:
-        status = 200
-        calls = 0
+    def import_result(items):
+        return {"contract_version": 2, "batch_id": "d" * 16,
+                "accepted": len(items), "rejected": 0,
+                "results": [{"index": i, "event_id": item["event_id"],
+                             "action": "stored"}
+                            for i, item in enumerate(items)]}
+
+    class FakeResponse:
+        def __init__(self, payload, url):
+            self.payload = payload
+            self.status = 200
+            self._url = url
 
         def __enter__(self):
             return self
@@ -516,40 +566,58 @@ def test_malformed_200_stays_spooled_and_retries(tmp_path):
             return False
 
         def geturl(self):
-            return "https://memory.example/api/v1/ledger/events"
+            return self._url
 
         def read(self, size=-1):
-            type(self).calls += 1
-            if type(self).calls < 3:
-                return b"{not json"
-            return json.dumps(ack_for(env["event_id"])).encode()
+            return self.payload if size < 0 else self.payload[:size]
+
+    def fake_urlopen(request, timeout):
+        body = json.loads(request.data.decode("utf-8"))
+        if body.get("method") == "initialize":
+            payload = {"jsonrpc": "2.0", "id": body["id"], "result": {
+                "protocolVersion": "2024-11-05", "capabilities": {},
+                "serverInfo": {"name": "substrate-memory", "version": "t"},
+                "instructions": "substrate-mcp-contract/2 t"}}
+            return FakeResponse(json.dumps(payload).encode(), request.full_url)
+        state["imports"] += 1
+        if state["imports"] < 3:
+            return FakeResponse(b"{not json", request.full_url)
+        items = body["params"]["arguments"]["items"]
+        structured = import_result(items)
+        payload = {"jsonrpc": "2.0", "id": body["id"], "result": {
+            "content": [{"type": "text", "text": json.dumps(structured)}],
+            "structuredContent": structured,
+            "isError": False,
+        }}
+        return FakeResponse(json.dumps(payload).encode(), request.full_url)
 
     real = urlrequest.urlopen
-    urlrequest.urlopen = lambda request, timeout: GarbageThenAck()
+    urlrequest.urlopen = fake_urlopen
     try:
         # The real client maps the garbage body to permanent invalid_response.
         client = SubstrateClient("https://memory.example", "k")
         with pytest.raises(ClientError) as garbage_info:
-            client.post_json("/api/v1/ledger/events", {"a": 1}, timeout=1.0)
+            client.call_tool("memory_import", {"items": [env]}, timeout=1.0)
         assert garbage_info.value.category == "invalid_response"
         assert garbage_info.value.transient is False
     finally:
         urlrequest.urlopen = real
 
-    GarbageThenAck.calls = 0
+    state["imports"] = 0
     sp = new_spool(tmp_path)
     try:
         sp.enqueue(env, priority=PRIORITY_LIVE,
                    kind="capture_turn", capture_origin="live")
-        urlrequest.urlopen = lambda request, timeout: GarbageThenAck()
+        urlrequest.urlopen = fake_urlopen
         try:
             client = SubstrateClient("https://memory.example", "k")
             sp.start(client)
             assert drain(sp) == 0
         finally:
             urlrequest.urlopen = real
-        # Two transient garbage attempts, then the ACK: never quarantined.
-        assert GarbageThenAck.calls == 3
+        # Two transient garbage attempts, then the stored batch: delivered,
+        # never quarantined.
+        assert state["imports"] == 3
         counters = sp.counters()
         assert sum(v["item_count"] for k, v in counters.items()
                    if k.endswith("|delivered")) == 1
@@ -558,10 +626,8 @@ def test_malformed_200_stays_spooled_and_retries(tmp_path):
         sp.close()
 
 
-
-
 REPO_ROOT = _pl.Path(__file__).resolve().parents[1]
-SRC_DIR = str(REPO_ROOT / "plugins" / "substrate" / "src")
+SRC_DIR = str(REPO_ROOT / "plugins" / "substrate-hermes" / "src")
 
 
 def _run_native(script, *args, timeout=30):
@@ -626,14 +692,18 @@ wanted = {e["event_id"]: e for e in _envelopes}
 class AckClient:
     def __init__(self):
         self.seen = {}
-    def post_json(self, path, body, **kw):
-        assert kw.get("idempotency_key") == body["event_id"]
-        canon = json.dumps(body, ensure_ascii=False, separators=(",", ":"),
-                           sort_keys=True)
-        self.seen[body["event_id"]] = canon
-        return {"event_id": body["event_id"], "accepted": True,
-                "stored": True, "status": "accepted", "action": "stored",
-                "handle": "m:12345678"}
+    def call_tool(self, name, arguments, **kw):
+        assert name == "memory_import"
+        for item in arguments["items"]:
+            canon = json.dumps(item, ensure_ascii=False, separators=(",", ":"),
+                               sort_keys=True)
+            self.seen[item["event_id"]] = canon
+        items = arguments["items"]
+        return ({"contract_version": 2, "batch_id": "c" * 16,
+                 "accepted": len(items), "rejected": 0,
+                 "results": [{"index": i, "event_id": item["event_id"],
+                              "action": "stored"}
+                             for i, item in enumerate(items)]}, "")
 
 client = AckClient()
 pending_before = sp.pending()
@@ -670,7 +740,9 @@ def test_process_kill_mid_flight_recovers(tmp_path):
     assert result["pending_before"] == 3
     assert result["pending_after"] == 0
     for env in expected["envelopes"]:
-        canon = json.dumps(env, ensure_ascii=False, separators=(",", ":"),
+        item = {k: v for k, v in env.items()
+                if k not in ("schema_version", "contract_version")}
+        canon = json.dumps(item, ensure_ascii=False, separators=(",", ":"),
                            sort_keys=True)
         assert result["seen"].get(env["event_id"]) == canon
     delivered = sum(v["item_count"] for k, v in result["counters"].items()
@@ -764,7 +836,9 @@ def test_process_kill_around_commit_recovers(tmp_path):
     wanted = {"control": expected["control"], "orphan": expected["orphan"]}
     assert set(result["seen"]) == {e["event_id"] for e in wanted.values()}
     for env in wanted.values():
-        canon = json.dumps(env, ensure_ascii=False, separators=(",", ":"),
+        item = {k: v for k, v in env.items()
+                if k not in ("schema_version", "contract_version")}
+        canon = json.dumps(item, ensure_ascii=False, separators=(",", ":"),
                            sort_keys=True)
         assert result["seen"][env["event_id"]] == canon
     by_outcome = {}
@@ -802,10 +876,10 @@ def test_stop_respects_deadline_on_blocked_sender(tmp_path):
     started = threading.Event()
 
     class BlockingClient:
-        def post_json(self, path, body, **kwargs):
+        def call_tool(self, name, arguments, **kwargs):
             started.set()
             time.sleep(30.0)
-            return ack_for(body["event_id"])
+            return import_response(arguments["items"], "stored")
 
     try:
         sp.enqueue(make_envelope(), priority=PRIORITY_LIVE,
@@ -821,6 +895,10 @@ def test_stop_respects_deadline_on_blocked_sender(tmp_path):
 
 
 def test_client_tls_redirect_and_retry_after():
+    """Transport checks for the MCP client: loopback http stays allowed,
+    redirects are refused, and HTTP statuses map to bounded categories."""
+    from substrate import client as client_module
+
     with pytest.raises(ClientError) as info:
         SubstrateClient("http://example.com", "k")
     assert info.value.category == "invalid_config"
@@ -837,7 +915,7 @@ def test_client_tls_redirect_and_retry_after():
             return False
 
         def geturl(self):
-            return "https://evil.example/api/v1/ledger/events"
+            return "https://evil.example/mcp"
 
         def read(self, size=-1):
             return b"{}"
@@ -845,28 +923,33 @@ def test_client_tls_redirect_and_retry_after():
     import urllib.request as urlrequest
 
     def fake_urlopen(request, timeout):
+        assert request.full_url == "https://memory.example/mcp"
+        assert request.get_header("Accept") == "application/json, text/event-stream"
+        assert request.get_header("Authorization") == "Bearer k"
         return RedirectResponse()
 
     real = urlrequest.urlopen
     urlrequest.urlopen = fake_urlopen
     try:
+        client_module.reset_init_cache()
         client = SubstrateClient("https://memory.example", "k")
         with pytest.raises(ClientError) as redirect_info:
-            client.post_json("/api/v1/ledger/events", {"a": 1}, timeout=1.0)
+            client.call_tool("memory_search", {"query": "q"}, timeout=1.0)
         assert redirect_info.value.category == "transport_error"
     finally:
         urlrequest.urlopen = real
 
     not_found = urllib.error.HTTPError(
-        "https://memory.example/api/v1/ledger/events", 404, "Not Found",
+        "https://memory.example/mcp", 404, "Not Found",
         {}, None,
     )
     urlrequest.urlopen = lambda request, timeout: (_ for _ in ()).throw(not_found)
     try:
+        client_module.reset_init_cache()
         client = SubstrateClient("https://memory.example", "k")
         with pytest.raises(ClientError) as not_found_info:
-            client.post_json("/api/v1/ledger/events", {"a": 1}, timeout=1.0)
-        assert not_found_info.value.category == "transport_error"
+            client.call_tool("memory_search", {"query": "q"}, timeout=1.0)
+        assert not_found_info.value.category == "not_found"
         assert not_found_info.value.status == 404
         assert not_found_info.value.transient is False
     finally:
@@ -875,14 +958,15 @@ def test_client_tls_redirect_and_retry_after():
     for code in (429, 503):
         headers = {"Retry-After": "600"}
         http_error = urllib.error.HTTPError(
-            "https://memory.example/api/v1/ledger/events", code, "Slow",
+            "https://memory.example/mcp", code, "Slow",
             headers, None,
         )
         urlrequest.urlopen = lambda request, timeout: (_ for _ in ()).throw(http_error)
         try:
+            client_module.reset_init_cache()
             client = SubstrateClient("https://memory.example", "k")
             with pytest.raises(ClientError) as slow_info:
-                client.post_json("/api/v1/ledger/events", {"a": 1}, timeout=1.0)
+                client.call_tool("memory_search", {"query": "q"}, timeout=1.0)
             assert slow_info.value.retry_after == 600.0
             assert slow_info.value.transient is True
         finally:
@@ -890,16 +974,112 @@ def test_client_tls_redirect_and_retry_after():
 
     headers = {"Retry-After": "120"}
     http_error = urllib.error.HTTPError(
-        "https://memory.example/api/v1/ledger/events", 429, "Too Many",
+        "https://memory.example/mcp", 429, "Too Many",
         headers, None,
     )
     urlrequest.urlopen = lambda request, timeout: (_ for _ in ()).throw(http_error)
     try:
+        client_module.reset_init_cache()
         client = SubstrateClient("https://memory.example", "k")
         with pytest.raises(ClientError) as rate_info:
-            client.post_json("/api/v1/ledger/events", {"a": 1}, timeout=1.0)
+            client.call_tool("memory_search", {"query": "q"}, timeout=1.0)
         assert rate_info.value.category == "rate_limited"
         assert rate_info.value.retry_after == 120.0
         assert rate_info.value.transient is True
     finally:
         urlrequest.urlopen = real
+
+
+def test_client_parses_plain_json_and_sse():
+    """The stdlib client accepts both application/json and SSE bodies."""
+    import urllib.request as urlrequest
+
+    from substrate import client as client_module
+
+    envelope = {"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}
+
+    class FakeResponse:
+        def __init__(self, payload, url):
+            self.payload = payload
+            self.status = 200
+            self._url = url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def geturl(self):
+            return self._url
+
+        def read(self, size=-1):
+            return self.payload if size < 0 else self.payload[:size]
+
+    bodies = [
+        json.dumps(envelope).encode(),
+        b"event: message\ndata: " + json.dumps(envelope).encode() + b"\n\n",
+        b": keep-alive\ndata: [DONE]\ndata: " + json.dumps(envelope).encode(),
+    ]
+    real = urlrequest.urlopen
+    try:
+        for body in bodies:
+            urlrequest.urlopen = (
+                lambda request, timeout, _b=body: FakeResponse(_b, request.full_url)
+            )
+            client_module.reset_init_cache()
+            client = SubstrateClient("https://memory.example", "k")
+            assert client._rpc("ping", {}, timeout=1.0) == {"ok": True}
+    finally:
+        urlrequest.urlopen = real
+
+
+def test_client_refuses_foreign_server_identity():
+    """Initialize must verify the substrate-memory name + contract prefix."""
+    from substrate import client as client_module
+    from substrate import contract as contract_module
+
+    def serve(result, url_holder):
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return url_holder["url"]
+
+            def read(self, size=-1):
+                payload = json.dumps(
+                    {"jsonrpc": "2.0", "id": 1, "result": result}).encode()
+                return payload if size < 0 else payload[:size]
+
+        def fake_urlopen(request, timeout):
+            url_holder["url"] = request.full_url
+            return FakeResponse()
+
+        return fake_urlopen
+
+    import urllib.request as _urlrequest
+
+    real = _urlrequest.urlopen
+    good = {
+        "protocolVersion": "2024-11-05", "capabilities": {},
+        "serverInfo": {"name": "substrate-memory", "version": "t"},
+        "instructions": "substrate-mcp-contract/2 t"}
+    for result in (
+        {**good, "serverInfo": {"name": "evil-memory", "version": "t"}},
+        {**good, "instructions": "other-contract/9"},
+    ):
+        url_holder: dict = {}
+        _urlrequest.urlopen = serve(result, url_holder)
+        try:
+            client_module.reset_init_cache()
+            client = SubstrateClient("https://memory.example", "k")
+            with pytest.raises(contract_module.ContractError):
+                client.ensure_initialized(timeout=1.0)
+        finally:
+            _urlrequest.urlopen = real

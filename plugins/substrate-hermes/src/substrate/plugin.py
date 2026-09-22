@@ -96,91 +96,40 @@ def _handles(value: Any) -> list[str]:
     return [item for item in value[: contract.MAX_HANDLES] if _valid_handle(item)]
 
 
-def _recent_turns(history: Any) -> list[dict[str, str]]:
-    """Extract the last two completed user/assistant pairs from Hermes history."""
-    if not isinstance(history, list):
-        return []
-    pairs: list[dict[str, str]] = []
-    pending: str | None = None
-    answer: str | None = None
-    for item in history:
-        if not isinstance(item, Mapping):
-            continue
-        role = item.get("role")
-        if role == "user":
-            if pending is not None and answer is not None:
-                pairs.append({"user": pending, "assistant": answer})
-            pending = _bounded_text(item.get("content", ""), contract.MAX_RECENT_TURN_BYTES)
-            answer = None
-        elif role == "assistant" and pending is not None:
-            # A tool-using turn can contain an assistant tool-call row followed
-            # by the final assistant row. Keep the last assistant content.
-            answer = _bounded_text(item.get("content", ""), contract.MAX_RECENT_TURN_BYTES)
-    if pending is not None and answer is not None:
-        pairs.append({"user": pending, "assistant": answer})
-    return pairs[-contract.MAX_RECENT_TURNS :]
-
-
-def _derive_turn(history: Any) -> int:
-    if not isinstance(history, list):
-        return 0
-    # pre_llm_call receives history including the current, unanswered user row.
-    users = sum(
-        1 for item in history if isinstance(item, Mapping) and item.get("role") == "user"
-    )
-    last_role = next(
-        (
-            item.get("role")
-            for item in reversed(history)
-            if isinstance(item, Mapping) and item.get("role") in {"user", "assistant", "tool"}
-        ),
-        None,
-    )
-    return max(0, users - (1 if last_role == "user" else 0))
-
-
-def _turn_context_request(
+def _turn_context_args(
     session_id: Any,
     user_message: Any,
-    conversation_history: Any,
     **kwargs: Any,
-) -> dict[str, Any]:
-    explicit_turn = kwargs.get("turn")
-    turn = (
-        explicit_turn
-        if isinstance(explicit_turn, int) and not isinstance(explicit_turn, bool) and explicit_turn >= 0
-        else _derive_turn(conversation_history)
-    )
-    turn_id = _bounded_text(kwargs.get("turn_id", ""), contract.MAX_ID_BYTES)
-    if not turn_id:
-        # Current Hermes supplies turn_id. This fallback keeps older hosts valid.
-        turn_id = str(uuid.uuid4())
-    request = {
-        "contract_version": contract.CONTRACT_VERSION,
-        "session_id": _bounded_text(session_id, contract.MAX_SESSION_ID_BYTES),
-        "turn_id": turn_id,
-        "turn": min(turn, contract.MAX_SAFE_INTEGER),
-        "platform": _bounded_text(kwargs.get("platform", ""), contract.MAX_PLATFORM_BYTES),
-        "chat_type": _bounded_text(kwargs.get("chat_type", ""), contract.MAX_CHAT_TYPE_BYTES),
-        "sender_id": _bounded_text(kwargs.get("sender_id", ""), contract.MAX_SPEAKER_ID_BYTES),
-        "agent_identity": _bounded_text(
-            kwargs.get("agent_identity", kwargs.get("agent_id", kwargs.get("model", ""))),
-            contract.MAX_SPEAKER_ID_BYTES,
-        ),
-        "agent_context": _bounded_text(
-            kwargs.get("agent_context", kwargs.get("profile_name", "")),
-            contract.MAX_AGENT_CONTEXT_BYTES,
-        ),
-        "parent_session_id": _bounded_text(
-            kwargs.get("parent_session_id", ""), contract.MAX_SESSION_ID_BYTES
-        ),
-        "message": _bounded_text(user_message, contract.MAX_TURN_MESSAGE_BYTES),
-        "recent_turns": _recent_turns(conversation_history),
-        "injected_handles": _handles(kwargs.get("injected_handles", [])),
-        "cited_handles": _handles(kwargs.get("cited_handles", [])),
-        "deadline_ms": contract.LIMITS["turn_context_deadline_ms"],
+) -> dict[str, Any] | None:
+    """Build ``memory_turn_context`` MCP arguments, or None when unusable.
+
+    The v2 contract takes only ``session_id``, ``prompt`` (<=16384 bytes),
+    ``platform``, and optional ``turn_id``/``agent_context``/
+    ``parent_session_id``. The server redacts the prompt, opens the pending
+    turn with it, and numbers turns itself, so no history, turn number, or
+    identity fields are sent.
+    """
+    sid = _bounded_text(session_id, contract.MAX_SESSION_ID_BYTES)
+    if not sid:
+        return None
+    args: dict[str, Any] = {
+        "session_id": sid,
+        "prompt": _bounded_text(user_message, contract.MAX_TURN_MESSAGE_BYTES),
+        "platform": _bounded_text(kwargs.get("platform", ""), contract.MAX_PLATFORM_BYTES)
+        or "hermes",
     }
-    return contract.validate_turn_context_request(request)
+    turn_id = _bounded_text(kwargs.get("turn_id", ""), contract.MAX_ID_BYTES)
+    if turn_id:
+        args["turn_id"] = turn_id
+    agent_context = _bounded_text(
+        kwargs.get("agent_context", ""), contract.MAX_AGENT_CONTEXT_BYTES
+    )
+    if agent_context in {"main", "subagent"}:
+        args["agent_context"] = agent_context
+    parent = _bounded_text(kwargs.get("parent_session_id", ""), contract.MAX_SESSION_ID_BYTES)
+    if parent:
+        args["parent_session_id"] = parent
+    return args
 
 
 def pre_llm_call(
@@ -189,22 +138,26 @@ def pre_llm_call(
     conversation_history: list[Any] | None = None,
     **kwargs: Any,
 ) -> dict[str, str] | None:
-    """Fetch and validate per-turn memory. Every failure injects nothing."""
+    """Fetch and validate per-turn memory. Every failure injects nothing.
+
+    Calls the ``memory_turn_context`` MCP tool and injects only its ``block``.
+    The ``[substrate] ... not saved yet`` sync line the contract appends for
+    MCP hosts is intentionally ignored here: the Hermes write-ahead spool
+    guarantees delivery of every captured turn, so there are no missing turns
+    to sync (see CONTRACT.md section 13).
+    """
     try:
         client = SubstrateClient.from_env()
         if not client.api_key:
             return {"context": _login_notice()}
-        request = _turn_context_request(
-            session_id, user_message, conversation_history or [], **kwargs
-        )
-        response = client.post_json(
-            "/api/v1/memory/turn-context", request, timeout=0.5
-        )
-        shaped = contract.shape_response("turn_context", response)
-        checked = contract.validate_turn_context(shaped)
-        # Bind the response to this request, rather than trusting valid data for
-        # another session/turn.
-        if checked["session_id"] != request["session_id"] or checked["turn"] != request["turn"]:
+        args = _turn_context_args(session_id, user_message, **kwargs)
+        if args is None:
+            return None
+        structured, _text = client.call_tool("memory_turn_context", args, timeout=0.5)
+        checked = contract.validate_mcp_turn_context(structured)
+        # Bind the response to this request, rather than trusting valid data
+        # for another session.
+        if checked["session_id"] != args["session_id"]:
             return None
         block = checked["block"]
         return {"context": block} if block else None
@@ -837,15 +790,14 @@ def _fit_result(value: dict[str, Any]) -> str:
     return text
 
 
-def _call_tool(route: str, path: str, request: dict[str, Any], shape: Any) -> str:
+def _call_tool(tool_name: str, request: dict[str, Any], shape: Any) -> str:
     client = None
     try:
         client = SubstrateClient.from_env()
         if not client.api_key:
             return _login_grant_result()
-        response = client.post_json(path, request, timeout=3.0)
-        shaped = contract.shape_response(route, response)
-        return _fit_result(shape(shaped))
+        structured, _text = client.call_tool(tool_name, request, timeout=3.0)
+        return _fit_result(shape(structured))
     except contract.ContractError:
         return _error("invalid_response")
     except ValueError:
@@ -899,7 +851,7 @@ def _note_auth_failure(rejected: str = "") -> None:
 
 
 def _shape_search(value: dict[str, Any]) -> dict[str, Any]:
-    if value.get("contract_version") != contract.CONTRACT_VERSION or not isinstance(value.get("results"), list):
+    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or not isinstance(value.get("results"), list):
         raise contract.ContractError("invalid_response")
     results: list[dict[str, Any]] = []
     for item in value["results"][:20]:
@@ -918,7 +870,7 @@ def _shape_search(value: dict[str, Any]) -> dict[str, Any]:
                 _bounded_text(marker, 128) for marker in item["markers"][:16] if isinstance(marker, str)
             ]
         results.append(result)
-    return {"contract_version": contract.CONTRACT_VERSION, "results": results}
+    return {"contract_version": contract.MCP_CONTRACT_VERSION, "results": results}
 
 
 def memory_search(args: dict[str, Any], **kwargs: Any) -> str:
@@ -937,16 +889,16 @@ def memory_search(args: dict[str, Any], **kwargs: Any) -> str:
             request["kinds"] = kinds
     except Exception:
         return _error("invalid_request")
-    return _call_tool("search", "/api/v1/memory/search", request, _shape_search)
+    return _call_tool("memory_search", request, _shape_search)
 
 
 def _shape_expand(value: dict[str, Any], expected: str) -> dict[str, Any]:
-    if value.get("contract_version") != contract.CONTRACT_VERSION or value.get("handle") != expected:
+    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or value.get("handle") != expected:
         raise contract.ContractError("invalid_response")
     if not isinstance(value.get("kind"), str):
         raise contract.ContractError("invalid_response")
     result: dict[str, Any] = {
-        "contract_version": contract.CONTRACT_VERSION,
+        "contract_version": contract.MCP_CONTRACT_VERSION,
         "handle": expected,
         "kind": _clip_utf8(value["kind"], 32),
     }
@@ -967,8 +919,7 @@ def memory_expand(args: dict[str, Any], **kwargs: Any) -> str:
     except Exception:
         return _error("invalid_request")
     return _call_tool(
-        "expand",
-        "/api/v1/memory/expand",
+        "memory_expand",
         {"handle": handle},
         lambda value: _shape_expand(value, handle),
     )
@@ -982,10 +933,10 @@ def _bounded_excerpt(value: Any) -> Any:
 
 
 def _shape_evidence(value: dict[str, Any]) -> dict[str, Any]:
-    if value.get("contract_version") != contract.CONTRACT_VERSION or not isinstance(value.get("excerpts"), list):
+    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or not isinstance(value.get("excerpts"), list):
         raise contract.ContractError("invalid_response")
     result: dict[str, Any] = {
-        "contract_version": contract.CONTRACT_VERSION,
+        "contract_version": contract.MCP_CONTRACT_VERSION,
         "excerpts": [_bounded_excerpt(item) for item in value["excerpts"][:20]],
     }
     if "raw" in value:
@@ -1007,7 +958,7 @@ def memory_evidence(args: dict[str, Any], **kwargs: Any) -> str:
         request = {"handle": handle, "raw": raw, "limit": _limit(args.get("limit"), 5)}
     except Exception:
         return _error("invalid_request")
-    return _call_tool("evidence", "/api/v1/memory/evidence", request, _shape_evidence)
+    return _call_tool("memory_evidence", request, _shape_evidence)
 
 
 _LEDGER_HANDLE_RE = re.compile(r"^m:[0-9a-f]{8,64}$")
@@ -1039,34 +990,33 @@ def _ledger_envelope(
     return envelope
 
 
-def _ledger_handle(response: Any, event_id: str) -> str:
-    """Extract the server's ``m:`` handle from a ledger ACK.
+def _mcp_handle(structured: Any, tool: str) -> str:
+    """Extract the server's ``m:`` handle from a write-tool result.
 
-    The spool item retires only on ``stored == true`` with a matching
-    ``event_id`` and a known ``action``; the tool additionally requires the
-    ``m:`` handle the server allocates for ``memory_write``/``memory_forget``.
+    The spooled ``memory_write``/``memory_forget`` envelope is retired
+    separately by the spool sender on its ``memory_import`` per-item action;
+    the tool additionally requires the ``m:`` handle the server allocates.
     """
-    if not isinstance(response, dict):
-        raise contract.ContractError("invalid_response", "ledger: expected object")
-    if response.get("stored") is not True:
-        raise contract.ContractError("invalid_response", "ledger: not stored")
-    if response.get("event_id") != event_id:
-        raise contract.ContractError("invalid_response", "ledger: event_id mismatch")
-    action = response.get("action")
-    if not isinstance(action, str) or action not in contract.ACTIONS:
-        raise contract.ContractError("invalid_response", "ledger: unknown action")
-    handle = response.get("handle")
+    if not isinstance(structured, dict):
+        raise contract.ContractError("invalid_response", f"{tool}: expected object")
+    if structured.get("contract_version") != contract.MCP_CONTRACT_VERSION:
+        raise contract.ContractError("invalid_response", f"{tool}: contract_version must be 2")
+    handle = structured.get("handle")
     if not isinstance(handle, str) or _LEDGER_HANDLE_RE.fullmatch(handle) is None:
-        raise contract.ContractError("invalid_response", "ledger: missing handle")
+        raise contract.ContractError("invalid_response", f"{tool}: missing handle")
     return handle
 
 
-def _ledger_call(envelope: dict[str, Any]) -> str:
-    """Durably enqueue an explicit envelope, POST it, and return its handle.
+def _ledger_call(envelope: dict[str, Any], tool_name: str, arguments: dict[str, Any]) -> str:
+    """Durably enqueue an explicit envelope, call its MCP tool, return its handle.
 
-    Returns compact JSON ``{"handle": "m:..."}`` on success and only
+    The envelope is spooled at ``PRIORITY_EXPLICIT`` (delivered later through
+    ``memory_import`` so the write stays durable) and the same operation is
+    additionally sent synchronously as ``memory_remember``/``memory_forget``
+    under the same ``operation_id`` so the tool can return the server's
+    handle. Returns compact JSON ``{"handle": "m:..."}`` on success and only
     ``{"error": category}`` on failure. Enqueue failures never fail the
-    call: the synchronous POST still decides the result.
+    call: the synchronous tool call still decides the result.
     """
     try:
         contract.validate_envelope(envelope, idempotency_key=envelope["event_id"])
@@ -1088,14 +1038,13 @@ def _ledger_call(envelope: dict[str, Any]) -> str:
     except Exception:
         return _error("transport_error")
     try:
-        response = client.post_json(
-            "/api/v1/ledger/events",
-            envelope,
+        structured, _text = client.call_tool(
+            tool_name,
+            arguments,
             timeout=3.0,
-            idempotency_key=envelope["event_id"],
             max_response_bytes=65_536,
         )
-        handle = _ledger_handle(response, envelope["event_id"])
+        handle = _mcp_handle(structured, tool_name)
         return json.dumps({"handle": handle}, separators=(",", ":"))
     except contract.ContractError:
         return _error("invalid_response")
@@ -1111,9 +1060,10 @@ def memory_remember(args: dict[str, Any], **kwargs: Any) -> str:
     """Write a fact to Substrate memory; returns the server's ``m:`` handle.
 
     Takes ``text`` plus ``durability`` (``durable``, ``time_bounded``, or
-    ``transient``) and an optional ``about`` label. Posts ledger kind
-    ``memory_write``. Returns compact JSON ``{"handle": "m:..."}`` on
-    success and only ``{"error": category}`` on failure.
+    ``transient``) and an optional ``about`` label. Spools ledger kind
+    ``memory_write`` and calls the ``memory_remember`` MCP tool. Returns
+    compact JSON ``{"handle": "m:..."}`` on success and only
+    ``{"error": category}`` on failure.
     """
     try:
         args = _strict_args(args, {"text", "durability", "about"}, {"text", "durability"})
@@ -1142,19 +1092,26 @@ def memory_remember(args: dict[str, Any], **kwargs: Any) -> str:
             session_id=kwargs.get("session_id", ""),
             sender_id=kwargs.get("sender_id", ""),
         )
+        tool_args: dict[str, Any] = {
+            "operation_id": envelope["event_id"],
+            "text": clean_text,
+            "durability": durability,
+        }
+        if about:
+            tool_args["about"] = _bounded_text(about, contract.MAX_ABOUT_BYTES)
     except Exception:
         return _error("invalid_request")
-    return _ledger_call(envelope)
+    return _ledger_call(envelope, "memory_remember", tool_args)
 
 
 def memory_forget(args: dict[str, Any], **kwargs: Any) -> str:
     """marks a memory as no longer true; it stays in the record, keeps its evidence, and can be revived by later information.
 
     Takes exactly one ``handle`` (``m:`` or ``p:``; a list of handles is
-    refused) plus a required non-empty ``reason``. Posts ledger kind
-    ``memory_forget`` for that atom only and never for related atoms.
-    Returns compact JSON ``{"handle": "m:..."}`` on success and only
-    ``{"error": category}`` on failure.
+    refused) plus a required non-empty ``reason``. Spools ledger kind
+    ``memory_forget`` for that atom only (never for related atoms) and calls
+    the ``memory_forget`` MCP tool. Returns compact JSON ``{"handle": "m:..."}``
+    on success and only ``{"error": category}`` on failure.
     """
     try:
         args = _strict_args(args, {"handle", "reason"}, {"handle", "reason"})
@@ -1173,9 +1130,14 @@ def memory_forget(args: dict[str, Any], **kwargs: Any) -> str:
             session_id=kwargs.get("session_id", ""),
             sender_id=kwargs.get("sender_id", ""),
         )
+        tool_args = {
+            "operation_id": envelope["event_id"],
+            "handle": handle,
+            "reason": clean_reason,
+        }
     except Exception:
         return _error("invalid_request")
-    return _ledger_call(envelope)
+    return _ledger_call(envelope, "memory_forget", tool_args)
 
 
 MEMORY_SEARCH_SCHEMA = {

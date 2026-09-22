@@ -59,16 +59,17 @@ jobs:
           set -euo pipefail
           version="$(tr -d ' \t\r\n' < VERSION)"
           test -n "$version"; [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          hermes_version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
-          test "$hermes_version" = 0.4.0
+          hermes_version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate-hermes/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
+          test "$hermes_version" = 0.7.0
           uv run --no-sync ruff check .
           uv run --no-sync python -m compileall -q plugins scripts
           uv run --no-sync python -m pytest -q
           uv run --no-sync python scripts/build_release.py
           cp dist/*.zip "$RUNNER_TEMP/"
           rm -rf dist; uv run --no-sync python scripts/build_release.py
-          cmp "$RUNNER_TEMP/substrate.zip" dist/substrate.zip
-          cmp "$RUNNER_TEMP/substrate-mcp.zip" dist/substrate-mcp.zip
+          for archive in substrate-hermes.zip substrate-claude.zip substrate-codex.zip substrate-mcp.zip; do
+            cmp "$RUNNER_TEMP/$archive" "dist/$archive"
+          done
           uv run --no-sync python scripts/build_release.py --check
           printf 'release_version=%s\n' "$version" >> "$GITHUB_OUTPUT"
       - name: Upload exact verified bytes
@@ -100,7 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${{ needs.verify.outputs.artifact_digest }}"
-          test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = 'SHA256SUMS substrate-mcp.zip substrate.zip '
+          test "$(find dist -maxdepth 1 -type f -printf '%f\n' | sort | tr '\n' ' ')" = 'SHA256SUMS substrate-claude.zip substrate-codex.zip substrate-hermes.zip substrate-mcp.zip '
           (cd dist && sha256sum -c SHA256SUMS)
       - uses: actions/attest-build-provenance@e3fe62ef559997059fe8380e7d2b4c909e2d65f4 # pinned
         with:
@@ -118,10 +119,10 @@ jobs:
           release_json="$RUNNER_TEMP/release.json"
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,tagName,targetCommitish,assets > "$release_json"
-          python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["isDraft"] is True; assert sorted(a["name"] for a in r["assets"]) == ["SHA256SUMS", "substrate-mcp.zip", "substrate.zip"]' "$release_json"
+          python -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["isDraft"] is True; assert sorted(a["name"] for a in r["assets"]) == ["SHA256SUMS", "substrate-claude.zip", "substrate-codex.zip", "substrate-hermes.zip", "substrate-mcp.zip"]' "$release_json"
           rm -rf "$RUNNER_TEMP/existing-release"; mkdir -p "$RUNNER_TEMP/existing-release"
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/existing-release"
-          for archive in substrate.zip substrate-mcp.zip SHA256SUMS; do
+          for archive in substrate-hermes.zip substrate-claude.zip substrate-codex.zip substrate-mcp.zip SHA256SUMS; do
             cmp "dist/$archive" "$RUNNER_TEMP/existing-release/$archive"
           done
           # A review draft has no public tag. Create one only after the owner

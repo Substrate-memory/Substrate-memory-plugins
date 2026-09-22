@@ -36,6 +36,8 @@ ALLOWED_HOSTS = frozenset({
     "github.com",
     "vm-substrate-ar-01.taile961d2.ts.net",
     "app.trysubstrate.co",
+    "trysubstrate.co",
+    "agent-plugins.org",
     "pypi.org",
     "files.pythonhosted.org",
     "developercertificate.org",

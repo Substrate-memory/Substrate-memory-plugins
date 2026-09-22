@@ -1,0 +1,180 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_turn_context",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "prompt": "${prompt}",
+              "platform": "claude"
+            }
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_capture_tool",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "tool_use_id": "${tool_use_id}",
+              "tool_name": "${tool_name}",
+              "tool_input": "${tool_input}",
+              "tool_response": "${tool_response}",
+              "platform": "claude"
+            }
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_capture_turn",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "assistant_message": "${last_assistant_message}",
+              "agent_context": "main",
+              "platform": "claude"
+            }
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_capture_turn",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "assistant_message": "${last_assistant_message}",
+              "agent_context": "subagent",
+              "agent_id": "${agent_id}",
+              "parent_session_id": "${session_id}",
+              "platform": "claude"
+            }
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_session_boundary",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "${source}",
+              "platform": "claude"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": "resume",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_session_boundary",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "${source}",
+              "platform": "claude"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_session_boundary",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "${source}",
+              "platform": "claude"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_session_boundary",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "${source}",
+              "platform": "claude"
+            }
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_session_boundary",
+            "timeout": 5,
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "compact",
+              "platform": "claude"
+            }
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:substrate-claude:substrate-memory",
+            "tool": "memory_session_boundary",
+            "timeout": 3,
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "end",
+              "reason": "${reason}",
+              "platform": "claude"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

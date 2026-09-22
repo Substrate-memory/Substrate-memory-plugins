@@ -1,0 +1,124 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "substrate-memory",
+            "tool": "memory_turn_context",
+            "input": {
+              "session_id": "${session_id}",
+              "prompt": "${prompt}",
+              "platform": "codex",
+              "turn_id": "${turn_id}"
+            },
+            "timeout": 5,
+            "statusMessage": "Loading Substrate memory"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "substrate-memory",
+            "tool": "memory_capture_tool",
+            "input": {
+              "session_id": "${session_id}",
+              "tool_use_id": "${tool_use_id}",
+              "tool_name": "${tool_name}",
+              "tool_input": "${tool_input}",
+              "tool_response": "${tool_response}",
+              "platform": "codex",
+              "turn_id": "${turn_id}"
+            },
+            "timeout": 5,
+            "statusMessage": "Saving turn activity to Substrate"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "substrate-memory",
+            "tool": "memory_capture_turn",
+            "input": {
+              "session_id": "${session_id}",
+              "assistant_message": "${last_assistant_message}",
+              "agent_context": "main",
+              "platform": "codex",
+              "turn_id": "${turn_id}"
+            },
+            "timeout": 5,
+            "statusMessage": "Saving turn to Substrate"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "substrate-memory",
+            "tool": "memory_capture_turn",
+            "input": {
+              "session_id": "${session_id}",
+              "assistant_message": "${last_assistant_message}",
+              "agent_context": "subagent",
+              "agent_id": "${agent_id}",
+              "parent_session_id": "${session_id}",
+              "platform": "codex",
+              "turn_id": "${turn_id}"
+            },
+            "timeout": 5,
+            "statusMessage": "Saving subagent turn to Substrate"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "substrate-memory",
+            "tool": "memory_session_boundary",
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "${source}",
+              "platform": "codex"
+            },
+            "timeout": 5,
+            "statusMessage": "Noting Substrate session boundary"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "substrate-memory",
+            "tool": "memory_session_boundary",
+            "input": {
+              "session_id": "${session_id}",
+              "boundary": "compact",
+              "platform": "codex"
+            },
+            "timeout": 5,
+            "statusMessage": "Noting Substrate session boundary"
+          }
+        ]
+      }
+    ]
+  }
+}

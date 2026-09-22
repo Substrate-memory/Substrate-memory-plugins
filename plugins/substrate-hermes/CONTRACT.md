@@ -286,3 +286,61 @@ locally spooled item. The server copy of this file needs the same append.
   401/403, 429, 5xx, malformed/mismatched ACKs) release the claim and back
   off from 1 s (30 s for auth errors), doubling to 300 s with jitter,
   honoring `Retry-After`.
+
+## 13. MCP memory contract v2 wire (v0.7.0)
+
+Sections 1-12 above are unchanged and stay byte-identical: the ledger
+envelope schema (`schema_version` 3), its validation rules, the
+deterministic event ids, and the redaction rules are shared verbatim with
+the MCP memory contract v2 (`docs/mcp-contract.md`, the single source of
+truth). What changed in v0.7.0 is the transport only: every server call
+now goes to `POST {origin}/mcp` as MCP JSON-RPC instead of the
+`/api/v1/*` REST endpoints.
+
+- Handshake: `initialize` once per process. The plugin refuses to run
+  unless `serverInfo.name == "substrate-memory"` and `instructions`
+  starts with `substrate-mcp-contract/2`. The capabilities check is
+  `initialize` plus `tools/list` containing all 12 contract tools
+  (`memory_search`, `memory_expand`, `memory_evidence`, `memory_shares`,
+  `memory_turn_context`, `memory_import_status`, `memory_remember`,
+  `memory_forget`, `memory_capture_tool`, `memory_capture_turn`,
+  `memory_session_boundary`, `memory_import`).
+- Calls: `tools/call` with `Authorization: Bearer sk_sub_...` (the same
+  device-grant key; onboarding is unchanged) and
+  `Accept: application/json, text/event-stream`. The client parses both
+  plain-JSON and SSE (`data:` line) bodies. A failed tool call
+  (`isError: true`) carries
+  `{"contract_version": 2, "error": <category>}`; the client maps the
+  category to its bounded error and never retries `invalid_request`,
+  `not_found`, or `forbidden`. Hooks always fail open.
+- Turn context: `pre_llm_call` calls `memory_turn_context` with
+  `session_id`, `prompt`, `platform` (plus `turn_id`/`agent_context`/
+  `parent_session_id` when the host provides them) and injects only the
+  returned `block`. The `[substrate] ... not saved yet` sync line the
+  contract appends is intentionally ignored: the Hermes write-ahead spool
+  guarantees delivery of every captured turn, so there are no missing
+  turns to sync; the line exists for spool-less MCP hosts. The 500 ms
+  turn-context deadline is unchanged.
+- Retrieval: `memory_search`, `memory_expand`, and `memory_evidence` call
+  the same-named MCP tools. Hermes tool names, argument schemas, and
+  result strings for the model are unchanged.
+- Explicit writes: `memory_remember` and `memory_forget` keep their Hermes
+  schemas and `{"handle": "m:..."}` results. Each call still spools a
+  `memory_write`/`memory_forget` envelope at explicit priority (durable
+  first) and additionally sends the same operation synchronously as the
+  same-named MCP tool under the same `operation_id`, so the tool can
+  return the server's handle.
+- Spool delivery: the sender drains the spool through `memory_import`
+  batches of at most 64 items and 240 KiB of items. Each item is the
+  spooled envelope without `schema_version`/`contract_version` and with
+  its `event_id`, so a replayed batch answers `duplicate` instead of
+  storing twice. Each item retires iff its per-item `action` is one of
+  `stored | duplicate | sealed | queued` (the section 12 ACK rule applied
+  per item); `rejected` quarantines the item with a durable counter;
+  transport and auth failures release the batch and back off exactly as
+  in section 12 (1 s base, 30 s for auth, doubling with jitter to 300 s,
+  honoring `Retry-After`). A batch that fails permanently is redelivered
+  one item at a time to isolate the poison item.
+- Envelope validation, redaction, spool layout and counters, session
+  boundaries, subagent routing, and the onboarding device grant are
+  unchanged from sections 1-12.
