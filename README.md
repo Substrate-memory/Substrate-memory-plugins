@@ -55,7 +55,7 @@ If Cowork needs manual installation, use **Cowork tab → Customize → Plugins 
 - **Redaction on both sides.** Secrets are redacted client-side before sending and again server-side on ingest. Captured tool arguments are bounded (4096 bytes) and tool results are stored as excerpts (8192 bytes plus a digest).
 - **Tenant isolation.** Every credential is tenant-scoped. The server owns account identity; clients never send tenant or account ids.
 - **What is stored.** Redacted turn content, session boundaries, explicit memories you confirm, and retraction records with their evidence.
-- **What is not stored.** Passwords, API keys, tokens, and other secrets. Small talk skipped during import. Nothing is written before you confirm.
+- **What is not stored.** Passwords, API keys, tokens, and other secrets are redacted before storage. During history import nothing is written before you confirm.
 
 See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md).
 
@@ -67,7 +67,7 @@ After **Connected to Substrate.**, the agent asks once whether to import past co
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.7.0 | `plugins/substrate-hermes` (Hermes 0.21.0) | `plugins/substrate-claude` | `plugins/substrate-mcp` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Candidate |
+| v0.7.0 | `plugins/substrate-hermes` (Hermes 0.21.0) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Candidate |
 
 Known limits, stated honestly:
 
@@ -90,8 +90,8 @@ Claude Cowork and Claude Code use `plugins/substrate-claude`. ChatGPT Work, the 
 **How do I know it is connected?**
 The agent runs an authenticated memory smoke test. Only a passed `memory_search` means **Connected to Substrate.**
 
-**Does it upload my raw transcripts?**
-No. Turns are redacted before sending and again on the server. History import sends only the sessions you confirm.
+**What exactly is sent to Substrate?**
+Each completed turn: your message, the agent's answer, and bounded tool calls and results, all redacted before sending and again on the server. History import sends the same redacted turn content, and only for the sessions you confirm.
 
 **What about my old August 2026 API-key plugin?**
 Those plugins (`substrate_capture`, local spool paths, `SUBSTRATE_API_KEY` setups) are deprecated. Uninstall them and connect with the browser flow. Their local spools are not migrated.
