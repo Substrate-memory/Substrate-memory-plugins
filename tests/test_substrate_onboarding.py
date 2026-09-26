@@ -1050,3 +1050,22 @@ def test_connection_check_matches_the_current_server(monkeypatch, device_server)
     assert onboarding.token_is_valid(device_server.origin, TOKEN) is True
     device_server.search_version = 3
     assert onboarding.token_is_valid(device_server.origin, TOKEN) is False
+
+
+def test_next_message_after_approval_connects_and_confirms(monkeypatch, device_server):
+    """Approval between turns (or across a restart): the next turn polls once,
+    stores the key, and tells the user who is connected, without a CLI."""
+    from substrate import plugin
+
+    _origin(monkeypatch, device_server)
+    monkeypatch.setattr(plugin, "_version_notice_shown", True)
+    first = plugin.pre_llm_call("s", "hello", [])["context"]
+    assert "Code: BCDF-GHJK" in first
+    device_server.token_mode = "approved"
+    device_server.token_body = {**device_server.token_body, "account": "owner@example.com"}
+    monkeypatch.setattr(onboarding, "_manager", None)  # a new process
+    second = plugin.pre_llm_call("s", "hello again", [])["context"]
+    assert "Connected to Substrate as owner@example.com." in second
+    assert credentials.stored_api_key(_isolated_home_path()) == TOKEN
+    third = plugin.pre_llm_call("s", "and again", [])
+    assert third is None or "Connected to Substrate as" not in third["context"]

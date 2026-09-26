@@ -463,6 +463,16 @@ class OnboardingManager:
                 state.get("phase") == "pending"
                 and float(state.get("expires_at", 0)) > now
             ):
+                thread = self._thread
+                if thread is None or not thread.is_alive():
+                    # New process (restart, one-shot CLI): the user may have
+                    # approved meanwhile, so check once before showing the link.
+                    self._poll_once()
+                    state = _load_state(self.home)
+                    if state.get("phase") == "connected":
+                        return None
+                    if state.get("phase") != "pending":
+                        return self.describe(state)
                 self._start_thread()
                 return self.describe(state)
             if not force and (

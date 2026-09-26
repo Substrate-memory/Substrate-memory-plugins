@@ -162,7 +162,12 @@ def pre_llm_call(
     try:
         client = SubstrateClient.from_env()
         if not client.api_key:
-            return _with_notes([_login_notice(_start_login())], notes)
+            status = _start_login()
+            if status is not None:
+                return _with_notes([_login_notice(status)], notes)
+            client = SubstrateClient.from_env()  # approved just now
+            if not client.api_key:
+                return _with_notes([_login_notice(None)], notes)
         announcement = _connected_announcement()
         if announcement:
             notes.append(announcement)
