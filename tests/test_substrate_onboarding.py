@@ -110,9 +110,9 @@ class _DeviceHandler(BaseHTTPRequestHandler):
                 "instructions": "substrate-mcp-contract/2 test"}}
         if method == "tools/list":
             return {"jsonrpc": "2.0", "id": message_id, "result": {
-                "tools": [{"name": name} for name in MCP_TOOLS]}}
+                "tools": [{"name": name} for name in self.server.tools]}}
         if method == "tools/call" and params.get("name") == "memory_search":
-            structured = {"contract_version": 2, "results": []}
+            structured = {"contract_version": self.server.search_version, "results": []}
             return {"jsonrpc": "2.0", "id": message_id, "result": {
                 "content": [{"type": "text", "text": json.dumps(structured)}],
                 "structuredContent": structured, "isError": False}}
@@ -189,6 +189,8 @@ def device_server():
     }
     server.slowed = False
     server.link_base = None
+    server.tools = MCP_TOOLS
+    server.search_version = 2
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     server.origin = f"http://127.0.0.1:{server.server_port}"
@@ -1036,3 +1038,15 @@ def test_host_version_notice_is_soft():
     assert plugin.host_version_notice("") == ""
     notice = plugin.host_version_notice("0.22.1")
     assert "0.21.0-0.21.x" in notice and "0.22.1" in notice and "should work" in notice
+
+
+def test_connection_check_matches_the_current_server(monkeypatch, device_server):
+    """The server answers the memory tools with contract_version 1 and offers
+    memory_shares only when sharing is wired (server Docs/mcp-contract.md).
+    v0.7.0 demanded 2 and all 12 tools, so approval ended in
+    authenticated_health_check_failed and memory_search in invalid_response."""
+    device_server.search_version = 1
+    device_server.tools = [name for name in MCP_TOOLS if name != "memory_shares"]
+    assert onboarding.token_is_valid(device_server.origin, TOKEN) is True
+    device_server.search_version = 3
+    assert onboarding.token_is_valid(device_server.origin, TOKEN) is False

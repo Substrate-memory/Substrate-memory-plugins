@@ -41,14 +41,14 @@ python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" poll
 
 `start` prints the approval link and a code. Open the link, sign in, check
 the code, and choose **Approve connection**. `poll` waits and ends with
-**Connected to Substrate as <your account>.** (add `--json` for
+**Connected to Substrate as you@example.com.** (your account) (add `--json` for
 machine-readable output). The agent must never approve for you or ask for a
 pasted key.
 
 Once the plugin is loaded (after `hermes gateway restart`), you do not need
 the CLI: when the profile is not connected, the agent shows the link and
 code in chat on your next message, the plugin finishes by itself after you
-approve, and the next turn says **Connected to Substrate as <account>.**
+approve, and the next turn says **Connected to Substrate as you@example.com.** (your account)
 Every failure comes with a plain message and a next step.
 
 The plugin stores the tenant-scoped key privately in the active profile

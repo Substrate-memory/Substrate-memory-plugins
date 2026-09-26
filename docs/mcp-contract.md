@@ -11,7 +11,7 @@ Conventions: all string sizes are UTF-8 byte counts; "≤ N" means at most N byt
 timestamps are RFC 3339 UTC; handles match `^[mp]:[0-9a-f]{8,64}$`; input schemas
 are **closed** (an unknown argument is `invalid_request`). Tool results carry the
 same JSON in `structuredContent` and, unless a tool says otherwise, in
-`content[0].text`. Every result object carries `"contract_version": 2`.
+`content[0].text`. The hook and import tools (4.3-4.8) answer with `"contract_version": 2`; the memory tools (`memory_search`, `memory_expand`, `memory_evidence`, `memory_shares`, `memory_remember`, `memory_forget`) answer with `"contract_version": 1` on the current server, and clients accept 1 or 2 for them. `memory_shares` is offered only when the server has sharing wired; clients must not require it.
 
 The legacy Hermes wire (`/api/v1/*`, `CONTRACT.md` contract_version 1) stays
 supported on the server during the v0.7.0 rollout. Its **envelope schema is reused

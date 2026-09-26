@@ -52,7 +52,7 @@ The agent identifies its host and installs the right package. The flow is the sa
 hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable
 ```
 
-Then follow the printed steps: the agent shows a one-time approval link and code, you approve in the browser, and the agent confirms **Connected to Substrate as <your account>.**
+Then follow the printed steps: the agent shows a one-time approval link and code, you approve in the browser, and the agent confirms **Connected to Substrate as you@example.com.** (your account)
 
 If Cowork needs manual installation, use **Cowork tab → Customize → Plugins → Personal plugins → + → Add marketplace → Add from a repository (GitHub URL)**, then browse and install the package. Client-required permission dialogs still need the user. Follow the single [installation and recovery guide](docs/installation.md).
 

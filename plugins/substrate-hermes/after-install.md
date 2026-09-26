@@ -10,7 +10,7 @@ Connect it now (one browser approval, no API key):
 
 2. The user opens the link, signs in, checks the code, and chooses
    **Approve connection**.
-3. Wait for approval. It prints **Connected to Substrate as <account>.**
+3. Wait for approval. It prints **Connected to Substrate as you@example.com.** (your account)
 
    ```sh
    python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" poll

@@ -254,7 +254,7 @@ def _cli_hint() -> str:
 def _login_notice(status: dict[str, Any] | None = None) -> str:
     """Missing-credential instruction: show the link and code, never ask for a key."""
     if isinstance(status, dict) and status.get("status") == "authorization_pending":
-        minutes = max(1, int(status.get("expires_in") or 0) // 60)
+        minutes = max(1, (int(status.get("expires_in") or 0) + 59) // 60)
         lines = [
             "<substrate-connect>",
             "Substrate memory is installed but not connected yet. In your reply, show the "
@@ -953,7 +953,7 @@ def _note_auth_failure(rejected: str = "") -> None:
 
 
 def _shape_search(value: dict[str, Any]) -> dict[str, Any]:
-    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or not isinstance(value.get("results"), list):
+    if not contract.memory_tool_version_ok(value) or not isinstance(value.get("results"), list):
         raise contract.ContractError("invalid_response")
     results: list[dict[str, Any]] = []
     for item in value["results"][:20]:
@@ -995,7 +995,7 @@ def memory_search(args: dict[str, Any], **kwargs: Any) -> str:
 
 
 def _shape_expand(value: dict[str, Any], expected: str) -> dict[str, Any]:
-    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or value.get("handle") != expected:
+    if not contract.memory_tool_version_ok(value) or value.get("handle") != expected:
         raise contract.ContractError("invalid_response")
     if not isinstance(value.get("kind"), str):
         raise contract.ContractError("invalid_response")
@@ -1035,7 +1035,7 @@ def _bounded_excerpt(value: Any) -> Any:
 
 
 def _shape_evidence(value: dict[str, Any]) -> dict[str, Any]:
-    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or not isinstance(value.get("excerpts"), list):
+    if not contract.memory_tool_version_ok(value) or not isinstance(value.get("excerpts"), list):
         raise contract.ContractError("invalid_response")
     result: dict[str, Any] = {
         "contract_version": contract.MCP_CONTRACT_VERSION,
@@ -1101,8 +1101,8 @@ def _mcp_handle(structured: Any, tool: str) -> str:
     """
     if not isinstance(structured, dict):
         raise contract.ContractError("invalid_response", f"{tool}: expected object")
-    if structured.get("contract_version") != contract.MCP_CONTRACT_VERSION:
-        raise contract.ContractError("invalid_response", f"{tool}: contract_version must be 2")
+    if not contract.memory_tool_version_ok(structured):
+        raise contract.ContractError("invalid_response", f"{tool}: unsupported contract_version")
     handle = structured.get("handle")
     if not isinstance(handle, str) or _LEDGER_HANDLE_RE.fullmatch(handle) is None:
         raise contract.ContractError("invalid_response", f"{tool}: missing handle")

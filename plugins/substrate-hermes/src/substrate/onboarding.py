@@ -303,7 +303,7 @@ def token_is_valid(origin: str, token: str) -> bool:
         return False
     return (
         isinstance(structured, dict)
-        and structured.get("contract_version") == contract.MCP_CONTRACT_VERSION
+        and contract.memory_tool_version_ok(structured)
         and isinstance(structured.get("results"), list)
     )
 
@@ -418,7 +418,7 @@ class OnboardingManager:
                 ),
                 "message": (
                     f"Open {link} in a browser, sign in, check that the code is {code}, "
-                    f"and choose Approve connection (valid for {max(1, expires_in // 60)} "
+                    f"and choose Approve connection (valid for {max(1, (expires_in + 59) // 60)} "
                     "minutes). The plugin finishes by itself after approval."
                 ),
             }
@@ -845,7 +845,7 @@ def _print_payload(payload: dict[str, Any], as_json: bool) -> None:
             "Substrate memory needs one-time browser approval.\n"
             f"Link: {payload.get('verification_uri_complete')}\n"
             f"Code: {payload.get('user_code')} "
-            f"(valid for {max(1, int(payload.get('expires_in') or 0) // 60)} minutes).\n"
+            f"(valid for {max(1, (int(payload.get('expires_in') or 0) + 59) // 60)} minutes).\n"
             "Open the link, sign in, check the code, and choose Approve connection. "
             "Then wait with `poll` (or check with `status`). "
             "Never paste an API key into chat."

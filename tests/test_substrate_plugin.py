@@ -583,7 +583,7 @@ def test_memory_forget_says_invalidation_not_removal():
 @pytest.mark.parametrize(
     "structured,expected",
     [
-        ({"contract_version": 1, "handle": "m:44a1b02e"}, "invalid_response"),
+        ({"contract_version": 3, "handle": "m:44a1b02e"}, "invalid_response"),  # 1 and 2 are valid
         ({"contract_version": 2, "handle": "p:44a1b02e"}, "invalid_response"),
         ({"contract_version": 2}, "invalid_response"),
         ({"contract_version": 2, "handle": "m:xyz"}, "invalid_response"),
