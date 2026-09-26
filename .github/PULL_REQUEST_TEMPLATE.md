@@ -5,7 +5,7 @@
 ## Evidence
 
 - [ ] Tests added or updated
-- [ ] `uv run --frozen --extra dev python -m pytest -q`
+- [ ] `.venv/bin/python -m pytest -q`
 - [ ] Publication scanner passed
 - [ ] Deterministic release build checked when packaging changed
 - [ ] Privacy, rollback, and compatibility effects documented

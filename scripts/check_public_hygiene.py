@@ -9,6 +9,7 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 from pathlib import Path
 
@@ -64,7 +65,7 @@ SKIP_SUFFIXES = (".pyc", ".pyo")
 
 
 def iter_files(root: Path):
-    for directory, dirnames, filenames in __import__("os").walk(root):
+    for directory, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(name for name in dirnames if name not in SKIP_DIRS)
         for name in sorted(filenames):
             if name.endswith(SKIP_SUFFIXES):

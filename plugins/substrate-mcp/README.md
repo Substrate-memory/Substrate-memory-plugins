@@ -60,7 +60,7 @@ If the user says no, do not ask again. If yes: list the sessions this agent can 
 
 The API-key based Claude Code, Codex, and Cowork plugins shipped in August 2026 are deprecated. This includes `substrate_capture`, paths such as `~/.substrate/*/spool` (including `~/.substrate/claude_code_memory/spool`), and setup using `SUBSTRATE_API_URL` or `SUBSTRATE_API_KEY`.
 
-Uninstall them. Do not set `SUBSTRATE_API_KEY` by hand; the current product does not issue API keys to users. Their local spools are not migrated; pending events do not become Substrate memory. Install the matching v0.7.0 package and use browser authorization instead.
+Uninstall them. Do not set `SUBSTRATE_API_KEY` by hand; the current product does not issue API keys to users. Their local spools are not migrated; pending events do not become Substrate memory. Install the matching v0.8.0 package and use browser authorization instead.
 
 ## Contents and guarantees
 

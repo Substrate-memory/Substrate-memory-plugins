@@ -59,7 +59,7 @@ def _load_sync():
 def test_manifest_shape() -> None:
     manifest = json.loads((PLUG / ".claude-plugin" / "plugin.json").read_text())
     assert manifest["name"] == "substrate-claude"
-    assert manifest["version"] == "0.7.0"
+    assert manifest["version"] == "0.8.0"
     assert manifest["author"]["name"] == "Sightline Technologies Inc"
     assert manifest["description"].strip()
     assert manifest["homepage"].startswith("https://")

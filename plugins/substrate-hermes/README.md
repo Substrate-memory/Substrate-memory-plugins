@@ -18,48 +18,64 @@ What you get:
 
 ## Install
 
-Install this directory, not the repository root:
+One command, from the repository URL (no scanner override needed):
 
 ```sh
-substrate_ref="$(git ls-remote https://github.com/Substrate-memory/Substrate-memory-plugins.git refs/tags/v0.7.0 | awk '{print $1}')"
-printf '%s\n' "$substrate_ref" | grep -Eq '^[0-9a-f]{40}$'
-hermes plugins install \
-  Substrate-memory/Substrate-memory-plugins/plugins/substrate-hermes \
-  --ref "$substrate_ref" --no-enable
+hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable
 ```
 
-The install flow is: **Install → Sign in → Review → Approve connection
-→ Connected to Substrate.** Connect the active profile with the bundled
-login CLI (standard library only, no `PYTHONPATH` needed):
+The repository root is a Hermes plugin that loads this directory.
+Installing only this directory also works:
+`hermes plugins install Substrate-memory/Substrate-memory-plugins/plugins/substrate-hermes --enable`.
+To pin a release, add `--ref <40-character commit SHA of the v0.8.0 tag>`.
+
+## Connect (one browser approval)
+
+The flow is: **Install → Sign in → Review → Approve connection →
+Connected to Substrate.**
 
 ```sh
-python <plugin-dir>/onboard.py start --json
+python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" start
+python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" poll
 ```
 
-When a `verification_uri_complete` link appears (from the login CLI, from
-`memory_search`, or on the first turn), open that exact link in a browser,
-sign in, and approve the connection. The agent must never approve it for
-you or ask for a pasted key. Then wait for approval:
+`start` prints the approval link and a code. Open the link, sign in, check
+the code, and choose **Approve connection**. `poll` waits and ends with
+**Connected to Substrate as you@example.com.** (your account) (add `--json` for
+machine-readable output). The agent must never approve for you or ask for a
+pasted key.
 
-```sh
-python <plugin-dir>/onboard.py poll --json
-python <plugin-dir>/onboard.py status --json
-```
+Once the plugin is loaded (after `hermes gateway restart`), you do not need
+the CLI: when the profile is not connected, the agent shows the link and
+code in chat on your next message, the plugin finishes by itself after you
+approve, and the next turn says **Connected to Substrate as you@example.com.** (your account)
+Every failure comes with a plain message and a next step.
 
 The plugin stores the tenant-scoped key privately in the active profile
 only (`<profile>/.env` plus `<profile>/substrate/credentials/access-token`,
-both owner-only). If `memory_search` reports `authorization_required`, run
-the commands above and retry. **Connected to Substrate.** is confirmed by
-an authenticated `memory_search` call, even with an empty result.
+both owner-only). **Connected to Substrate.** is confirmed by an
+authenticated `memory_search` call, even with an empty result.
+
+Use the default address `https://app.trysubstrate.co`. If the plugin
+reaches Substrate through another address (an old `SUBSTRATE_API_URL`, a
+proxy or tailnet name), sign-in still works and the plugin tells you which
+setting to remove. Plain `http` is only accepted for a server on the same
+machine.
 
 TLS verification stays enabled with the host trust store. Never disable
 TLS verification, install a private certificate, or inspect another Hermes
 profile.
 
-After setup succeeds, disable `substrate_wiki` (if an old provider is
-installed), enable `substrate`, restart the gateway, and verify
-`memory_search` in a new turn. Do not change `memory.provider` before a
-memory call succeeds.
+If an old `substrate_wiki` provider is installed, see `after-install.md`
+for the cutover after the first successful memory call.
+
+## Supported Hermes versions
+
+Tested on Hermes 0.21.0-0.21.x (0.21.4 verified end to end). The plugin
+installs and runs on any version. Outside the tested range it tells you
+once: *Tested on Hermes 0.21.0-0.21.x; you are on X. It should work; if
+something does not, tell us.* It never upgrades Hermes. See
+[COMPATIBILITY.md](../../COMPATIBILITY.md#version-policy).
 
 ## Import past conversations
 
@@ -116,6 +132,5 @@ All server calls use the MCP memory contract v2 over `POST {server}/mcp`
 (see [`CONTRACT.md`](CONTRACT.md) section 13 and
 [`docs/mcp-contract.md`](../../docs/mcp-contract.md)). Wire schemas and
 limits are defined in [`CONTRACT.md`](CONTRACT.md). Runtime code uses only
-the Python standard library. Supported host: Hermes 0.21.0 exactly (the
-tested version); do not install on an unverified host version and do not
-upgrade Hermes automatically.
+the Python standard library. Host versions: see *Supported Hermes versions*
+above (installs on any version; never upgrades Hermes automatically).

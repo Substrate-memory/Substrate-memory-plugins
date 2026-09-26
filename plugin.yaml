@@ -1,3 +1,7 @@
+# Hermes entry for installing this whole repository by its URL:
+#   hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins
+# Loads plugins/substrate-hermes (see __init__.py). Keep in sync with
+# plugins/substrate-hermes/plugin.yaml (tests/test_packaging.py checks it).
 name: substrate
 version: 0.8.0
 description: Substrate retrieval, durable completed-turn capture, session boundaries, and memory write tools for Hermes

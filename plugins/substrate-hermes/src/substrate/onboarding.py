@@ -35,16 +35,16 @@ from typing import Any
 try:
     from . import contract
     from . import credentials
-    from .client import ClientError, SubstrateClient
+    from .client import PLUGIN_VERSION, ClientError, SubstrateClient
 except ImportError:  # standalone script layout (src/ bootstrapped on sys.path)
     try:
         from substrate import contract  # type: ignore[no-redef]
         from substrate import credentials  # type: ignore[no-redef]
-        from substrate.client import ClientError, SubstrateClient  # type: ignore[no-redef]
+        from substrate.client import PLUGIN_VERSION, ClientError, SubstrateClient  # type: ignore[no-redef]
     except ImportError:  # flat script layout (public repo shape)
         import contract  # type: ignore[no-redef]
         import credentials  # type: ignore[no-redef]
-        from client import ClientError, SubstrateClient  # type: ignore[no-redef]
+        from client import PLUGIN_VERSION, ClientError, SubstrateClient  # type: ignore[no-redef]
 
 CLIENT_ID = "substrate-hermes"
 SCOPES = "capture retrieve"
@@ -127,7 +127,7 @@ def request_json(
 ) -> tuple[int, dict[str, Any]]:
     headers = {
         "Accept": "application/json",
-        "User-Agent": "substrate-hermes-plugin/0.4.0",
+        "User-Agent": f"substrate-hermes-plugin/{PLUGIN_VERSION}",
     }
     data = None
     if form is not None:
@@ -171,34 +171,109 @@ def request_json(
     return status, value
 
 
+def _is_loopback_host(host: str) -> bool:
+    return (host or "").lower() in {"127.0.0.1", "localhost", "::1"}
+
+
 def safe_verification_url(origin: str, value: Any, user_code: str) -> str:
-    """Accept only the server's device URL and rebuild it on the API origin."""
+    """Accept the server's approval link and rebuild it from its parts.
+
+    The server builds the link on its public origin, which can differ from
+    the address this plugin uses to reach it (a tailnet name, a proxy, or a
+    loopback port on the same host). Rejecting that link (v0.7.0) failed the
+    whole login as ``invalid_response``. The link must be https (http only
+    for a loopback host), point at ``/oauth/device``, and carry this grant's
+    user code; nothing else from the server is echoed.
+    """
     if not isinstance(value, str) or len(value) > 4096:
         raise OnboardingError("invalid_response")
     try:
         parsed = urllib.parse.urlsplit(value)
-        expected = urllib.parse.urlsplit(origin)
+        query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+        host = parsed.hostname or ""
     except ValueError as exc:
         raise OnboardingError("invalid_response") from exc
     if (
-        parsed.scheme != expected.scheme
-        or parsed.netloc != expected.netloc
+        not host
         or parsed.path != DEVICE_PATH
+        or query.get("user_code") != user_code
+        or not (parsed.scheme == "https" or (parsed.scheme == "http" and _is_loopback_host(host)))
     ):
         raise OnboardingError("invalid_response")
-    try:
-        query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
-    except ValueError as exc:
-        raise OnboardingError("invalid_response") from exc
-    if query.get("user_code") != user_code:
-        raise OnboardingError("invalid_response")
     return urllib.parse.urlunsplit((
-        expected.scheme,
-        expected.netloc,
+        parsed.scheme,
+        parsed.netloc,
         DEVICE_PATH,
         urllib.parse.urlencode({"user_code": user_code}),
         "",
     ))
+
+
+def link_origin(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+# One plain sentence per failure: what happened and what to do next.
+_EXPLAIN = {
+    "invalid_config": (
+        "The Substrate address is not usable. Use https://app.trysubstrate.co: remove "
+        "SUBSTRATE_API_URL (or set it to that address) and try again. Plain http is "
+        "only allowed for a server on this machine."
+    ),
+    "transport_error": (
+        "Could not reach Substrate. Check the internet connection and try again in a minute."
+    ),
+    "timeout": "Substrate did not answer in time. Try again in a minute.",
+    "rate_limited": "Too many sign-in attempts. Wait a minute, then try again.",
+    "authorization_failed": (
+        "Substrate refused to start the sign-in. Update the plugin to the latest release "
+        "and try again; if it still fails, report it."
+    ),
+    "invalid_response": (
+        "Substrate answered in a format this plugin does not understand. Update the plugin "
+        "to the latest release and try again; if it still fails, report it."
+    ),
+    "invalid_content_type": (
+        "The Substrate address answered with a web page, not the API. Check "
+        "SUBSTRATE_API_URL (use https://app.trysubstrate.co) and try again."
+    ),
+    "response_too_large": (
+        "The Substrate address answered with unexpected data. Check SUBSTRATE_API_URL "
+        "(use https://app.trysubstrate.co) and try again."
+    ),
+    "authorization_expired": "The approval link expired before it was approved. Start the sign-in again to get a new link.",
+    "access_denied": "The connection was declined in the browser. Start the sign-in again if that was a mistake.",
+    "missing_device_credential": "The sign-in state on this machine was lost. Start the sign-in again.",
+    "authenticated_health_check_failed": (
+        "Approval worked, but the first memory call failed. Try again in a minute; if it "
+        "keeps failing, report it."
+    ),
+    "reconnect_required": "Substrate no longer accepts the saved key (it was revoked or expired). Start the sign-in again.",
+    "missing_credential": "The saved key is missing on this machine. Start the sign-in again.",
+    "credential_store_failed": "Could not save the key in this profile (check disk space and permissions), then start the sign-in again.",
+    "refusing_symlink": "The profile's substrate folder is a symlink, so the key was not saved. Remove the symlink and start the sign-in again.",
+    "internal_error": "Something went wrong in the plugin. Start the sign-in again; if it keeps failing, report it.",
+}
+
+
+ISSUES_URL = "https://github.com/Substrate-memory/Substrate-memory-plugins/issues"
+
+
+def explain(error_class: str) -> str:
+    text = _EXPLAIN.get(error_class, _EXPLAIN["internal_error"])
+    return text.replace("report it", f"report it at {ISSUES_URL}")
+
+
+def origin_notice(api_origin: str, canonical: str) -> str:
+    """Non-blocking advice when the plugin reaches Substrate by another address."""
+    if not canonical or canonical == api_origin:
+        return ""
+    return (
+        f"This plugin reaches Substrate at {api_origin}, but Substrate's own address is "
+        f"{canonical}. Sign-in still works. To avoid problems later, remove the old "
+        f"SUBSTRATE_API_URL setting (or set it to {canonical})."
+    )
 
 
 def token_is_valid(origin: str, token: str) -> bool:
@@ -228,7 +303,7 @@ def token_is_valid(origin: str, token: str) -> bool:
         return False
     return (
         isinstance(structured, dict)
-        and structured.get("contract_version") == contract.MCP_CONTRACT_VERSION
+        and contract.memory_tool_version_ok(structured)
         and isinstance(structured.get("results"), list)
     )
 
@@ -326,26 +401,49 @@ class OnboardingManager:
         self._thread: threading.Thread | None = None
 
     def describe(self, state: dict[str, Any]) -> dict[str, Any]:
-        """Content-free summary: links and codes only, never secrets."""
+        """Content-free summary: links, codes and plain messages, never secrets."""
         phase = state.get("phase")
         now = time.time()
         if phase == "pending":
-            return {
+            link = _clip(str(state.get("verification_uri_complete", "")), 512)
+            code = _clip(str(state.get("user_code", "")), 16)
+            expires_in = max(0, int(float(state.get("expires_at", now)) - now))
+            described = {
                 "status": "authorization_pending",
-                "verification_uri_complete": _clip(
-                    str(state.get("verification_uri_complete", "")), 512
-                ),
-                "user_code": _clip(str(state.get("user_code", "")), 16),
-                "expires_in": max(0, int(float(state.get("expires_at", now)) - now)),
+                "verification_uri_complete": link,
+                "user_code": code,
+                "expires_in": expires_in,
                 "agent_name": _clip(
                     str(state.get("agent_name", "")), MAX_AGENT_NAME_BYTES
                 ),
+                "message": (
+                    f"Open {link} in a browser, sign in, check that the code is {code}, "
+                    f"and choose Approve connection (valid for {max(1, (expires_in + 59) // 60)} "
+                    "minutes). The plugin finishes by itself after approval."
+                ),
             }
+            notice = origin_notice(self.origin, str(state.get("canonical_origin", "")))
+            if notice:
+                described["notice"] = notice
+            return described
         if phase in {"failed", "declined", "invalid"}:
+            error_class = _clip(str(state.get("error_class", "")), 48) or (
+                "internal_error" if phase != "declined" else "access_denied")
+            if phase == "invalid":
+                error_class = "missing_device_credential"
             return {
                 "status": str(phase),
-                "error_class": _clip(str(state.get("error_class", "")), 48),
+                "error_class": error_class,
+                "message": explain(error_class),
             }
+        if phase == "connected":
+            account = _clip(str(state.get("account", "")), 256)
+            agent = _clip(str(state.get("agent_name", "")), MAX_AGENT_NAME_BYTES)
+            message = f"Connected to Substrate as {account}." if account else "Connected to Substrate."
+            if agent:
+                message += f" This agent appears as \"{agent}\" in Substrate."
+            return {"status": "connected", "account": account, "agent_name": agent,
+                    "message": message}
         return {"status": _clip(str(phase), 24)}
 
     def _fail(self, category: str) -> dict[str, Any]:
@@ -365,6 +463,16 @@ class OnboardingManager:
                 state.get("phase") == "pending"
                 and float(state.get("expires_at", 0)) > now
             ):
+                thread = self._thread
+                if thread is None or not thread.is_alive():
+                    # New process (restart, one-shot CLI): the user may have
+                    # approved meanwhile, so check once before showing the link.
+                    self._poll_once()
+                    state = _load_state(self.home)
+                    if state.get("phase") == "connected":
+                        return None
+                    if state.get("phase") != "pending":
+                        return self.describe(state)
                 self._start_thread()
                 return self.describe(state)
             if not force and (
@@ -424,6 +532,7 @@ class OnboardingManager:
         now = time.time()
         state = {
             "phase": "pending",
+            "canonical_origin": link_origin(complete),
             "user_code": user_code,
             "agent_name": _clip(
                 str(value.get("agent_name") or resolve_agent_name()),
@@ -611,7 +720,13 @@ class OnboardingManager:
         _clear_device_credential(self.home)
         try:
             _save_state(
-                self.home, {**state, "phase": "connected", "connected_at": time.time()}
+                self.home,
+                {**state, "phase": "connected", "connected_at": time.time(),
+                 "account": _clip(" ".join(str(value.get("account") or "").split()), 256),
+                 "agent_name": _clip(" ".join(str(
+                     value.get("agent_name") or state.get("agent_name") or "").split()),
+                     MAX_AGENT_NAME_BYTES),
+                 "announced": False},
             )
         except OnboardingError:
             pass
@@ -629,14 +744,34 @@ def ensure_started(*, force: bool = False) -> dict[str, Any] | None:
         home = active_home()
         origin = check_origin(resolve_origin())
     except (OnboardingError, OSError, ValueError):
-        return {"status": "failed", "error_class": "invalid_config"}
+        return _failed("invalid_config")
     with _manager_lock:
         if _manager is None or _manager.home != home or _manager.origin != origin:
             _manager = OnboardingManager(home, origin)
     try:
         return _manager.ensure(force=force)
     except Exception:
-        return {"status": "failed", "error_class": "internal_error"}
+        return _failed("internal_error")
+
+
+def take_connected_announcement() -> str:
+    """Return the one-time "Connected to Substrate as ..." line after a login.
+
+    Only a login finished by this plugin version sets ``announced: False``;
+    older states never announce. The flag is cleared before returning.
+    """
+    try:
+        home = active_home()
+    except (OSError, ValueError):
+        return ""
+    state = _load_state(home)
+    if state.get("phase") != "connected" or state.get("announced") is not False:
+        return ""
+    try:
+        _save_state(home, {**state, "announced": True})
+    except OnboardingError:
+        return ""
+    return str(OnboardingManager(home, "").describe(state).get("message", ""))
 
 
 def note_auth_failure(rejected: str = "") -> None:
@@ -696,6 +831,20 @@ def note_auth_failure(rejected: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 
+def _failed(error_class: str) -> dict[str, Any]:
+    return {"status": "failed", "error_class": error_class, "message": explain(error_class)}
+
+
+def _ready(credential: str, state: dict[str, Any] | None = None) -> dict[str, Any]:
+    account = _clip(str((state or {}).get("account", "")), 256)
+    return {
+        "status": "ready",
+        "credential": credential,
+        "account": account,
+        "message": f"Connected to Substrate as {account}." if account else "Connected to Substrate.",
+    }
+
+
 def _print_payload(payload: dict[str, Any], as_json: bool) -> None:
     if as_json:
         print(json.dumps(payload, sort_keys=True), flush=True)
@@ -705,23 +854,17 @@ def _print_payload(payload: dict[str, Any], as_json: bool) -> None:
         print(
             "Substrate memory needs one-time browser approval.\n"
             f"Link: {payload.get('verification_uri_complete')}\n"
-            f"One-time code: {payload.get('user_code')} "
-            f"(valid for {payload.get('expires_in')} seconds).\n"
-            "Open the link, sign in by email, and approve the connection. "
-            "Then re-run with `status` (or wait with `poll`). "
-            "Never paste an API key into chat.",
-            flush=True,
-        )
-    elif status == "ready":
-        print(
-            f"Substrate memory is connected ({payload.get('credential', 'ok')}).",
+            f"Code: {payload.get('user_code')} "
+            f"(valid for {max(1, (int(payload.get('expires_in') or 0) + 59) // 60)} minutes).\n"
+            "Open the link, sign in, check the code, and choose Approve connection. "
+            "Then wait with `poll` (or check with `status`). "
+            "Never paste an API key into chat."
+            + (f"\nNote: {payload['notice']}" if payload.get("notice") else ""),
             flush=True,
         )
     else:
         print(
-            f"Substrate onboarding status: {status}"
-            + (f" ({payload.get('error_class')})" if payload.get("error_class") else "")
-            + ".",
+            str(payload.get("message") or f"Substrate sign-in status: {status}."),
             flush=True,
         )
 
@@ -739,9 +882,9 @@ def _cli_status(home: Path, as_json: bool) -> int:
     if described.get("status") == "connected":
         existing = os.environ.get(credentials.ENV_KEY) or credentials.stored_api_key(home)
         if existing:
-            _print_payload({"status": "ready", "credential": "stored"}, as_json)
+            _print_payload(_ready("stored", state), as_json)
             return 0
-        _print_payload({"status": "failed", "error_class": "missing_credential"}, as_json)
+        _print_payload(_failed("missing_credential"), as_json)
         return 1
     _print_payload(described, as_json)
     return 0 if described.get("status") == "authorization_pending" else 1
@@ -754,12 +897,12 @@ def _cli_start(home: Path, origin: str, as_json: bool) -> int:
             credentials.save_origin(home, origin)
         except credentials.CredentialError:
             pass
-        _print_payload({"status": "ready", "credential": "existing"}, as_json)
+        _print_payload(_ready("existing", _load_state(home)), as_json)
         return 0
     manager = OnboardingManager(home, origin)
     status = manager.ensure(force=True)
     if status is None:
-        _print_payload({"status": "ready", "credential": "existing"}, as_json)
+        _print_payload(_ready("existing", _load_state(home)), as_json)
         return 0
     _print_payload(status, as_json)
     return 0 if status.get("status") == "authorization_pending" else 1
@@ -769,7 +912,7 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
     manager = OnboardingManager(home, origin)
     status = manager.ensure()
     if status is None:
-        _print_payload({"status": "ready", "credential": "existing"}, as_json)
+        _print_payload(_ready("existing", _load_state(home)), as_json)
         return 0
     if status.get("status") != "authorization_pending":
         _print_payload(status, as_json)
@@ -782,9 +925,7 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
         state = _load_state(home)
         phase = state.get("phase")
         if phase == "connected":
-            _print_payload(
-                {"status": "ready", "credential": "device_authorization"}, as_json
-            )
+            _print_payload(_ready("device_authorization", state), as_json)
             return 0
         if phase in {"failed", "declined", "invalid"}:
             _print_payload(manager.describe(state), as_json)
@@ -833,8 +974,7 @@ def main(argv: list[str] | None = None) -> int:
         home = _resolve_cli_home(args.hermes_home)
         origin = check_origin(args.origin or resolve_origin())
     except (OnboardingError, OSError, ValueError):
-        _print_payload({"status": "failed", "error_class": "invalid_config"},
-                       bool(args.as_json))
+        _print_payload(_failed("invalid_config"), bool(args.as_json))
         return 1
     command = args.command or "status"
     try:
@@ -844,8 +984,7 @@ def main(argv: list[str] | None = None) -> int:
             return _cli_poll(home, origin, float(args.timeout), bool(args.as_json))
         return _cli_status(home, bool(args.as_json))
     except (OnboardingError, credentials.CredentialError):
-        _print_payload({"status": "failed", "error_class": "internal_error"},
-                       bool(args.as_json))
+        _print_payload(_failed("internal_error"), bool(args.as_json))
         return 1
 
 

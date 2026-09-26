@@ -830,6 +830,18 @@ MCP_TOOLS = frozenset({
     "memory_import",
 })
 MCP_TOOL_LIST = sorted(MCP_TOOLS)
+# The server offers memory_shares only when sharing is wired; this plugin
+# never calls it, so its absence must not fail the connection check.
+MCP_REQUIRED_TOOLS = MCP_TOOLS - {"memory_shares"}
+# The five memory tools this plugin calls answer with contract_version 1 on
+# the current server (server Docs/mcp-contract.md 4.1-4.2); the hook and
+# import tools answer with 2. Accept both for the memory tools.
+MEMORY_TOOL_CONTRACT_VERSIONS = (1, 2)
+
+
+def memory_tool_version_ok(value: Any) -> bool:
+    version = value.get("contract_version") if isinstance(value, dict) else None
+    return not isinstance(version, bool) and version in MEMORY_TOOL_CONTRACT_VERSIONS
 
 MCP_ERROR_CATEGORIES = frozenset({
     "unauthorized",
@@ -905,8 +917,8 @@ def validate_mcp_tools(result: Any) -> list[str]:
     for entry in result["tools"]:
         if isinstance(entry, dict) and isinstance(entry.get("name"), str):
             names.append(entry["name"])
-    if not MCP_TOOLS.issubset(names):
-        missing = sorted(MCP_TOOLS - set(names))
+    if not MCP_REQUIRED_TOOLS.issubset(names):
+        missing = sorted(MCP_REQUIRED_TOOLS - set(names))
         raise ContractError(_R, f"tools/list: missing contract tools: {missing}")
     return names
 
@@ -986,6 +998,7 @@ __all__ = [
     "IMPORT_BATCH_MAX_BYTES", "IMPORT_BATCH_MAX_ITEMS", "IMPORT_OK_ACTIONS",
     "JOB_STATUSES", "KINDS", "LIMITS", "MCP_CONTRACT_VERSION", "MCP_ERROR_CATEGORIES",
     "MCP_INSTRUCTIONS_PREFIX", "MCP_SERVER_NAME", "MCP_TOOLS", "MCP_TOOL_LIST",
+    "MCP_REQUIRED_TOOLS", "MEMORY_TOOL_CONTRACT_VERSIONS", "memory_tool_version_ok",
     "MEMORY_WRITE_SOURCES", "MESSAGE_ROLES", "NAMESPACE",
     "PLUGIN_POSTABLE_KINDS", "RESPONSE_FIELDS", "SCHEMA_VERSION", "SPEAKER_ROLES", "UUID_RE",
     "ack_ok", "canonical_bytes", "canonical_json", "deterministic_event_id", "fixture_path",

@@ -20,6 +20,7 @@ import re
 import threading
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Mapping
 
 from . import contract
@@ -42,6 +43,13 @@ STATIC_MEMORY_PROMPT = (
 )
 
 TOOLSET = "substrate"
+# Absolute path of the bundled login CLI, so instructions never say "<plugin-dir>".
+ONBOARD_CLI = str(Path(__file__).resolve().parents[2] / "onboard.py")
+ISSUES_URL = "https://github.com/Substrate-memory/Substrate-memory-plugins/issues"
+# Soft version policy (COMPATIBILITY.md): install and run on any host version;
+# outside the tested range, tell the user once instead of refusing.
+TESTED_HERMES_MINOR = "0.21"
+_version_notice_shown = False
 _TOOL_RESULT_BYTES = contract.LIMITS["max_tool_result_bytes"]
 _TEXT_SECRET_RE = re.compile(
     r"(?i)(\b(?:authorization|api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*)"
@@ -145,40 +153,141 @@ def pre_llm_call(
     MCP hosts is intentionally ignored here: the Hermes write-ahead spool
     guarantees delivery of every captured turn, so there are no missing turns
     to sync (see CONTRACT.md section 13).
+
+    Without a key, the turn starts (or resumes) the browser sign-in itself and
+    injects the approval link and code for the agent to show in chat. The
+    first turn after approval carries a one-time "connected as" note.
     """
+    notes = [n for n in (_host_version_notice_once(),) if n]
     try:
         client = SubstrateClient.from_env()
         if not client.api_key:
-            return {"context": _login_notice()}
+            status = _start_login()
+            if status is not None:
+                return _with_notes([_login_notice(status)], notes)
+            client = SubstrateClient.from_env()  # approved just now
+            if not client.api_key:
+                return _with_notes([_login_notice(None)], notes)
+        announcement = _connected_announcement()
+        if announcement:
+            notes.append(announcement)
         args = _turn_context_args(session_id, user_message, **kwargs)
         if args is None:
-            return None
+            return _with_notes([], notes)
         structured, _text = client.call_tool("memory_turn_context", args, timeout=0.5)
         checked = contract.validate_mcp_turn_context(structured)
         # Bind the response to this request, rather than trusting valid data
         # for another session.
         if checked["session_id"] != args["session_id"]:
-            return None
+            return _with_notes([], notes)
         block = checked["block"]
-        return {"context": block} if block else None
+        return _with_notes([block] if block else [], notes)
     except ClientError as exc:
         if exc.category == "invalid_config":
-            return {"context": _login_notice()}
-        return None
+            return _with_notes([_login_notice(_start_login())], notes)
+        return _with_notes([], notes)
+    except Exception:
+        return _with_notes([], notes)
+
+
+def _with_notes(parts: list[str], notes: list[str]) -> dict[str, str] | None:
+    text = "\n".join(part for part in [*notes, *parts] if part)
+    return {"context": text} if text else None
+
+
+def running_hermes_version() -> str:
+    try:
+        from hermes_cli import __version__ as version  # type: ignore[import-not-found]
+    except Exception:
+        return ""
+    return str(version or "")
+
+
+def host_version_notice(version: str | None = None) -> str:
+    """Friendly note when the host is outside the tested range; never blocks."""
+    version = running_hermes_version() if version is None else version
+    if not version or version == TESTED_HERMES_MINOR or version.startswith(TESTED_HERMES_MINOR + "."):
+        return ""
+    return (
+        f"Substrate memory is tested on Hermes {TESTED_HERMES_MINOR}.0-{TESTED_HERMES_MINOR}.x; "
+        f"this host runs Hermes {version}. It should work. If something does not, "
+        f"tell us at {ISSUES_URL}."
+    )
+
+
+def _host_version_notice_once() -> str:
+    global _version_notice_shown
+    if _version_notice_shown:
+        return ""
+    _version_notice_shown = True
+    notice = host_version_notice()
+    return f"<substrate-notice>\nTell the user once: {notice}\n</substrate-notice>" if notice else ""
+
+
+def _start_login() -> dict[str, Any] | None:
+    try:
+        from . import onboarding as _onboarding
+
+        return _onboarding.ensure_started()
     except Exception:
         return None
 
 
-def _login_notice() -> str:
-    """Missing-credential instruction: run the login CLI, never paste a key."""
+def _connected_announcement() -> str:
+    try:
+        from . import onboarding as _onboarding
+
+        message = _onboarding.take_connected_announcement()
+    except Exception:
+        return ""
+    if not message:
+        return ""
+    return (
+        "<substrate-connect>\n"
+        f"Substrate memory was just connected. Tell the user once, in these words: {message}\n"
+        "</substrate-connect>"
+    )
+
+
+def _cli_hint() -> str:
+    return (
+        f"To connect by hand, run: python {ONBOARD_CLI} start "
+        f"(then python {ONBOARD_CLI} poll to wait for approval)."
+    )
+
+
+def _login_notice(status: dict[str, Any] | None = None) -> str:
+    """Missing-credential instruction: show the link and code, never ask for a key."""
+    if isinstance(status, dict) and status.get("status") == "authorization_pending":
+        minutes = max(1, (int(status.get("expires_in") or 0) + 59) // 60)
+        lines = [
+            "<substrate-connect>",
+            "Substrate memory is installed but not connected yet. In your reply, show the "
+            "user this approval link and code exactly as written, and ask them to open the "
+            "link, sign in, check the code, and choose Approve connection:",
+            f"Link: {status.get('verification_uri_complete', '')}",
+            f"Code: {status.get('user_code', '')} (valid for {minutes} minutes)",
+            "The plugin finishes by itself after approval; a later turn confirms the "
+            "account. Never ask for or accept an API key.",
+        ]
+        if status.get("notice"):
+            lines.append(f"Also tell the user: {status['notice']}")
+        lines.append("</substrate-connect>")
+        return "\n".join(lines)
+    if isinstance(status, dict) and status.get("message"):
+        return (
+            "<substrate-connect>\n"
+            "Substrate memory is installed but could not start the sign-in. Tell the user, "
+            f"in plain words: {status['message']} (code: {status.get('error_class', '')}). "
+            "The plugin retries automatically on a later turn. "
+            f"{_cli_hint()} Never ask for or accept an API key.\n"
+            "</substrate-connect>"
+        )
     return (
         "<substrate-connect>\n"
         "Substrate memory is not connected for this profile. "
-        "To connect, run: python <plugin-dir>/onboard.py start --json "
-        "then open the printed verification link in a browser, sign in, "
-        "and approve. Check progress with: "
-        "python <plugin-dir>/onboard.py status --json. "
-        "Never paste an API key into chat.\n"
+        f"{_cli_hint()} Show the user the printed link and code; they open the link, "
+        "sign in, and choose Approve connection. Never paste an API key into chat.\n"
         "</substrate-connect>"
     )
 
@@ -189,12 +298,10 @@ def _login_required_result() -> str:
         {
             "status": "authorization_required",
             "message": (
-                "Substrate memory is not connected for this profile. Run "
-                "python <plugin-dir>/onboard.py start --json, open the printed "
-                "verification_uri_complete in a browser, sign in, and approve; "
-                "then re-run status/poll and retry this call. "
-                "The key is stored privately in this profile. "
-                "Never paste an API key into chat."
+                "Substrate memory is not connected for this profile. "
+                f"{_cli_hint()} Show the user the printed link and code, ask them to "
+                "approve it in a browser, then retry this call. The key is stored "
+                "privately in this profile. Never paste an API key into chat."
             ),
         }
     )
@@ -811,30 +918,30 @@ def _call_tool(tool_name: str, request: dict[str, Any], shape: Any) -> str:
 
 
 def _login_grant_result() -> str:
-    """Instruct CLI login; surface a pending grant link when one is active."""
-    try:
-        from . import onboarding as _onboarding
-
-        status = _onboarding.ensure_started()
-    except Exception:
-        status = None
+    """Surface the pending approval link (or a plain error) to the agent."""
+    status = _start_login()
     if isinstance(status, dict) and status.get("status") == "authorization_pending":
+        result = {
+            "status": "authorization_required",
+            "message": (
+                "Substrate memory is not connected yet. Show the user this link and code, "
+                "ask them to open the link, sign in, and choose Approve connection, then "
+                "retry this call; the plugin finishes by itself after approval. "
+                "Never paste an API key into chat."
+            ),
+            "verification_uri_complete": str(status.get("verification_uri_complete", "")),
+            "user_code": str(status.get("user_code", "")),
+            "expires_in": status.get("expires_in", 0),
+        }
+        if status.get("notice"):
+            result["notice"] = str(status["notice"])
+        return _compact(result)
+    if isinstance(status, dict) and status.get("message"):
         return _compact(
             {
                 "status": "authorization_required",
-                "message": (
-                    "Substrate memory is not connected yet. Open the link below "
-                    "in a browser, sign in by email, and approve the connection. "
-                    "You can also drive this with python <plugin-dir>/onboard.py "
-                    "start|status|poll --json. After approving, retry this call; "
-                    "authorization completes automatically. "
-                    "Never paste an API key into chat."
-                ),
-                "verification_uri_complete": str(
-                    status.get("verification_uri_complete", "")
-                ),
-                "user_code": str(status.get("user_code", "")),
-                "expires_in": status.get("expires_in", 0),
+                "error_class": str(status.get("error_class", "")),
+                "message": f"{status['message']} {_cli_hint()}",
             }
         )
     return _login_required_result()
@@ -851,7 +958,7 @@ def _note_auth_failure(rejected: str = "") -> None:
 
 
 def _shape_search(value: dict[str, Any]) -> dict[str, Any]:
-    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or not isinstance(value.get("results"), list):
+    if not contract.memory_tool_version_ok(value) or not isinstance(value.get("results"), list):
         raise contract.ContractError("invalid_response")
     results: list[dict[str, Any]] = []
     for item in value["results"][:20]:
@@ -893,7 +1000,7 @@ def memory_search(args: dict[str, Any], **kwargs: Any) -> str:
 
 
 def _shape_expand(value: dict[str, Any], expected: str) -> dict[str, Any]:
-    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or value.get("handle") != expected:
+    if not contract.memory_tool_version_ok(value) or value.get("handle") != expected:
         raise contract.ContractError("invalid_response")
     if not isinstance(value.get("kind"), str):
         raise contract.ContractError("invalid_response")
@@ -933,7 +1040,7 @@ def _bounded_excerpt(value: Any) -> Any:
 
 
 def _shape_evidence(value: dict[str, Any]) -> dict[str, Any]:
-    if value.get("contract_version") != contract.MCP_CONTRACT_VERSION or not isinstance(value.get("excerpts"), list):
+    if not contract.memory_tool_version_ok(value) or not isinstance(value.get("excerpts"), list):
         raise contract.ContractError("invalid_response")
     result: dict[str, Any] = {
         "contract_version": contract.MCP_CONTRACT_VERSION,
@@ -999,8 +1106,8 @@ def _mcp_handle(structured: Any, tool: str) -> str:
     """
     if not isinstance(structured, dict):
         raise contract.ContractError("invalid_response", f"{tool}: expected object")
-    if structured.get("contract_version") != contract.MCP_CONTRACT_VERSION:
-        raise contract.ContractError("invalid_response", f"{tool}: contract_version must be 2")
+    if not contract.memory_tool_version_ok(structured):
+        raise contract.ContractError("invalid_response", f"{tool}: unsupported contract_version")
     handle = structured.get("handle")
     if not isinstance(handle, str) or _LEDGER_HANDLE_RE.fullmatch(handle) is None:
         raise contract.ContractError("invalid_response", f"{tool}: missing handle")
