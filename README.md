@@ -46,6 +46,14 @@ The agent identifies its host and installs the right package. The flow is the sa
 | Hermes | `plugins/substrate-hermes` | [substrate-hermes README](plugins/substrate-hermes/README.md) |
 | Any other MCP-capable agent (only when no package above fits) | `plugins/substrate-mcp` (thin fallback) | [substrate-mcp README](plugins/substrate-mcp/README.md) |
 
+**Hermes in one command** (the repository root is a Hermes plugin that loads `plugins/substrate-hermes`; it passes the Hermes install scan with no override):
+
+```sh
+hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable
+```
+
+Then follow the printed steps: the agent shows a one-time approval link and code, you approve in the browser, and the agent confirms **Connected to Substrate as <your account>.**
+
 If Cowork needs manual installation, use **Cowork tab → Customize → Plugins → Personal plugins → + → Add marketplace → Add from a repository (GitHub URL)**, then browse and install the package. Client-required permission dialogs still need the user. Follow the single [installation and recovery guide](docs/installation.md).
 
 ## Security and privacy
@@ -67,7 +75,9 @@ After **Connected to Substrate.**, the agent asks once whether to import past co
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.7.0 | `plugins/substrate-hermes` (Hermes 0.21.0) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Candidate |
+| v0.8.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0-0.21.x) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Released |
+
+Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0-0.21.x; you are on X. It should work; tell us if not.* See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
 
 Known limits, stated honestly:
 
@@ -103,11 +113,11 @@ Yes. The immutable `v0.5.0` and `v0.6.0` tags remain available for rollback.
 
 ```bash
 uv sync --frozen --extra dev
-uv run --frozen --extra dev ruff check .
-uv run --frozen --extra dev python -m pytest -q
+.venv/bin/ruff check .
+.venv/bin/python -m pytest -q
 python3 scripts/check_public_hygiene.py --root .
-uv run --frozen --extra dev python scripts/build_release.py
-uv run --frozen --extra dev python scripts/build_release.py --check
+.venv/bin/python scripts/build_release.py
+.venv/bin/python scripts/build_release.py --check
 ```
 
 Releases are staged and gated; no tag or publication happens from a review branch. See [docs/releasing.md](docs/releasing.md).

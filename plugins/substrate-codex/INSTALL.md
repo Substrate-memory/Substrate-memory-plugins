@@ -35,10 +35,10 @@ value keep JSON type.
 ## Verify
 
 ```text
-cd /home/substrateops/workspace/substrate-memory-plugins
+cd Substrate-memory-plugins  # your checkout
 python3 ~/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/substrate-codex
-uv run --frozen --extra dev python -m pytest -q tests/test_substrate_codex_plugin.py
-CODEX_HOME=/tmp/sb-codex codex plugin marketplace add /home/substrateops/workspace/substrate-memory-plugins
+.venv/bin/python -m pytest -q tests/test_substrate_codex_plugin.py
+CODEX_HOME=/tmp/sb-codex codex plugin marketplace add "$PWD"
 CODEX_HOME=/tmp/sb-codex codex plugin add substrate-codex@substrate-marketplace
 CODEX_HOME=/tmp/sb-codex codex plugin list --json
 ```

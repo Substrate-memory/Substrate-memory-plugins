@@ -18,10 +18,10 @@ server or credential implementation here.
 
    ```bash
    uv sync --frozen --extra dev
-   uv run --frozen --extra dev ruff check .
-   uv run --frozen --extra dev python -m pytest -q
+   .venv/bin/ruff check .
+   .venv/bin/python -m pytest -q
    python3 scripts/check_public_hygiene.py --root .
-   uv run --frozen --extra dev python scripts/build_release.py --check
+   .venv/bin/python scripts/build_release.py --check
    ```
 
 5. Update `CHANGELOG.md` and compatibility/security docs when behavior changes.

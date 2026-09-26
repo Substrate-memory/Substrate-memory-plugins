@@ -1,6 +1,6 @@
 # Releasing
 
-Release `0.7.0` is the unified-connection release. The repository ships four deterministic archives (see `scripts/build_release.py` for the exact archive set; if the builder still lists the old two-archive layout, it must be extended to the four packages below before release):
+Release `0.8.0` fixes Hermes install and sign-in on top of the `0.7.0` unified-connection release. The repository ships four deterministic archives (see `scripts/build_release.py` for the exact archive set; if the builder still lists the old two-archive layout, it must be extended to the four packages below before release):
 
 - `substrate-hermes.zip`: the Hermes package (`plugins/substrate-hermes`) with durable write-ahead spool, session boundaries, subagent capture, and device login.
 - `substrate-claude.zip`: the Claude package (`plugins/substrate-claude`) with `memory_*` hook wiring and the sync command for Cowork and Claude Code.
@@ -22,8 +22,9 @@ An owner may prepare a GitHub draft targeting the review-branch commit and attac
 ## Deterministic local check
 
 ```sh
-uv run --frozen --extra dev ruff check .
-uv run --frozen --extra dev python -m pytest -q
+uv sync --frozen --extra dev
+.venv/bin/ruff check .
+.venv/bin/python -m pytest -q
 python3 scripts/check_public_hygiene.py --root .
 rm -rf dist && python3 scripts/build_release.py
 cp dist/substrate-hermes.zip /tmp/first-hermes.zip

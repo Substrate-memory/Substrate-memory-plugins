@@ -1,35 +1,38 @@
-# Complete Substrate setup
+# Substrate memory is installed
 
-No manual credential step is required. Connect the active profile with the
-bundled login CLI:
+Connect it now (one browser approval, no API key):
 
-```sh
-python "$profile_home/plugins/substrate/onboard.py" start --json
-```
+1. Start the sign-in and show the user the printed link and code:
 
-Show the printed `verification_uri_complete` URL to the user and ask them
-to approve it in a browser. Do not expose or request an access token. Then:
+   ```sh
+   python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" start
+   ```
 
-```sh
-python "$profile_home/plugins/substrate/onboard.py" poll --json
-```
+2. The user opens the link, signs in, checks the code, and chooses
+   **Approve connection**.
+3. Wait for approval. It prints **Connected to Substrate as <account>.**
 
-Optionally, to connect during installation instead of on first use, run the
-compat entry point (same link, waits for approval, then stores the key):
+   ```sh
+   python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" poll
+   ```
+
+4. Enable and load the plugin if it is not yet active:
+   `hermes plugins enable substrate`, then `hermes gateway restart` (with the
+   user's agreement, if the gateway is running this chat).
+
+After a restart, the plugin also shows the link and code in chat by itself
+on the next message when it is not connected yet. Never paste an API key
+into chat.
+
+Tested on Hermes 0.21.0-0.21.x. Other versions should work; if something
+does not, tell us at https://github.com/Substrate-memory/Substrate-memory-plugins/issues.
+
+## Upgrading from the old `substrate_wiki` provider
+
+Only after a memory call succeeds, complete the cutover:
 
 ```sh
 profile_home="${HERMES_HOME:-$(dirname "$(hermes config path)")}"
-python3 "$profile_home/plugins/substrate/setup.py" \
-  --hermes-home "$profile_home"
-```
-
-If it prints `verification_uri_complete`, show that exact URL to the user
-and ask them to approve it in a browser. Do not expose or request an
-access token.
-
-Then complete the cutover (only after a memory call succeeds):
-
-```sh
 config_path="$(hermes config path)"
 config_backup="$(mktemp)"
 cp -p -- "$config_path" "$config_backup"

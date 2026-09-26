@@ -48,9 +48,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - run: uv sync --frozen --extra dev
-      - run: uv run --frozen --extra dev ruff check .
-      - run: uv run --frozen --extra dev python -m compileall -q plugins scripts
-      - run: uv run --frozen --extra dev python -m pytest -q
+      - run: .venv/bin/ruff check .
+      - run: .venv/bin/python -m compileall -q plugins scripts
+      - run: .venv/bin/python -m pytest -q
       - name: Validate JSON manifests
         run: |
           python3 - <<'EOF'
@@ -62,8 +62,8 @@ jobs:
               json.loads(path.read_text())
           print('JSON manifests parse')
           EOF
-      - run: uv run --frozen --extra dev python scripts/build_release.py
-      - run: uv run --frozen --extra dev python scripts/build_release.py --check
+      - run: .venv/bin/python scripts/build_release.py
+      - run: .venv/bin/python scripts/build_release.py --check
       - name: Validate Cowork plugin with native CLI when available
         run: |
           if command -v claude >/dev/null 2>&1; then

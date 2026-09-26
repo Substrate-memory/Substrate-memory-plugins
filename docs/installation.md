@@ -98,7 +98,7 @@ Then complete the common browser flow and run the self-check. Do not use the dep
 
 ### Hermes (`plugins/substrate-hermes`)
 
-Use the `plugins/substrate-hermes` package and its published v0.5.0 install pin during the rollout (see the package README for the exact install command). Follow its README for the standard-library login CLI and supported host version. Do not change its runtime, inspect another profile, upgrade Hermes automatically, or replace its working device authorization with a custom OAuth client. Wait for browser approval, let the plugin obtain/store credentials privately, then verify. Keep existing memory configuration unchanged until a memory request succeeds. Then run the shared **Import past conversations** step below; it is identical for every host.
+Install with one command from the repository URL: `hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable` (the root is a Hermes plugin that loads `plugins/substrate-hermes`; installing the `plugins/substrate-hermes` directory also works). It installs on any Hermes version; outside the tested range it says so once (see [COMPATIBILITY.md](../COMPATIBILITY.md#version-policy)). Run `onboard.py start` from the installed plugin directory, show the user the printed link and code, then `onboard.py poll`; it ends with **Connected to Substrate as <account>.** After a gateway restart the plugin also shows the link and code in chat by itself. Do not inspect another profile or replace its device authorization with a custom OAuth client. Keep existing memory configuration unchanged until a memory request succeeds. Then run the shared **Import past conversations** step below; it is identical for every host.
 
 ### Other MCP-capable agents (`plugins/substrate-mcp`, fallback)
 
@@ -127,7 +127,7 @@ Raw unconfirmed transcripts are never uploaded. This step is the same for every 
 
 The API-key based Claude Code, Codex, and Cowork plugins shipped in August 2026 are deprecated. This includes `substrate_capture`, local paths such as `~/.substrate/*/spool` (including `~/.substrate/claude_code_memory/spool`), and any setup using `SUBSTRATE_API_URL` or `SUBSTRATE_API_KEY`.
 
-Uninstall those legacy plugins. Do not set `SUBSTRATE_API_KEY` by hand on any host; the current product does not issue API keys to users. (The Hermes plugin writes its own private credential after browser approval. Leave that alone.) Their local spools are not migrated; pending spool events do not become Substrate memory. Install the matching v0.7.0 package and complete browser authorization instead.
+Uninstall those legacy plugins. Do not set `SUBSTRATE_API_KEY` by hand on any host; the current product does not issue API keys to users. (The Hermes plugin writes its own private credential after browser approval. Leave that alone.) Their local spools are not migrated; pending spool events do not become Substrate memory. Install the matching v0.8.0 package and complete browser authorization instead.
 
 ## Recovery and implementation boundary
 

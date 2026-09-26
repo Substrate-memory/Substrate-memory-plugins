@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+
+Hermes install and sign-in fixed end to end.
+
+- **Sign-in no longer fails with `invalid_response`.** v0.7.0 rejected the server's valid approval link whenever the plugin reached Substrate by an address other than `https://app.trysubstrate.co` (an old `SUBSTRATE_API_URL`, a stored address from an earlier install, a proxy or tailnet name). The server builds the link on its public address, so the whole login failed although the server had issued a code. The plugin now accepts the link when it is HTTPS (plain HTTP only for a loopback host), points at `/oauth/device`, and carries this grant's code, and tells the user which old setting to remove.
+- **One-command install from the repository URL.** The repository root is now a Hermes plugin (`plugin.yaml` + `__init__.py`) that loads `plugins/substrate-hermes`: `hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable`. No more "not a valid plugin" warning. A root `onboard.py` gives one login path for both layouts.
+- **Passes the Hermes install scan without an override.** Hermes 0.21.4 `plugin_guard` verdict for the repository root moved from CAUTION (89 findings, 1 high) to SAFE (0 high). The dynamic `__import__("os")` in `scripts/check_public_hygiene.py` is a normal import; docs and CI use `uv sync --frozen` + `.venv/bin/...` instead of `uv run`. Remaining medium findings are subprocess calls in tests and the optional Secret Service lookup (`secret-tool`).
+- **Login in chat.** When the profile is not connected, the plugin starts the sign-in itself and gives the agent the link and code to show in chat. It finishes by itself after approval and the next turn says **Connected to Substrate as <account>.** (the server adds the account from its next release; older servers give **Connected to Substrate.**). Notices show the real `onboard.py` path, never `<plugin-dir>`.
+- **Plain errors.** Every sign-in failure has a sentence saying what happened and what to do (`message`), next to the `error_class` code.
+- **Universal version policy.** No package refuses a host version. Outside the tested range the user gets one friendly note (*Tested on Hermes 0.21.0-0.21.x; you are on X. It should work; tell us if not.*). The Hermes plugin shows it by itself; for the other hosts the installing agent follows the same rule. See `COMPATIBILITY.md#version-policy`.
+- Verified end to end on a real Hermes 0.21.4 in an isolated profile: install by URL → enable → approval link → approve → memory write and recall.
+
 ## 0.7.0
 
 One connection experience for every agent:

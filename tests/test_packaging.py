@@ -49,7 +49,7 @@ def test_archives_are_deterministic_and_clean(tmp_path: Path) -> None:
     assert "substrate-hermes/plugin.yaml" in zipfile.ZipFile(tmp_path / ARCHIVE_NAME).namelist()
 
 def test_release_metadata_and_mcp_manifest() -> None:
-    assert (REPOSITORY_ROOT / "VERSION").read_text().strip() == "0.7.0"
+    assert (REPOSITORY_ROOT / "VERSION").read_text().strip() == "0.8.0"
     plugin_manifest = json.loads((REPOSITORY_ROOT / "plugins/substrate-mcp/.claude-plugin/plugin.json").read_text())
     assert plugin_manifest["name"] == "substrate-mcp"
     manifest = json.loads((REPOSITORY_ROOT / "plugins/substrate-mcp/.mcp.json").read_text())
@@ -82,7 +82,7 @@ def test_hermes_archive_keeps_installed_identity() -> None:
         assert "substrate-hermes/plugin.yaml" in names
         manifest = archive.read("substrate-hermes/plugin.yaml").decode("utf-8")
         assert "name: substrate" in manifest.splitlines()
-        assert "version: 0.7.0" in manifest.splitlines()
+        assert "version: 0.8.0" in manifest.splitlines()
 
 
 def test_onboarding_has_one_shared_user_facing_contract() -> None:
@@ -99,6 +99,27 @@ def test_onboarding_has_one_shared_user_facing_contract() -> None:
         assert "Connection approved" in text
         assert "Connected to Substrate." in text
     assert "not proof" in guide
-    assert "published v0.5.0 install pin" in guide
+    assert "hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable" in guide
     assert "Do not select Hermes merely" in guide
     assert "automatically" in guide
+
+
+def test_repository_root_is_an_installable_hermes_plugin() -> None:
+    """``hermes plugins install <repo URL>`` installs the root: it must be a
+    valid Hermes plugin that loads plugins/substrate-hermes (v0.8.0)."""
+    import importlib.util
+
+    root_manifest = (REPOSITORY_ROOT / "plugin.yaml").read_text(encoding="utf-8")
+    package_manifest = (REPOSITORY_ROOT / "plugins/substrate-hermes/plugin.yaml").read_text(encoding="utf-8")
+    body = [line for line in root_manifest.splitlines() if not line.startswith("#")]
+    assert body == package_manifest.splitlines()
+    assert "requires_hermes" not in root_manifest  # soft version policy: never a hard gate
+    spec = importlib.util.spec_from_file_location(
+        "hermes_plugins_root_probe", REPOSITORY_ROOT / "__init__.py",
+        submodule_search_locations=[str(REPOSITORY_ROOT)],
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    assert callable(module.register)
+    assert module.register.__module__.endswith("src.substrate.plugin")

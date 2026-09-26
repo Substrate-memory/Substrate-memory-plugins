@@ -8,7 +8,7 @@
     {
       "name": "substrate-mcp",
       "description": "Thin Cowork-compatible remote Substrate MCP memory plugin",
-      "version": "0.6.0",
+      "version": "0.8.0",
       "author": {
         "name": "Sightline Technologies Inc"
       },
@@ -19,7 +19,7 @@
     {
       "name": "substrate-claude",
       "description": "Substrate memory for Claude Cowork and Claude Code: recall, automatic capture, and history import over remote MCP",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "author": {
         "name": "Sightline Technologies Inc"
       },

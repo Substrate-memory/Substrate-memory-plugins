@@ -142,7 +142,10 @@ class _DeviceHandler(BaseHTTPRequestHandler):
             if first.get("scope") != "capture retrieve":
                 self._send(400, {"error": "invalid_scope"})
                 return
-            base = f"http://127.0.0.1:{self.server.server_port}"
+            # Mirrors the real server reply (agent-api/agent-auth.mjs): the
+            # link is built on the server's PUBLIC origin (link_base), which
+            # can differ from the address the plugin used.
+            base = self.server.link_base or f"http://127.0.0.1:{self.server.server_port}"
             self._send(200, {
                 "device_code": DEVICE_CODE,
                 "user_code": "BCDF-GHJK",
@@ -150,6 +153,7 @@ class _DeviceHandler(BaseHTTPRequestHandler):
                 "verification_uri_complete": f"{base}/oauth/device?user_code=BCDF-GHJK",
                 "expires_in": 900,
                 "interval": 1,
+                "agent_name": first.get("agent_name", ""),
             })
             return
         if parsed.path == "/oauth/token":
@@ -184,6 +188,7 @@ def device_server():
         "scope": "capture retrieve",
     }
     server.slowed = False
+    server.link_base = None
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     server.origin = f"http://127.0.0.1:{server.server_port}"
@@ -923,3 +928,111 @@ def test_rejected_env_without_stored_key_stops_401_loop(
     assert "onboard.py" in second["message"]
     assert OLD_TOKEN not in json.dumps(second)
     assert os.environ["SUBSTRATE_UNRELATED_SENTINEL"] == "keep-me"
+
+
+# ---------------------------------------------------------------------------
+# v0.8.0: wire contract with the real server and plain-language outcomes
+# (server side: agent-api/agent-auth.test.mjs "device flow wire format stays
+# pinned for the Hermes plugin").
+# ---------------------------------------------------------------------------
+
+
+def test_link_on_server_public_origin_is_accepted(monkeypatch, device_server):
+    """v0.7.0 regression: the plugin reached the server by another address
+    (tailnet name, proxy, loopback) and rejected the valid reply as
+    invalid_response. The link on the public origin is now shown as is."""
+    origin = _origin(monkeypatch, device_server)
+    device_server.link_base = "https://app.trysubstrate.co"
+    manager = onboarding.OnboardingManager(_isolated_home_path(), origin)
+    status = manager.ensure(force=True)
+    assert status["status"] == "authorization_pending"
+    assert status["verification_uri_complete"] == (
+        "https://app.trysubstrate.co/oauth/device?user_code=BCDF-GHJK"
+    )
+    assert status["user_code"] == "BCDF-GHJK"
+    assert "https://app.trysubstrate.co" in status["notice"]
+    assert "Approve connection" in status["message"]
+
+
+def _isolated_home_path() -> Path:
+    return Path(os.environ["HERMES_HOME"]).resolve()
+
+
+@pytest.mark.parametrize("link", [
+    "http://app.trysubstrate.co/oauth/device?user_code=BCDF-GHJK",  # plain http, remote
+    "https://app.trysubstrate.co/connect?user_code=BCDF-GHJK",  # wrong path
+    "https://app.trysubstrate.co/oauth/device?user_code=ZZZZ-ZZZZ",  # other grant
+    "javascript:alert(1)//oauth/device?user_code=BCDF-GHJK",
+])
+def test_unsafe_links_still_rejected(link):
+    with pytest.raises(onboarding.OnboardingError):
+        onboarding.safe_verification_url("http://127.0.0.1:9", link, "BCDF-GHJK")
+
+
+def test_link_is_rebuilt_without_extra_parts():
+    assert onboarding.safe_verification_url(
+        "https://app.trysubstrate.co",
+        "https://app.trysubstrate.co/oauth/device?user_code=BCDF-GHJK#frag",
+        "BCDF-GHJK",
+    ) == "https://app.trysubstrate.co/oauth/device?user_code=BCDF-GHJK"
+
+
+@pytest.mark.parametrize("reply,expected", [
+    ({"account": "owner@example.com", "agent_name": "henry"},
+     'Connected to Substrate as owner@example.com. This agent appears as "henry" in Substrate.'),
+    ({}, "Connected to Substrate."),  # current server without the account field
+])
+def test_connected_names_the_account_once(monkeypatch, device_server, reply, expected):
+    home = _isolated_home_path()
+    origin = _origin(monkeypatch, device_server)
+    manager = onboarding.OnboardingManager(home, origin)
+    assert manager.ensure(force=True)["status"] == "authorization_pending"
+    device_server.token_mode = "approved"
+    device_server.token_body = {**device_server.token_body, **reply}
+    assert manager._poll_once() is False
+    assert onboarding.take_connected_announcement() == expected
+    assert onboarding.take_connected_announcement() == ""  # once only
+    proc = subprocess.run(
+        [sys.executable, str(PLUGIN_CLI), "status", "--json"],
+        capture_output=True, text=True, timeout=30,
+        env={**os.environ, "SUBSTRATE_API_KEY": ""},
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "ready"
+    assert payload["message"].startswith(expected.split(" This agent")[0])
+
+
+def test_every_failure_has_a_plain_message(monkeypatch, device_server):
+    origin = _origin(monkeypatch, device_server)
+    device_server.link_base = "http://attacker.example"
+    status = onboarding.OnboardingManager(_isolated_home_path(), origin).ensure(force=True)
+    assert status["status"] == "failed"
+    assert status["error_class"] == "invalid_response"
+    assert "Update the plugin" in status["message"]
+    for category in ("invalid_config", "transport_error", "rate_limited", "authorization_failed",
+                     "invalid_content_type", "authorization_expired", "access_denied",
+                     "authenticated_health_check_failed", "reconnect_required", "unknown"):
+        text = onboarding.explain(category)
+        assert text and category not in text and "  " not in text
+
+
+def test_pre_llm_call_shows_link_and_code_in_chat(monkeypatch, device_server):
+    from substrate import plugin
+
+    _origin(monkeypatch, device_server)
+    device_server.link_base = "https://app.trysubstrate.co"
+    monkeypatch.setattr(plugin, "_version_notice_shown", True)
+    context = plugin.pre_llm_call("s", "hello", [])["context"]
+    assert "Link: https://app.trysubstrate.co/oauth/device?user_code=BCDF-GHJK" in context
+    assert "Code: BCDF-GHJK" in context
+    assert "<plugin-dir>" not in context
+
+
+def test_host_version_notice_is_soft():
+    from substrate import plugin
+
+    assert plugin.host_version_notice("0.21.0") == ""
+    assert plugin.host_version_notice("0.21.4") == ""
+    assert plugin.host_version_notice("") == ""
+    notice = plugin.host_version_notice("0.22.1")
+    assert "0.21.0-0.21.x" in notice and "0.22.1" in notice and "should work" in notice
