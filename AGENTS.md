@@ -19,7 +19,7 @@ Pick the package for the agent that is handling this request right now:
 
 Never pick a host because its binary happens to exist on the machine. Do not select Hermes merely because a Hermes executable exists elsewhere. Target the agent currently handling the installation request. Ask the user which host this is only when it cannot be determined safely.
 
-Check the host version against the tested range in [COMPATIBILITY.md](COMPATIBILITY.md#version-policy). If it is outside the range, install anyway and tell the user once: *Tested on <host> <range>; you are on <version>. It should work; if something does not, tell us at https://github.com/Substrate-memory/Substrate-memory-plugins/issues.* Never refuse and never change the host version.
+Check the host version against the tested range in [COMPATIBILITY.md](COMPATIBILITY.md#version-policy). A range ending in "or newer" has no upper bound. If the host is outside the range, install anyway and tell the user once: *Tested on <host> <range>; you are on <version>. It should work; if something does not, tell us at https://github.com/Substrate-memory/Substrate-memory-plugins/issues.* Never refuse and never change the host version.
 
 For Hermes, one command installs from the repository URL (the root is a Hermes plugin that loads `plugins/substrate-hermes`): `hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable`. Then follow the printed steps.
 

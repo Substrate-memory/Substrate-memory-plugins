@@ -75,9 +75,9 @@ After **Connected to Substrate.**, the agent asks once whether to import past co
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.8.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0-0.21.x) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Released |
+| v0.8.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Released |
 
-Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0-0.21.x; you are on X. It should work; tell us if not.* See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
+Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0 or newer; you are on X. It should work; tell us if not.* Newer Hermes versions get no note. See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
 
 Known limits, stated honestly:
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.1
+
+Hermes sign-in keeps the user's approval.
+
+- **Approval no longer lost to a slow first memory call.** After approval the plugin checks the new key with one authenticated `memory_search`. v0.8.0 allowed 5 seconds; the first call for a newly approved agent can take longer (the tenant opens cold), so the plugin discarded the issued key and its device code, marked the sign-in failed, and the next message started a new code. From the user's side: "I approved it" followed by another link. The check now allows 20 seconds, and a timeout or server error keeps the grant: the server hands the same key back on the next poll, so the plugin retries until it succeeds. Only a key the server actually refuses fails the sign-in.
+- **"Approval received" instead of the link again.** While that check is still running, the agent is told the approval arrived and there is nothing more to do in the browser, and not to start a new sign-in.
+- **One poller at a time.** The gateway's background poll, the turn itself and an agent-run `onboard.py` all polled the same grant. Close together, they tripped the server's 5-second `slow_down` window for each other, and two pollers redeeming one approval got `409 temporarily_unavailable`, which v0.8.0 treated as a failed sign-in. Polls are now serialized per profile with a lock file and spaced by the poll interval, and `temporarily_unavailable` / `rate_limited` mean "ask again".
+- **"Done" connects on that message.** Every turn with a pending code checks with Substrate before replying, even when the background poll is mid-sleep, so the message sent right after approving connects instead of showing the same link.
+- **A new code says why.** When a code expires or fails and the plugin starts another, the agent is told which earlier code ended and why, so it does not guess (for example, that the approval never reached Substrate). A grant that expires after approval is reported as a failed connection check, not as "expired before it was approved".
+- **Open-ended Hermes range.** Tested on Hermes 0.21.0 or newer. Newer versions no longer get a "tested on 0.21.x" note; only a Hermes older than 0.21.0 does. Nothing is ever refused.
+
 ## 0.8.0
 
 Hermes install and sign-in fixed end to end.

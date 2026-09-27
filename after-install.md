@@ -24,5 +24,5 @@ After a restart, the plugin also shows the link and code in chat by itself
 on the next message when it is not connected yet. Never paste an API key
 into chat.
 
-Tested on Hermes 0.21.0-0.21.x. Other versions should work; if something
+Tested on Hermes 0.21.0 or newer. Other versions should work; if something
 does not, tell us at https://github.com/Substrate-memory/Substrate-memory-plugins/issues.

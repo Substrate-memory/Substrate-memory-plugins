@@ -127,7 +127,7 @@ Raw unconfirmed transcripts are never uploaded. This step is the same for every 
 
 The API-key based Claude Code, Codex, and Cowork plugins shipped in August 2026 are deprecated. This includes `substrate_capture`, local paths such as `~/.substrate/*/spool` (including `~/.substrate/claude_code_memory/spool`), and any setup using `SUBSTRATE_API_URL` or `SUBSTRATE_API_KEY`.
 
-Uninstall those legacy plugins. Do not set `SUBSTRATE_API_KEY` by hand on any host; the current product does not issue API keys to users. (The Hermes plugin writes its own private credential after browser approval. Leave that alone.) Their local spools are not migrated; pending spool events do not become Substrate memory. Install the matching v0.8.0 package and complete browser authorization instead.
+Uninstall those legacy plugins. Do not set `SUBSTRATE_API_KEY` by hand on any host; the current product does not issue API keys to users. (The Hermes plugin writes its own private credential after browser approval. Leave that alone.) Their local spools are not migrated; pending spool events do not become Substrate memory. Install the matching v0.8.1 package and complete browser authorization instead.
 
 ## Recovery and implementation boundary
 
