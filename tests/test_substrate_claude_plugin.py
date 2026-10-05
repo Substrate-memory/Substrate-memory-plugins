@@ -39,12 +39,6 @@ CONTRACT_TABLE = {
                                      "assistant_message": "${last_assistant_message}",
                                      "agent_context": "main",
                                      "platform": "claude"}),
-    "SubagentStop": ("memory_capture_turn", {"session_id": "${session_id}",
-                                             "assistant_message": "${last_assistant_message}",
-                                             "agent_context": "subagent",
-                                             "agent_id": "${agent_id}",
-                                             "parent_session_id": "${session_id}",
-                                             "platform": "claude"}),
 }
 
 
@@ -111,16 +105,17 @@ def test_session_boundaries() -> None:
     pre = entries["PreCompact"][0]["hooks"][0]
     assert pre["tool"] == "memory_session_boundary"
     assert pre["input"]["boundary"] == "compact"
-    end = entries["SessionEnd"][0]["hooks"][0]
-    assert end["tool"] == "memory_session_boundary"
-    assert end["input"]["boundary"] == "end"
-    assert end["input"]["reason"] == "${reason}"
-    assert end["timeout"] == 3
-
+    # Claude Code 2.1.289 skips mcp_tool hooks on SessionEnd too ("no MCP
+    # client context"); the server seals a session after 30 minutes idle.
+    assert "SessionEnd" not in entries
+    # SubagentStop also fires for Claude Code's own helpers (the compaction
+    # summary was stored as a turn); real subagent results already arrive as
+    # the main agent's Agent tool result through PostToolUse.
+    assert "SubagentStop" not in entries
 
 def test_hook_timeouts() -> None:
     entries = _hook_entries()
-    for event in ("UserPromptSubmit", "PostToolUse", "Stop", "SubagentStop"):
+    for event in ("UserPromptSubmit", "PostToolUse", "Stop"):
         for group in entries[event]:
             for hook in group["hooks"]:
                 assert hook["timeout"] == 5, event

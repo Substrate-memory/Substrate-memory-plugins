@@ -257,16 +257,19 @@ hook event. Reference mapping (the plugin packages ship the exact files):
 | `UserPromptSubmit` | `memory_turn_context` | `session_id, prompt, platform` (+ `turn_id` on Codex) |
 | `PostToolUse` (all tools) | `memory_capture_tool` | `session_id, tool_use_id, tool_name, tool_input, tool_response, platform` |
 | `Stop` | `memory_capture_turn` | `session_id, assistant_message=last_assistant_message, agent_context: main, platform` |
-| `SubagentStop` | `memory_capture_turn` | `… agent_context: subagent, agent_id, parent_session_id=session_id` |
+| `SubagentStop` (Codex only) | `memory_capture_turn` | `… agent_context: subagent, agent_id, parent_session_id=session_id` |
 | `SessionStart` | — (Codex only; Claude Code rejects `mcp_tool` hooks on this event) | |
 | `PreCompact` | `memory_session_boundary` | `boundary: compact` |
-| `SessionEnd` (Claude only; Codex has no MCP hook here) | `memory_session_boundary` | `boundary: end, reason` |
+| `SessionEnd` | — (Claude Code and Codex both refuse MCP tool hooks here) | |
 
-Timeouts: `UserPromptSubmit` 5 s, `PostToolUse`/`Stop`/`SubagentStop` 5 s,
-`SessionEnd` 3 s. Every hook fails open. Known host limits, documented to users:
-Claude Code rejects `mcp_tool` hooks on `SessionStart` (no MCP client context),
-so the plugin declares none and the first turn implies the boundary; Codex `SessionEnd` cannot call MCP tools (the
-server seals the session after 30 minutes idle).
+Timeouts: 5 s for every hook. Every hook fails open. Known host limits,
+documented to users (verified on Claude Code 2.1.289): Claude Code refuses
+`mcp_tool` hooks on `SessionStart` and `SessionEnd` (no MCP client context), so
+the first turn implies the start and the server seals a session after 30
+minutes idle. The Claude plugin declares no `SubagentStop` hook: Claude Code
+fires it for its own helpers too (the compaction summary was stored as a
+turn), and a real subagent's result already arrives as the main agent's Agent
+tool result through `PostToolUse`.
 
 ## 8. Sync and history import (client side)
 
