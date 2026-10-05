@@ -78,6 +78,11 @@ script never contacts the network; the agent passes its printed batches to
 
 - Claude Code does not allow MCP tool hooks on `SessionStart`, so there is
   none; the boundary is implied by the first turn instead.
+- Use the plugin or the claude.ai Substrate connector, not both. With both
+  present and the connector not signed in, Claude Code in print mode
+  (`claude -p`, the Agent SDK) dropped the plugin's server at startup, so
+  that run got no recall and no capture (seen on Claude Code 2.1.289;
+  interactive sessions were unaffected).
 - Claude Code allows no MCP tool hook when a session ends, so the server seals
   a session after 30 minutes idle (checked on that account's next request);
   nothing is lost, it becomes memory a little later.
