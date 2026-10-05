@@ -8,6 +8,6 @@
 | TLS interception | HTTPS verification remains enabled; no certificate bypass |
 | Tenant crossover | Backend-owned OAuth and tenant-scoped authorization; clients never send tenant or account ids |
 | Secret capture in turns or tool traffic | Client-side redaction plus server-side re-redaction on ingest (shared fixture `contract/redaction-fixtures.json`); bounded tool args (4096 bytes) and result excerpts (8192 bytes plus digest); history import only after user confirms the session list |
-| Over-claiming capture | Docs state the honest limits: Codex has no session-end hook (server seals idle sessions after 30 minutes); Claude SessionStart at launch fires before MCP connects; an unreopened Cowork cloud session's last turn is not recovered; the fallback package claims best effort only, never automatic full-transcript capture |
+| Over-claiming capture | Docs state the honest limits: Codex has no session-end hook (server seals idle sessions after 30 minutes); Claude Code allows no MCP tool hook on SessionStart; an unreopened Cowork cloud session's last turn is not recovered; the fallback package claims best effort only, never automatic full-transcript capture |
 | Premature success claim | **Connection approved** is consent only; **Connected to Substrate.** requires an authenticated `memory_search` smoke test |
 | Premature release | Review-only workflow artifacts; no tag/publication without separate explicit approval |

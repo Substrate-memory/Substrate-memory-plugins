@@ -1,5 +1,6 @@
 name: substrate
-version: 0.8.0
+version: 0.8.1
+python_runtime: external
 description: Substrate retrieval, durable completed-turn capture, session boundaries, and memory write tools for Hermes
 provides_tools:
   - memory_search

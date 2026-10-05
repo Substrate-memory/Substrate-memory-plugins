@@ -3,7 +3,10 @@
 # Loads plugins/substrate-hermes (see __init__.py). Keep in sync with
 # plugins/substrate-hermes/plugin.yaml (tests/test_packaging.py checks it).
 name: substrate
-version: 0.8.0
+version: 0.8.1
+# stdlib-only: Hermes must not install or lock anything for this plugin
+# (its pyproject.toml is repository tooling, not a runtime declaration).
+python_runtime: external
 description: Substrate retrieval, durable completed-turn capture, session boundaries, and memory write tools for Hermes
 provides_tools:
   - memory_search

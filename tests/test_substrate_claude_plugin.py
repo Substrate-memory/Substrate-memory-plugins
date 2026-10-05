@@ -39,12 +39,6 @@ CONTRACT_TABLE = {
                                      "assistant_message": "${last_assistant_message}",
                                      "agent_context": "main",
                                      "platform": "claude"}),
-    "SubagentStop": ("memory_capture_turn", {"session_id": "${session_id}",
-                                             "assistant_message": "${last_assistant_message}",
-                                             "agent_context": "subagent",
-                                             "agent_id": "${agent_id}",
-                                             "parent_session_id": "${session_id}",
-                                             "platform": "claude"}),
 }
 
 
@@ -59,7 +53,7 @@ def _load_sync():
 def test_manifest_shape() -> None:
     manifest = json.loads((PLUG / ".claude-plugin" / "plugin.json").read_text())
     assert manifest["name"] == "substrate-claude"
-    assert manifest["version"] == "0.8.0"
+    assert manifest["version"] == "0.8.1"
     assert manifest["author"]["name"] == "Sightline Technologies Inc"
     assert manifest["description"].strip()
     assert manifest["homepage"].startswith("https://")
@@ -105,29 +99,23 @@ def test_post_tool_use_has_no_matcher() -> None:
 
 def test_session_boundaries() -> None:
     entries = _hook_entries()
-    by_matcher = {}
-    for group in entries["SessionStart"]:
-        by_matcher[group["matcher"]] = group["hooks"][0]
-    assert set(by_matcher) == {"startup", "resume", "clear", "compact"}
-    for matcher, hook in by_matcher.items():
-        assert hook["tool"] == "memory_session_boundary"
-        assert hook["server"] == SERVER
-        assert hook["input"]["boundary"] == "${source}"
-        assert hook["input"]["session_id"] == "${session_id}"
-        assert hook["input"]["platform"] == "claude"
+    # Claude Code refuses mcp_tool hooks on SessionStart ("no MCP client
+    # context") and shows the user an error on every launch: none is declared.
+    assert "SessionStart" not in entries
     pre = entries["PreCompact"][0]["hooks"][0]
     assert pre["tool"] == "memory_session_boundary"
     assert pre["input"]["boundary"] == "compact"
-    end = entries["SessionEnd"][0]["hooks"][0]
-    assert end["tool"] == "memory_session_boundary"
-    assert end["input"]["boundary"] == "end"
-    assert end["input"]["reason"] == "${reason}"
-    assert end["timeout"] == 3
-
+    # Claude Code 2.1.289 skips mcp_tool hooks on SessionEnd too ("no MCP
+    # client context"); the server seals a session after 30 minutes idle.
+    assert "SessionEnd" not in entries
+    # SubagentStop also fires for Claude Code's own helpers (the compaction
+    # summary was stored as a turn); real subagent results already arrive as
+    # the main agent's Agent tool result through PostToolUse.
+    assert "SubagentStop" not in entries
 
 def test_hook_timeouts() -> None:
     entries = _hook_entries()
-    for event in ("UserPromptSubmit", "PostToolUse", "Stop", "SubagentStop"):
+    for event in ("UserPromptSubmit", "PostToolUse", "Stop"):
         for group in entries[event]:
             for hook in group["hooks"]:
                 assert hook["timeout"] == 5, event

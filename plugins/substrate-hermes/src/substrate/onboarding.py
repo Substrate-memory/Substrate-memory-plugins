@@ -18,6 +18,7 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -26,6 +27,7 @@ import stat
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -56,6 +58,12 @@ STATE_VERSION = 1
 RETRY_COOLDOWN_SECONDS = 60.0
 BEGIN_TIMEOUT_SECONDS = 10.0
 POLL_TIMEOUT_SECONDS = 10.0
+# The first memory call on a freshly approved agent can open a cold tenant,
+# which takes longer than an ordinary per-turn call.
+CHECK_TIMEOUT_SECONDS = 20.0
+# How long a turn waits for another poller (the background thread or a CLI
+# process) that is finishing the same approval.
+POLL_LOCK_WAIT_SECONDS = 10.0
 DEVICE_PATH = "/oauth/device"
 TOKEN_RE = re.compile(r"^sk_sub_[A-Za-z0-9_\-]{8,256}$")
 USER_CODE_RE = re.compile(r"^[BCDFGHJKLMNPQRSTVWXZ23456789]{4}-[BCDFGHJKLMNPQRSTVWXZ23456789]{4}$")
@@ -63,6 +71,12 @@ DEVICE_CODE_RE = re.compile(r"^[0-9a-f]{64}$")
 FORBIDDEN_STATE_KEYS = ("access_token", "api_key", "token", "device_code")
 
 TRANSIENT_HTTP_STATUSES = frozenset({408, 425, 429, 500, 502, 503, 504})
+# Token-endpoint errors that mean "ask again", not "this grant is dead". The
+# server answers 409 temporarily_unavailable when two pollers race to redeem
+# the same approval; the loser must keep polling, not fail the grant.
+TRANSIENT_TOKEN_ERRORS = frozenset({"temporarily_unavailable", "rate_limited"})
+# Connection-check failures that say nothing about the key itself.
+_REJECTING_CLIENT_ERRORS = frozenset({"unauthorized", "forbidden", "invalid_config"})
 
 
 class OnboardingError(RuntimeError):
@@ -246,8 +260,8 @@ _EXPLAIN = {
     "access_denied": "The connection was declined in the browser. Start the sign-in again if that was a mistake.",
     "missing_device_credential": "The sign-in state on this machine was lost. Start the sign-in again.",
     "authenticated_health_check_failed": (
-        "Approval worked, but the first memory call failed. Try again in a minute; if it "
-        "keeps failing, report it."
+        "The browser approval reached Substrate, but the first memory call with the new "
+        "key did not succeed. Try again in a minute; if it keeps failing, report it."
     ),
     "reconnect_required": "Substrate no longer accepts the saved key (it was revoked or expired). Start the sign-in again.",
     "missing_credential": "The saved key is missing on this machine. Start the sign-in again.",
@@ -276,7 +290,7 @@ def origin_notice(api_origin: str, canonical: str) -> str:
     )
 
 
-def token_is_valid(origin: str, token: str) -> bool:
+def check_token(origin: str, token: str, *, timeout: float | None = None) -> str:
     """Authenticated preflight: MCP initialize + tools/list + smoke search.
 
     The capabilities check is ``initialize`` (verifying
@@ -285,27 +299,42 @@ def token_is_valid(origin: str, token: str) -> bool:
     containing all 12 contract tools; ``memory_search`` is the connection
     smoke test (an authenticated call, even with an empty result, proves
     **Connected to Substrate.**).
+
+    Returns ``"ok"``, ``"rejected"`` (the server refused the key or does not
+    speak the contract) or ``"unavailable"`` (timeout, transport or server
+    error: nothing is known about the key yet, so it must not be discarded).
     """
+    if timeout is None:
+        timeout = CHECK_TIMEOUT_SECONDS
     try:
         client = SubstrateClient((origin or "").rstrip("/") or credentials.DEFAULT_ORIGIN, token)
     except ClientError:
-        return False
+        return "rejected"
     try:
-        client.check_capabilities(timeout=5.0)
+        client.check_capabilities(timeout=timeout)
         structured, _text = client.call_tool(
             "memory_search",
             {"query": "Substrate installation health check", "limit": 1},
-            timeout=5.0,
+            timeout=timeout,
         )
-    except (ClientError, contract.ContractError):
-        return False
+    except ClientError as exc:
+        if exc.category in _REJECTING_CLIENT_ERRORS or not exc.transient:
+            return "rejected"
+        return "unavailable"
+    except contract.ContractError:
+        return "rejected"
     except Exception:
-        return False
-    return (
+        return "unavailable"
+    ok = (
         isinstance(structured, dict)
         and contract.memory_tool_version_ok(structured)
         and isinstance(structured.get("results"), list)
     )
+    return "ok" if ok else "rejected"
+
+
+def token_is_valid(origin: str, token: str) -> bool:
+    return check_token(origin, token) == "ok"
 
 
 def _state_path(home: Path) -> Path:
@@ -391,6 +420,52 @@ def _clear_device_credential(home: Path) -> None:
         pass
 
 
+def _expiry_class(state: dict[str, Any]) -> str:
+    # A grant that expires after approval was approved: the first memory call
+    # never answered. Saying "expired before it was approved" would be false.
+    return "authenticated_health_check_failed" if state.get("approved") else "authorization_expired"
+
+
+@contextlib.contextmanager
+def _poll_lock(home: Path, wait: float) -> Iterator[bool]:
+    """Serialize token polls across threads and processes for one profile.
+
+    The gateway's background thread, a turn, and an agent-run ``onboard.py``
+    all poll the same grant. Unserialized they trip the server's 5-second
+    ``slow_down`` window for each other and race to redeem the approval.
+    Yields False when the lock is not acquired within ``wait`` seconds.
+    """
+    try:
+        import fcntl
+    except ImportError:  # non-POSIX: no cross-process lock, best effort
+        yield True
+        return
+    path = home / "substrate" / "onboarding.lock"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptor = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except OSError:
+        yield True
+        return
+    try:
+        deadline = time.monotonic() + max(0.0, wait)
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    yield False
+                    return
+                time.sleep(0.1)
+        try:
+            yield True
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
+
+
 class OnboardingManager:
     """One profile's resumable device-authorization state machine."""
 
@@ -408,6 +483,20 @@ class OnboardingManager:
             link = _clip(str(state.get("verification_uri_complete", "")), 512)
             code = _clip(str(state.get("user_code", "")), 16)
             expires_in = max(0, int(float(state.get("expires_at", now)) - now))
+            if state.get("approved"):
+                # The browser approval reached Substrate and a key was issued;
+                # only the first memory call has not answered yet. Showing the
+                # link again here would send the user to approve twice.
+                return {
+                    "status": "finishing",
+                    "user_code": code,
+                    "expires_in": expires_in,
+                    "message": (
+                        f"Approval for code {code} was received. Substrate is still "
+                        "preparing memory for this agent; the plugin keeps checking "
+                        "and confirms on a later message. Nothing more to do in the browser."
+                    ),
+                }
             described = {
                 "status": "authorization_pending",
                 "verification_uri_complete": link,
@@ -422,6 +511,14 @@ class OnboardingManager:
                     "minutes). The plugin finishes by itself after approval."
                 ),
             }
+            previous_code = _clip(str(state.get("previous_user_code", "")), 16)
+            previous_error = _clip(str(state.get("previous_error_class", "")), 48)
+            if previous_code and previous_error:
+                described["previous"] = (
+                    f"The earlier code {previous_code} did not finish: "
+                    f"{explain(previous_error)} This is a new code; the earlier "
+                    "link no longer works."
+                )
             notice = origin_notice(self.origin, str(state.get("canonical_origin", "")))
             if notice:
                 described["notice"] = notice
@@ -463,16 +560,16 @@ class OnboardingManager:
                 state.get("phase") == "pending"
                 and float(state.get("expires_at", 0)) > now
             ):
-                thread = self._thread
-                if thread is None or not thread.is_alive():
-                    # New process (restart, one-shot CLI): the user may have
-                    # approved meanwhile, so check once before showing the link.
-                    self._poll_once()
-                    state = _load_state(self.home)
-                    if state.get("phase") == "connected":
-                        return None
-                    if state.get("phase") != "pending":
-                        return self.describe(state)
+                # The user may have approved a moment ago ("done") while the
+                # background poll is still sleeping, or in another process.
+                # Check now (waiting out the server's poll interval and any
+                # poller finishing the same approval) before showing the link.
+                self._poll_once(wait=POLL_LOCK_WAIT_SECONDS)
+                state = _load_state(self.home)
+                if state.get("phase") == "connected":
+                    return None
+                if state.get("phase") != "pending":
+                    return self.describe(state)
                 self._start_thread()
                 return self.describe(state)
             if not force and (
@@ -485,9 +582,9 @@ class OnboardingManager:
                 and float(state.get("attempted_at", 0)) + RETRY_COOLDOWN_SECONDS > now
             ):
                 return self.describe(state)
-            return self._begin()
+            return self._begin(previous=state)
 
-    def _begin(self) -> dict[str, Any]:
+    def _begin(self, previous: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
             status, value = request_json(
                 self.origin,
@@ -543,6 +640,16 @@ class OnboardingManager:
             "expires_at": now + lifetime,
             "attempted_at": now,
         }
+        # Say why a new code replaced the old one, so the agent does not guess
+        # (for example, that the user's approval never reached Substrate).
+        if (
+            previous
+            and previous.get("phase") in {"failed", "declined"}
+            and previous.get("user_code")
+            and previous.get("error_class")
+        ):
+            state["previous_user_code"] = _clip(str(previous["user_code"]), 16)
+            state["previous_error_class"] = _clip(str(previous["error_class"]), 48)
         # The device code is a bearer credential for the approval grant: it
         # lives only in an owner-private file, never in the descriptive state.
         try:
@@ -575,7 +682,7 @@ class OnboardingManager:
                     _save_state(
                         self.home,
                         {**state, "phase": "failed",
-                         "error_class": "authorization_expired"},
+                         "error_class": _expiry_class(state)},
                     )
                 except OnboardingError:
                     pass
@@ -585,14 +692,35 @@ class OnboardingManager:
             except (TypeError, ValueError):
                 interval = 5
             time.sleep(interval)
-            if not self._poll_once():
+            if not self._poll_once(wait=float(interval)):
                 return
 
-    def _poll_once(self) -> bool:
-        """One poll step. Returns True when polling should continue."""
-        state = _load_state(self.home)
-        if state.get("phase") != "pending":
-            return False
+    def _poll_once(self, wait: float = 0.0) -> bool:
+        """One poll step. Returns True when polling should continue.
+
+        ``wait`` bounds how long to wait for another poller and for the
+        server's minimum poll interval; the background thread passes 0 and
+        simply skips a step that someone else is already taking.
+        """
+        with _poll_lock(self.home, wait) as locked:
+            if not locked:
+                return True
+            state = _load_state(self.home)
+            if state.get("phase") != "pending":
+                return False
+            try:
+                interval = max(1, min(int(state.get("interval", 5)), 60))
+                last = float(state.get("last_polled_at", 0))
+            except (TypeError, ValueError):
+                interval, last = 5, 0.0
+            remaining = last + interval + 0.5 - time.time()
+            if remaining > 0:
+                if remaining > wait:
+                    return True
+                time.sleep(remaining)
+            return self._poll_locked(state)
+
+    def _poll_locked(self, state: dict[str, Any]) -> bool:
         device_code = _read_private_device_code(self.home)
         if not device_code:
             try:
@@ -604,6 +732,11 @@ class OnboardingManager:
             except OnboardingError:
                 pass
             return False
+        state = {**state, "last_polled_at": time.time()}
+        try:
+            _save_state(self.home, state)
+        except OnboardingError:
+            pass
         try:
             status, value = request_json(
                 self.origin,
@@ -632,9 +765,11 @@ class OnboardingManager:
         if status in TRANSIENT_HTTP_STATUSES:
             return True
         if status == 200:
-            return self._complete(value)
+            return self._complete(value, state)
         error = value.get("error")
         if error == "authorization_pending":
+            return True
+        if error in TRANSIENT_TOKEN_ERRORS:
             return True
         if error == "slow_down":
             try:
@@ -659,7 +794,7 @@ class OnboardingManager:
                 _save_state(
                     self.home,
                     {**state, "phase": "failed",
-                     "error_class": "authorization_expired"},
+                     "error_class": _expiry_class(state)},
                 )
             except OnboardingError:
                 pass
@@ -673,10 +808,8 @@ class OnboardingManager:
             pass
         return False
 
-    def _complete(self, value: dict[str, Any]) -> bool:
-        state = _load_state(self.home)
-        if state.get("phase") != "pending":
-            return False
+    def _complete(self, value: dict[str, Any], state: dict[str, Any]) -> bool:
+        """Validate, check and store an issued key. Called under the poll lock."""
         token = value.get("access_token")
         scope = value.get("scope", "")
         if (
@@ -695,7 +828,20 @@ class OnboardingManager:
             except OnboardingError:
                 pass
             return False
-        if not token_is_valid(self.origin, token):
+        # Recorded before the (possibly slow) first memory call so a turn
+        # arriving meanwhile says "approval received" instead of the link.
+        state = {**state, "approved": True}
+        try:
+            _save_state(self.home, state)
+        except OnboardingError:
+            pass
+        verdict = check_token(self.origin, token)
+        if verdict == "unavailable":
+            # The key is issued and the server hands the same key back on the
+            # next poll until the grant expires, so keep the grant (and its
+            # device code) and check again instead of discarding the approval.
+            return True
+        if verdict != "ok":
             _clear_device_credential(self.home)
             try:
                 _save_state(
@@ -718,10 +864,14 @@ class OnboardingManager:
             return False
         os.environ[credentials.ENV_KEY] = token
         _clear_device_credential(self.home)
+        connected = {
+            key: item for key, item in state.items()
+            if key not in {"approved", "previous_user_code", "previous_error_class"}
+        }
         try:
             _save_state(
                 self.home,
-                {**state, "phase": "connected", "connected_at": time.time(),
+                {**connected, "phase": "connected", "connected_at": time.time(),
                  "account": _clip(" ".join(str(value.get("account") or "").split()), 256),
                  "agent_name": _clip(" ".join(str(
                      value.get("agent_name") or state.get("agent_name") or "").split()),
@@ -859,6 +1009,7 @@ def _print_payload(payload: dict[str, Any], as_json: bool) -> None:
             "Open the link, sign in, check the code, and choose Approve connection. "
             "Then wait with `poll` (or check with `status`). "
             "Never paste an API key into chat."
+            + (f"\nNote: {payload['previous']}" if payload.get("previous") else "")
             + (f"\nNote: {payload['notice']}" if payload.get("notice") else ""),
             flush=True,
         )
@@ -887,7 +1038,7 @@ def _cli_status(home: Path, as_json: bool) -> int:
         _print_payload(_failed("missing_credential"), as_json)
         return 1
     _print_payload(described, as_json)
-    return 0 if described.get("status") == "authorization_pending" else 1
+    return 0 if described.get("status") in {"authorization_pending", "finishing"} else 1
 
 
 def _cli_start(home: Path, origin: str, as_json: bool) -> int:
@@ -905,7 +1056,7 @@ def _cli_start(home: Path, origin: str, as_json: bool) -> int:
         _print_payload(_ready("existing", _load_state(home)), as_json)
         return 0
     _print_payload(status, as_json)
-    return 0 if status.get("status") == "authorization_pending" else 1
+    return 0 if status.get("status") in {"authorization_pending", "finishing"} else 1
 
 
 def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
@@ -914,7 +1065,7 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
     if status is None:
         _print_payload(_ready("existing", _load_state(home)), as_json)
         return 0
-    if status.get("status") != "authorization_pending":
+    if status.get("status") not in {"authorization_pending", "finishing"}:
         _print_payload(status, as_json)
         return 1
     if not as_json:

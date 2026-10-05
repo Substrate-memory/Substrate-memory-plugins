@@ -27,7 +27,7 @@ hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plug
 The repository root is a Hermes plugin that loads this directory.
 Installing only this directory also works:
 `hermes plugins install Substrate-memory/Substrate-memory-plugins/plugins/substrate-hermes --enable`.
-To pin a release, add `--ref <40-character commit SHA of the v0.8.0 tag>`.
+To pin a release, add `--ref <40-character commit SHA of the v0.8.1 tag>`.
 
 ## Connect (one browser approval)
 
@@ -71,10 +71,10 @@ for the cutover after the first successful memory call.
 
 ## Supported Hermes versions
 
-Tested on Hermes 0.21.0-0.21.x (0.21.4 verified end to end). The plugin
-installs and runs on any version. Outside the tested range it tells you
-once: *Tested on Hermes 0.21.0-0.21.x; you are on X. It should work; if
-something does not, tell us.* It never upgrades Hermes. See
+Tested on Hermes 0.21.0 or newer (0.21.4 verified end to end). The plugin
+installs and runs on any version. Newer versions get no note; on an older
+Hermes it tells you once: *Tested on Hermes 0.21.0 or newer; you are on X.
+It should work; if something does not, tell us.* It never upgrades Hermes. See
 [COMPATIBILITY.md](../../COMPATIBILITY.md#version-policy).
 
 ## Import past conversations

@@ -75,14 +75,14 @@ After **Connected to Substrate.**, the agent asks once whether to import past co
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.8.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0-0.21.x) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Released |
+| v0.8.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Released |
 
-Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0-0.21.x; you are on X. It should work; tell us if not.* See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
+Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0 or newer; you are on X. It should work; tell us if not.* Newer Hermes versions get no note. See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
 
 Known limits, stated honestly:
 
 - Codex has no session-end hook, so the server seals idle sessions after 30 minutes.
-- Claude's SessionStart hook at launch runs before MCP connects, so the first turn implies the boundary.
+- Claude Code allows no MCP tool hook on SessionStart, so the first turn implies the session boundary.
 - If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
 - Plugin hooks in Codex must be trusted once via `/hooks`.
 - Cowork needs a new session after install before tools appear.

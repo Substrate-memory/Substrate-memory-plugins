@@ -67,6 +67,16 @@ def _no_background_thread(monkeypatch):
     monkeypatch.setattr(onboarding.OnboardingManager, "_start_thread", lambda self: None)
 
 
+def _poll_now(manager):
+    """One poll step now: forget the last poll time so the client-side
+    interval (which mirrors the server's slow_down window) does not skip it."""
+    path = manager.home / "substrate" / "onboarding.json"
+    state = json.loads(path.read_text())
+    state.pop("last_polled_at", None)
+    path.write_text(json.dumps(state))
+    return manager._poll_once()
+
+
 # ---------------------------------------------------------------------------
 # Loopback stub device server (test-only stand-in, not the real server)
 # ---------------------------------------------------------------------------
@@ -112,6 +122,8 @@ class _DeviceHandler(BaseHTTPRequestHandler):
             return {"jsonrpc": "2.0", "id": message_id, "result": {
                 "tools": [{"name": name} for name in self.server.tools]}}
         if method == "tools/call" and params.get("name") == "memory_search":
+            if self.server.search_delay:
+                time.sleep(self.server.search_delay)
             structured = {"contract_version": self.server.search_version, "results": []}
             return {"jsonrpc": "2.0", "id": message_id, "result": {
                 "content": [{"type": "text", "text": json.dumps(structured)}],
@@ -157,9 +169,21 @@ class _DeviceHandler(BaseHTTPRequestHandler):
             })
             return
         if parsed.path == "/oauth/token":
+            # Mirrors the real server's poll window (agent-api/agent-auth.mjs):
+            # a poll within `poll_window` of the previous one is slow_down.
+            now = time.monotonic()
+            with self.server.poll_guard:
+                last, self.server.last_poll = self.server.last_poll, now
+            if self.server.poll_window and last and now - last < self.server.poll_window:
+                self.server.slow_downs += 1
+                self._send(400, {"error": "slow_down"})
+                return
             mode = self.server.token_mode
             if callable(mode):
                 mode = mode()
+            if isinstance(mode, tuple):
+                self._send(mode[0], {"error": mode[1]})
+                return
             if mode == "slow_down_once":
                 if not self.server.slowed:
                     self.server.slowed = True
@@ -191,6 +215,11 @@ def device_server():
     server.link_base = None
     server.tools = MCP_TOOLS
     server.search_version = 2
+    server.search_delay = 0.0
+    server.poll_window = 0.0
+    server.poll_guard = threading.Lock()
+    server.last_poll = 0.0
+    server.slow_downs = 0
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     server.origin = f"http://127.0.0.1:{server.server_port}"
@@ -240,7 +269,7 @@ def test_poll_completes_and_stores_key_privately(monkeypatch, device_server, _is
     home = _isolated_home
     manager, _origin_value = _begin(monkeypatch, device_server, home)
     device_server.token_mode = "approved"
-    assert manager._poll_once() is False  # terminal: stored, thread stops
+    assert _poll_now(manager) is False  # terminal: stored, thread stops
     token_file = home / "substrate" / "credentials" / "access-token"
     assert token_file.read_text(encoding="utf-8") == TOKEN
     env_text = (home / ".env").read_text(encoding="utf-8")
@@ -266,10 +295,10 @@ def test_slow_down_backs_off_and_still_completes(
     # First poll sees slow_down only when the stub says so; emulate ordering:
     device_server.slowed = False
     device_server.token_mode = lambda: "slow_down_once" if not device_server.slowed else "approved"
-    assert manager._poll_once() is True
+    assert _poll_now(manager) is True
     state = json.loads((home / "substrate" / "onboarding.json").read_text())
     assert state["interval"] == 6  # 1 + 5 slow_down penalty
-    assert manager._poll_once() is False
+    assert _poll_now(manager) is False
     assert (home / "substrate" / "credentials" / "access-token").read_text() == TOKEN
 
 
@@ -277,7 +306,7 @@ def test_denied_and_expired_fail_safely(monkeypatch, device_server, _isolated_ho
     home = _isolated_home
     manager, _origin_value = _begin(monkeypatch, device_server, home)
     device_server.token_mode = "access_denied"
-    assert manager._poll_once() is False
+    assert _poll_now(manager) is False
     state = json.loads((home / "substrate" / "onboarding.json").read_text())
     assert state["phase"] == "declined"
     assert not (home / "substrate" / "credentials" / "onboarding-device").exists()
@@ -287,7 +316,7 @@ def test_denied_and_expired_fail_safely(monkeypatch, device_server, _isolated_ho
     manager2 = onboarding.OnboardingManager(home2.resolve(), device_server.origin)
     assert manager2.ensure(force=True)["status"] == "authorization_pending"
     device_server.token_mode = "expired_token"
-    assert manager2._poll_once() is False
+    assert _poll_now(manager2) is False
     state2 = json.loads((home2 / "substrate" / "onboarding.json").read_text())
     assert state2["phase"] == "failed"
 
@@ -301,7 +330,7 @@ def test_bad_scope_or_token_shape_fails_closed(monkeypatch, device_server, _isol
         "token_type": "Bearer",
         "scope": "capture",  # wrong: must be exactly "capture retrieve"
     }
-    assert manager._poll_once() is False
+    assert _poll_now(manager) is False
     state = json.loads((home / "substrate" / "onboarding.json").read_text())
     assert state == {**state, "phase": "failed"}
     assert not (home / "substrate" / "credentials" / "access-token").exists()
@@ -315,7 +344,7 @@ def test_bad_scope_or_token_shape_fails_closed(monkeypatch, device_server, _isol
     home3.mkdir()
     manager3 = onboarding.OnboardingManager(home3.resolve(), device_server.origin)
     assert manager3.ensure(force=True)["status"] == "authorization_pending"
-    assert manager3._poll_once() is False
+    assert _poll_now(manager3) is False
     state3 = json.loads((home3 / "substrate" / "onboarding.json").read_text())
     assert state3["phase"] == "failed"
 
@@ -363,7 +392,7 @@ def test_auth_failure_clears_token_but_keeps_spool(
     home = _isolated_home
     manager, _origin_value = _begin(monkeypatch, device_server, home)
     device_server.token_mode = "approved"
-    assert manager._poll_once() is False
+    assert _poll_now(manager) is False
 
     envelope = {
         "schema_version": 3,
@@ -394,7 +423,7 @@ def test_auth_failure_clears_token_but_keeps_spool(
     home2 = home  # same profile repairs in place
     manager2 = onboarding.OnboardingManager(home2.resolve(), device_server.origin)
     assert manager2.ensure(force=True)["status"] == "authorization_pending"
-    assert manager2._poll_once() is False
+    assert _poll_now(manager2) is False
     assert credentials.stored_api_key(home.resolve()) == TOKEN
     assert spool_module.get_spool().pending() == 1
 
@@ -991,7 +1020,7 @@ def test_connected_names_the_account_once(monkeypatch, device_server, reply, exp
     assert manager.ensure(force=True)["status"] == "authorization_pending"
     device_server.token_mode = "approved"
     device_server.token_body = {**device_server.token_body, **reply}
-    assert manager._poll_once() is False
+    assert _poll_now(manager) is False
     assert onboarding.take_connected_announcement() == expected
     assert onboarding.take_connected_announcement() == ""  # once only
     proc = subprocess.run(
@@ -1033,11 +1062,10 @@ def test_pre_llm_call_shows_link_and_code_in_chat(monkeypatch, device_server):
 def test_host_version_notice_is_soft():
     from substrate import plugin
 
-    assert plugin.host_version_notice("0.21.0") == ""
-    assert plugin.host_version_notice("0.21.4") == ""
-    assert plugin.host_version_notice("") == ""
-    notice = plugin.host_version_notice("0.22.1")
-    assert "0.21.0-0.21.x" in notice and "0.22.1" in notice and "should work" in notice
+    for version in ("0.21.0", "0.21.4", "0.22.1", "0.30.0", "1.0.0", "", "dev"):
+        assert plugin.host_version_notice(version) == "", version
+    notice = plugin.host_version_notice("0.20.3")
+    assert "0.21.0 or newer" in notice and "0.20.3" in notice and "should work" in notice
 
 
 def test_connection_check_matches_the_current_server(monkeypatch, device_server):
@@ -1069,3 +1097,137 @@ def test_next_message_after_approval_connects_and_confirms(monkeypatch, device_s
     assert credentials.stored_api_key(_isolated_home_path()) == TOKEN
     third = plugin.pre_llm_call("s", "and again", [])
     assert third is None or "Connected to Substrate as" not in third["context"]
+
+
+# ---------------------------------------------------------------------------
+# 0.8.1 regressions from a live Hermes sign-in (2026-09-26): the user
+# approved each code, the agent saw "still pending", and the plugin issued a
+# new code every time.
+# ---------------------------------------------------------------------------
+
+
+def _state(home):
+    return json.loads((home / "substrate" / "onboarding.json").read_text())
+
+
+def test_slow_first_memory_call_keeps_the_approval(monkeypatch, device_server, _isolated_home):
+    """The first memory call on a newly approved agent can open a cold tenant.
+    v0.8.0 gave it 5 s, then threw the issued key and the device code away, so
+    the next turn started a new code although the user had approved."""
+    from substrate import plugin
+
+    home = _isolated_home
+    manager, _ = _begin(monkeypatch, device_server, home)
+    monkeypatch.setattr(onboarding, "CHECK_TIMEOUT_SECONDS", 0.3)
+    device_server.search_delay = 1.0
+    device_server.token_mode = "approved"
+    assert _poll_now(manager) is True  # keep polling, not failed
+    state = _state(home)
+    assert state["phase"] == "pending" and state["approved"] is True
+    assert (home / "substrate" / "credentials" / "onboarding-device").exists()
+    assert credentials.stored_api_key(home) == ""
+
+    described = manager.describe(state)
+    assert described["status"] == "finishing"
+    notice = plugin._login_notice(described)
+    assert "Link:" not in notice and "BCDF-GHJK" in notice and "onboard.py start" in notice
+
+    device_server.search_delay = 0.0  # the tenant is warm now
+    assert _poll_now(manager) is False
+    assert _state(home)["phase"] == "connected"
+    assert credentials.stored_api_key(home) == TOKEN
+
+
+def test_rejected_key_still_fails(monkeypatch, device_server, _isolated_home):
+    home = _isolated_home
+    manager, _ = _begin(monkeypatch, device_server, home)
+    device_server.token = "sk_sub_" + "c" * 32  # the MCP server refuses TOKEN
+    device_server.token_mode = "approved"
+    assert _poll_now(manager) is False
+    state = _state(home)
+    assert state["phase"] == "failed"
+    assert state["error_class"] == "authenticated_health_check_failed"
+
+
+def test_redemption_race_keeps_polling(monkeypatch, device_server, _isolated_home):
+    """Two pollers redeeming one approval: the server answers the loser
+    409 temporarily_unavailable. v0.8.0 marked the grant failed, and the
+    winner's key was then dropped because the state was no longer pending."""
+    home = _isolated_home
+    manager, _ = _begin(monkeypatch, device_server, home)
+    device_server.token_mode = (409, "temporarily_unavailable")
+    assert _poll_now(manager) is True
+    assert _state(home)["phase"] == "pending"
+    device_server.token_mode = "approved"
+    assert _poll_now(manager) is False
+    assert credentials.stored_api_key(home) == TOKEN
+
+
+def test_done_message_connects_while_background_poll_sleeps(monkeypatch, device_server, _isolated_home):
+    """User approves, types "done" before the background thread's next poll:
+    the turn checks now instead of showing the same link again."""
+    home = _isolated_home
+    manager, _ = _begin(monkeypatch, device_server, home)
+    sleeper = threading.Thread(target=time.sleep, args=(5,), daemon=True)
+    sleeper.start()
+    manager._thread = sleeper  # the gateway's poller is alive, mid-sleep
+    state = _state(home)
+    state["last_polled_at"] = time.time()  # and it polled a moment ago
+    (home / "substrate" / "onboarding.json").write_text(json.dumps(state))
+    device_server.token_mode = "approved"
+    assert manager.ensure() is None
+    assert credentials.stored_api_key(home) == TOKEN
+
+
+def test_pollers_share_the_server_poll_window(monkeypatch, device_server, _isolated_home):
+    """The gateway thread and an agent-run onboard.py poll the same grant.
+    Unserialized they land inside each other's slow_down window."""
+    home = _isolated_home
+    manager, _ = _begin(monkeypatch, device_server, home)
+    device_server.poll_window = 1.0  # the stub grant's interval is 1 s
+    device_server.token_mode = "authorization_pending"
+    other = onboarding.OnboardingManager(home, manager.origin)
+    errors = []
+
+    def run(m):
+        try:
+            for _ in range(3):
+                m._poll_once(wait=3.0)
+        except Exception as exc:  # pragma: no cover - surfaced below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run, args=(m,)) for m in (manager, other)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert not errors
+    assert device_server.slow_downs == 0
+    assert _state(home)["phase"] == "pending"
+
+
+def test_new_code_says_why_the_old_one_ended(monkeypatch, device_server, _isolated_home):
+    from substrate import plugin
+
+    home = _isolated_home
+    _origin(monkeypatch, device_server)
+    (home / "substrate").mkdir(parents=True, exist_ok=True)
+    onboarding._save_state(home, {
+        "phase": "failed", "user_code": "66T2-PPCS",
+        "error_class": "authorization_expired", "attempted_at": 0.0,
+    })
+    status = onboarding.ensure_started()
+    assert status["status"] == "authorization_pending" and status["user_code"] == "BCDF-GHJK"
+    assert "66T2-PPCS" in status["previous"] and "expired" in status["previous"]
+    notice = plugin._login_notice(status)
+    assert "66T2-PPCS" in notice and "Code: BCDF-GHJK" in notice
+
+
+def test_expiry_after_approval_is_not_called_unapproved(monkeypatch, device_server, _isolated_home):
+    home = _isolated_home
+    manager, _ = _begin(monkeypatch, device_server, home)
+    state = {**_state(home), "approved": True}
+    (home / "substrate" / "onboarding.json").write_text(json.dumps(state))
+    device_server.token_mode = "expired_token"
+    assert _poll_now(manager) is False
+    assert _state(home)["error_class"] == "authenticated_health_check_failed"

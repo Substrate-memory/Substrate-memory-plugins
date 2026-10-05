@@ -86,7 +86,7 @@ def test_pre_llm_call_posts_exact_contract_request(monkeypatch):
             "turn_id": "turn-2",
             "parent_session_id": "parent-1",
         },
-        "timeout": 0.5,
+        "timeout": 2.0,
     }
 
 

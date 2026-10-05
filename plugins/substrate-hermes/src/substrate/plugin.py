@@ -46,9 +46,11 @@ TOOLSET = "substrate"
 # Absolute path of the bundled login CLI, so instructions never say "<plugin-dir>".
 ONBOARD_CLI = str(Path(__file__).resolve().parents[2] / "onboard.py")
 ISSUES_URL = "https://github.com/Substrate-memory/Substrate-memory-plugins/issues"
-# Soft version policy (COMPATIBILITY.md): install and run on any host version;
-# outside the tested range, tell the user once instead of refusing.
-TESTED_HERMES_MINOR = "0.21"
+# Soft version policy (COMPATIBILITY.md): install and run on any host version.
+# The tested range is open-ended (this release and newer); only an older host
+# gets a one-time note, and nothing is ever refused.
+TESTED_HERMES_FLOOR = (0, 21, 0)
+TESTED_HERMES_RANGE = "0.21.0 or newer"
 _version_notice_shown = False
 _TOOL_RESULT_BYTES = contract.LIMITS["max_tool_result_bytes"]
 _TEXT_SECRET_RE = re.compile(
@@ -140,6 +142,12 @@ def _turn_context_args(
     return args
 
 
+# Per-turn recall budget. 0.5 s was below one authenticated round trip to the
+# hosted server (TLS + auth + recall), so the block was almost always dropped;
+# a chat turn's own LLM call takes seconds, so 2 s still adds no felt delay.
+TURN_CONTEXT_TIMEOUT = 2.0
+
+
 def pre_llm_call(
     session_id: str = "",
     user_message: str = "",
@@ -174,7 +182,7 @@ def pre_llm_call(
         args = _turn_context_args(session_id, user_message, **kwargs)
         if args is None:
             return _with_notes([], notes)
-        structured, _text = client.call_tool("memory_turn_context", args, timeout=0.5)
+        structured, _text = client.call_tool("memory_turn_context", args, timeout=TURN_CONTEXT_TIMEOUT)
         checked = contract.validate_mcp_turn_context(structured)
         # Bind the response to this request, rather than trusting valid data
         # for another session.
@@ -203,13 +211,25 @@ def running_hermes_version() -> str:
     return str(version or "")
 
 
+def _version_tuple(version: str) -> tuple[int, ...] | None:
+    match = re.match(r"^\s*v?(\d+)\.(\d+)(?:\.(\d+))?", version or "")
+    if match is None:
+        return None
+    return tuple(int(part or 0) for part in match.groups())
+
+
 def host_version_notice(version: str | None = None) -> str:
-    """Friendly note when the host is outside the tested range; never blocks."""
+    """Friendly note only when the host is older than the tested floor; never blocks.
+
+    Newer and unrecognized versions get no note: new Hermes releases are
+    expected to work, and nagging about them reads as a restriction.
+    """
     version = running_hermes_version() if version is None else version
-    if not version or version == TESTED_HERMES_MINOR or version.startswith(TESTED_HERMES_MINOR + "."):
+    parsed = _version_tuple(version)
+    if parsed is None or parsed >= TESTED_HERMES_FLOOR:
         return ""
     return (
-        f"Substrate memory is tested on Hermes {TESTED_HERMES_MINOR}.0-{TESTED_HERMES_MINOR}.x; "
+        f"Substrate memory is tested on Hermes {TESTED_HERMES_RANGE}; "
         f"this host runs Hermes {version}. It should work. If something does not, "
         f"tell us at {ISSUES_URL}."
     )
@@ -258,6 +278,13 @@ def _cli_hint() -> str:
 
 def _login_notice(status: dict[str, Any] | None = None) -> str:
     """Missing-credential instruction: show the link and code, never ask for a key."""
+    if isinstance(status, dict) and status.get("status") == "finishing":
+        return (
+            "<substrate-connect>\n"
+            f"{status.get('message', '')} Tell the user this in plain words. Do not show "
+            "a link, do not start a new sign-in, and do not run onboard.py start.\n"
+            "</substrate-connect>"
+        )
     if isinstance(status, dict) and status.get("status") == "authorization_pending":
         minutes = max(1, (int(status.get("expires_in") or 0) + 59) // 60)
         lines = [
@@ -267,9 +294,15 @@ def _login_notice(status: dict[str, Any] | None = None) -> str:
             "link, sign in, check the code, and choose Approve connection:",
             f"Link: {status.get('verification_uri_complete', '')}",
             f"Code: {status.get('user_code', '')} (valid for {minutes} minutes)",
-            "The plugin finishes by itself after approval; a later turn confirms the "
-            "account. Never ask for or accept an API key.",
+            "The plugin checked with Substrate just before this message: this code is not "
+            "approved yet. If the user says they already approved it, ask them to reopen "
+            "the link and confirm the page ends at Connection approved. Do not start a new "
+            "sign-in or run onboard.py start while this code is valid. The plugin finishes "
+            "by itself after approval; a later turn confirms the account. Never ask for or "
+            "accept an API key.",
         ]
+        if status.get("previous"):
+            lines.append(f"Also tell the user: {status['previous']}")
         if status.get("notice"):
             lines.append(f"Also tell the user: {status['notice']}")
         lines.append("</substrate-connect>")
@@ -920,6 +953,13 @@ def _call_tool(tool_name: str, request: dict[str, Any], shape: Any) -> str:
 def _login_grant_result() -> str:
     """Surface the pending approval link (or a plain error) to the agent."""
     status = _start_login()
+    if isinstance(status, dict) and status.get("status") == "finishing":
+        return _compact(
+            {
+                "status": "authorization_finishing",
+                "message": f"{status.get('message', '')} Retry this call on a later message.",
+            }
+        )
     if isinstance(status, dict) and status.get("status") == "authorization_pending":
         result = {
             "status": "authorization_required",
@@ -933,6 +973,8 @@ def _login_grant_result() -> str:
             "user_code": str(status.get("user_code", "")),
             "expires_in": status.get("expires_in", 0),
         }
+        if status.get("previous"):
+            result["previous"] = str(status["previous"])
         if status.get("notice"):
             result["notice"] = str(status["notice"])
         return _compact(result)
