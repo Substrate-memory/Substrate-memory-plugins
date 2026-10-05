@@ -72,7 +72,7 @@ Install the `substrate-claude` package through the client's supported interface.
 6. **Start a new Cowork session.** In the current Cowork build, a plugin MCP server is registered only at session start (observed behavior). Nothing opens a browser tab in the old session. If tools still do not appear in the new session, quit and reopen the app.
 7. In the new session, paste the self-check prompt. The first memory call opens the browser link. Complete the same Substrate sign-in, review, approval and verification sequence. Trust plugin hooks once via `/hooks` if the host asks.
 
-Required client installation/permission dialogs cannot be bypassed by a repo prompt. The user must perform steps the client does not let the agent automate. Note the launch limit: Claude's SessionStart hook at launch runs before MCP connects, so the first turn implies the boundary. If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
+Required client installation/permission dialogs cannot be bypassed by a repo prompt. The user must perform steps the client does not let the agent automate. Note the launch limit: Claude Code allows no MCP tool hook on SessionStart, so the first turn implies the session boundary. If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
 
 > TODO (docs worker): confirm the exact Cowork steps against `plugins/substrate-claude/README.md` once that package lands.
 

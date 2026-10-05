@@ -142,6 +142,12 @@ def _turn_context_args(
     return args
 
 
+# Per-turn recall budget. 0.5 s was below one authenticated round trip to the
+# hosted server (TLS + auth + recall), so the block was almost always dropped;
+# a chat turn's own LLM call takes seconds, so 2 s still adds no felt delay.
+TURN_CONTEXT_TIMEOUT = 2.0
+
+
 def pre_llm_call(
     session_id: str = "",
     user_message: str = "",
@@ -176,7 +182,7 @@ def pre_llm_call(
         args = _turn_context_args(session_id, user_message, **kwargs)
         if args is None:
             return _with_notes([], notes)
-        structured, _text = client.call_tool("memory_turn_context", args, timeout=0.5)
+        structured, _text = client.call_tool("memory_turn_context", args, timeout=TURN_CONTEXT_TIMEOUT)
         checked = contract.validate_mcp_turn_context(structured)
         # Bind the response to this request, rather than trusting valid data
         # for another session.

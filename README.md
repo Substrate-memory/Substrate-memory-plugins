@@ -82,7 +82,7 @@ Every package installs on any host version. Outside the tested range the agent (
 Known limits, stated honestly:
 
 - Codex has no session-end hook, so the server seals idle sessions after 30 minutes.
-- Claude's SessionStart hook at launch runs before MCP connects, so the first turn implies the boundary.
+- Claude Code allows no MCP tool hook on SessionStart, so the first turn implies the session boundary.
 - If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
 - Plugin hooks in Codex must be trusted once via `/hooks`.
 - Cowork needs a new session after install before tools appear.

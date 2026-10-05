@@ -21,8 +21,8 @@ plugin: sign-in runs through the host browser flow.
 - `PostToolUse` calls `memory_capture_tool` for every tool call.
 - `Stop` calls `memory_capture_turn` for the main agent; `SubagentStop` calls
   it with the subagent context.
-- `SessionStart`, `PreCompact`, and `SessionEnd` call
-  `memory_session_boundary` so sessions seal cleanly.
+- `PreCompact` and `SessionEnd` call `memory_session_boundary` so sessions
+  seal cleanly; the first turn of a session implies its start.
 - Every hook fails open: a failed memory call never blocks the session.
 
 ## Install for Cowork
@@ -75,8 +75,8 @@ script never contacts the network; the agent passes its printed batches to
 
 ## Known limits
 
-- `SessionStart` at launch fires before MCP servers connect, so the hook call
-  is skipped; the boundary is implied by the first turn instead.
+- Claude Code does not allow MCP tool hooks on `SessionStart`, so there is
+  none; the boundary is implied by the first turn instead.
 - A cloud session that ends has a short hook budget; the server also seals a
   session after 30 minutes idle, so nothing is lost.
 - Cowork cloud sessions cannot run local servers or scripts: everything goes

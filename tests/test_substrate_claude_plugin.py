@@ -105,16 +105,9 @@ def test_post_tool_use_has_no_matcher() -> None:
 
 def test_session_boundaries() -> None:
     entries = _hook_entries()
-    by_matcher = {}
-    for group in entries["SessionStart"]:
-        by_matcher[group["matcher"]] = group["hooks"][0]
-    assert set(by_matcher) == {"startup", "resume", "clear", "compact"}
-    for matcher, hook in by_matcher.items():
-        assert hook["tool"] == "memory_session_boundary"
-        assert hook["server"] == SERVER
-        assert hook["input"]["boundary"] == "${source}"
-        assert hook["input"]["session_id"] == "${session_id}"
-        assert hook["input"]["platform"] == "claude"
+    # Claude Code refuses mcp_tool hooks on SessionStart ("no MCP client
+    # context") and shows the user an error on every launch: none is declared.
+    assert "SessionStart" not in entries
     pre = entries["PreCompact"][0]["hooks"][0]
     assert pre["tool"] == "memory_session_boundary"
     assert pre["input"]["boundary"] == "compact"

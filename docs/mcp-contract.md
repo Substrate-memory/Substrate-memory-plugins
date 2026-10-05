@@ -258,14 +258,14 @@ hook event. Reference mapping (the plugin packages ship the exact files):
 | `PostToolUse` (all tools) | `memory_capture_tool` | `session_id, tool_use_id, tool_name, tool_input, tool_response, platform` |
 | `Stop` | `memory_capture_turn` | `session_id, assistant_message=last_assistant_message, agent_context: main, platform` |
 | `SubagentStop` | `memory_capture_turn` | `… agent_context: subagent, agent_id, parent_session_id=session_id` |
-| `SessionStart` (`startup\|resume\|clear\|compact`) | `memory_session_boundary` | `session_id, boundary=source, platform` |
+| `SessionStart` | — (Codex only; Claude Code rejects `mcp_tool` hooks on this event) | |
 | `PreCompact` | `memory_session_boundary` | `boundary: compact` |
 | `SessionEnd` (Claude only; Codex has no MCP hook here) | `memory_session_boundary` | `boundary: end, reason` |
 
 Timeouts: `UserPromptSubmit` 5 s, `PostToolUse`/`Stop`/`SubagentStop` 5 s,
 `SessionEnd` 3 s. Every hook fails open. Known host limits, documented to users:
-Claude `SessionStart` at launch fires before MCP servers connect (the boundary is
-then implied by the first turn); Codex `SessionEnd` cannot call MCP tools (the
+Claude Code rejects `mcp_tool` hooks on `SessionStart` (no MCP client context),
+so the plugin declares none and the first turn implies the boundary; Codex `SessionEnd` cannot call MCP tools (the
 server seals the session after 30 minutes idle).
 
 ## 8. Sync and history import (client side)
