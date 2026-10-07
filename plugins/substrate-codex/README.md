@@ -11,6 +11,9 @@ One package serves ChatGPT Work, Codex in the ChatGPT desktop app, and Codex CLI
 - Explicit memory: ask the agent to remember or forget a fact.
 - Catch-up sync: if some turns were not saved yet, the agent imports them
   from the local transcript on request.
+- Past conversations: right after connecting, the agent offers once to import
+  your earlier Codex sessions on this computer (**Import all** / **Let me
+  pick** / **Not now**).
 
 ## Install
 
@@ -43,10 +46,20 @@ codex mcp login substrate-memory
 
 Install → Sign in → Review → Approve connection → Connected to Substrate.
 
-The first memory call opens **Connect your agent to Substrate**. Sign in,
-review the connection, choose **Approve connection**, then return to the agent.
-The agent confirms with an authenticated `memory_search` check and reports
-**Connected to Substrate.**
+The agent starts sign-in (**Connect your agent to Substrate**). Sign in,
+review the connection, choose **Approve connection**. The agent confirms with
+an authenticated `memory_search` check, reports **Connected to Substrate.**,
+and in the same reply offers the import:
+
+> I found 42 past conversations on this computer (610 turns, 2 Aug to 7 Oct
+> 2026). Import them into Substrate? **Import all** / **Let me pick** / **Not now**
+
+**Import all** uploads everything except the current conversation, in the
+background, straight from the local script to Substrate with a short-lived
+import-only ticket; your history never passes through the chat. The agent
+reports progress and the final `Imported N sessions (T turns): S stored, D
+duplicate, R rejected.` **Not now** is remembered; ask "import my past
+conversations" any time.
 
 ## Hook trust step
 
@@ -66,8 +79,8 @@ passwords, tokens, and keys are replaced before storage.
 - Memory tools never receive pasted secrets; the agent redacts them first.
 - `memory_forget` suppresses a fact from normal recall on your explicit
   request.
-- History import only runs after you approve it, and only from transcripts
-  on your own machine.
+- History import only runs after you choose it, only from transcripts on your
+  own machine, and is redacted on your machine and again on the server.
 
 ## Known limits
 
@@ -75,6 +88,8 @@ passwords, tokens, and keys are replaced before storage.
   ends, so the server seals idle sessions after 30 minutes.
 - Plugins installed on the web do not deploy scripts, so the sync and import
   scripts require the desktop app or the CLI.
+- The import upload needs network access from Codex's sandbox; Codex asks you
+  to allow it.
 - At session launch, the start hook can run before the memory server is
   connected; the boundary is then picked up on the first turn.
 

@@ -54,11 +54,16 @@ These are client-specific preparation steps, not different Substrate sign-in flo
 
 ### Claude Code (`plugins/substrate-claude`)
 
-Install the `substrate-claude` package per its README, then complete the common browser flow and run the self-check. The package wires `memory_*` hooks so recall is injected before every turn and every completed turn is captured automatically, including bounded redacted tool calls and results. The host transcript is the spool: if the server reports missing turns, the agent runs the package sync command to re-import them with deterministic ids.
+First run `claude plugin list --json`. If any `substrate-claude@…` entry exists (a copy synced from claude.ai shows as `substrate-claude@synced`), it is already installed: do not install a second copy, enable it if needed (`claude plugin enable <id>`) and just sign in. Otherwise the agent installs it:
 
-> TODO (docs worker): confirm the exact install commands against `plugins/substrate-claude/README.md` once that package lands, and replace this pointer with the confirmed commands.
+```text
+claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
+claude plugin install substrate-claude@substrate-marketplace
+```
 
-Do not use the deprecated API-key plugin described below. Plugin hooks must be trusted once via `/hooks`.
+The user types `/reload-plugins`, then `/substrate-claude:substrate-connect`. That command starts sign-in at once, keeps checking while the user approves in the browser (no "done" needed), verifies with `memory_search`, reports **Connected to Substrate.**, and offers the import in the same reply. The package wires `memory_*` hooks so recall is injected before every turn and every completed turn is captured automatically, including bounded redacted tool calls and results. The host transcript is the spool: if the server reports missing turns, the agent runs the package sync command to re-import them with deterministic ids.
+
+Do not use the deprecated API-key plugin described below.
 
 ### Cowork (`plugins/substrate-claude`)
 
@@ -73,8 +78,6 @@ Install the `substrate-claude` package through the client's supported interface.
 7. In the new session, paste the self-check prompt. The first memory call opens the browser link. Complete the same Substrate sign-in, review, approval and verification sequence. Trust plugin hooks once via `/hooks` if the host asks.
 
 Required client installation/permission dialogs cannot be bypassed by a repo prompt. The user must perform steps the client does not let the agent automate. Note the launch limit: Claude Code allows no MCP tool hook on SessionStart, so the first turn implies the session boundary. If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
-
-> TODO (docs worker): confirm the exact Cowork steps against `plugins/substrate-claude/README.md` once that package lands.
 
 ### Codex and ChatGPT Work (`plugins/substrate-codex`)
 
@@ -98,7 +101,7 @@ Then complete the common browser flow and run the self-check. Do not use the dep
 
 ### Hermes (`plugins/substrate-hermes`)
 
-Install with one command from the repository URL: `hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable` (the root is a Hermes plugin that loads `plugins/substrate-hermes`; installing the `plugins/substrate-hermes` directory also works). It installs on any Hermes version; outside the tested range it says so once (see [COMPATIBILITY.md](../COMPATIBILITY.md#version-policy)). Run `onboard.py start` from the installed plugin directory, show the user the printed link and code, then `onboard.py poll`; it ends with **Connected to Substrate as you@example.com.** (your account) After a gateway restart the plugin also shows the link and code in chat by itself. Do not inspect another profile or replace its device authorization with a custom OAuth client. Keep existing memory configuration unchanged until a memory request succeeds. Then run the shared **Import past conversations** step below; it is identical for every host.
+Install with one command from the repository URL: `hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plugins --enable` (the root is a Hermes plugin that loads `plugins/substrate-hermes`; installing the `plugins/substrate-hermes` directory also works). It installs on any Hermes version; outside the tested range it says so once (see [COMPATIBILITY.md](../COMPATIBILITY.md#version-policy)). Run `onboard.py start` from the installed plugin directory, show the user the printed link and code, then `onboard.py poll`; it ends with **Connected to Substrate as you@example.com.** (your account) After a gateway restart the plugin also shows the link and code in chat by itself. Do not inspect another profile or replace its device authorization with a custom OAuth client. Keep existing memory configuration unchanged until a memory request succeeds. Then run the shared **Import past conversations** step below.
 
 ### Other MCP-capable agents (`plugins/substrate-mcp`, fallback)
 
@@ -106,28 +109,32 @@ Use the thin `plugins/substrate-mcp` package only when no native package fits. C
 
 For another MCP host, use its documented configuration interface. Do not invent a command or bypass client permissions. A client with only local stdio or incompatible OAuth is not automatically supported; never work around that limitation by asking the user for a token.
 
-## Import past conversations (asked once, same for every host)
+## Import past conversations (offered once, same for every host)
 
-After **Connected to Substrate.**, the agent asks exactly once:
+Right after **Connected to Substrate.**, in the same reply, the agent offers once per computer (agent connection), with counts from this computer:
 
 ```text
-Do you want to import past conversations into Substrate? I will show you the sessions I can read on this host, and import only what you confirm. Nothing is written before you confirm.
+I found 87 past conversations on this computer (1,204 turns, 3 Mar to 7 Oct 2026). Import them into Substrate? Import all / Let me pick / Not now
 ```
 
-If the user says no, do not ask again. If yes:
+- **Import all** (default): every local conversation except the current one, which the hooks already capture live. The import runs in the background; the agent keeps reporting progress and ends with `Imported N sessions (T turns): S stored, D duplicate, R rejected.` without waiting for the user.
+- **Let me pick**: the agent lists conversations by date and title and imports only the chosen ones.
+- **Not now**: recorded and never asked again. The user can ask "import my past conversations" any time.
 
-1. List the sessions this agent can read on this host: its own local session transcripts (Claude and Codex packages provide a sync command that lists them; Hermes and fallback hosts use their own readable history or an export file the user places where the agent can read it). Show the list to the user first. The agent has no access to another app's chat history. If nothing is accessible, say so plainly and stop.
-2. After the user confirms the list of sessions, import the confirmed sessions as raw, redacted turns with `--origin history_replay` and a fresh `batch_id` (Claude/Codex sync), so the server stores each turn once under a deterministic id. On hosts without a sync command, write confirmed durable facts with `memory_remember` (one item per call, one new `operation_id` per item, at most 4096 bytes of text). Nothing is written before confirmation.
-3. Never import secrets, API keys, tokens, passwords, or private credentials. They are redacted client- and server-side.
-4. Report what was imported (for example the `memory_import_status` result) and any failures.
+How each host does it:
 
-Raw unconfirmed transcripts are never uploaded. This step is the same for every host; only the readable history differs.
+- **Claude Code and Codex.** `scripts/substrate_sync.py --preview` gives the counts. On a yes the agent calls `memory_import_ticket` and runs `substrate_sync.py --upload --all --background` with the ticket in `SUBSTRATE_IMPORT_TICKET` / `SUBSTRATE_MCP_URL` (environment only, never shown in chat), then polls `--status`. The script posts redacted `history_replay` batches (at most 64 items / 240 KiB) straight to Substrate, so conversation content never passes through the model. An offer hook (`--offer-check`) reminds the agent until the user has answered once.
+- **Hermes.** The plugin reads its own profile's history and sends it through its spool after live turns (see `plugins/substrate-hermes`).
+- **Cowork cloud** has no local history: the offer is skipped silently.
+- **Fallback MCP hosts** list what they can read and import confirmed turns with `memory_import` (or confirmed facts with `memory_remember`), per `plugins/substrate-mcp/INSTALL.md`.
+
+Secrets are redacted client- and server-side. Imports are idempotent: repeats are stored once. If an import stops (for example the 60-minute ticket expired), the agent gets a new ticket and runs it again; finished conversations are skipped.
 
 ## Legacy plugins
 
 The API-key based Claude Code, Codex, and Cowork plugins shipped in August 2026 are deprecated. This includes `substrate_capture`, local paths such as `~/.substrate/*/spool` (including `~/.substrate/claude_code_memory/spool`), and any setup using `SUBSTRATE_API_URL` or `SUBSTRATE_API_KEY`.
 
-Uninstall those legacy plugins. Do not set `SUBSTRATE_API_KEY` by hand on any host; the current product does not issue API keys to users. (The Hermes plugin writes its own private credential after browser approval. Leave that alone.) Their local spools are not migrated; pending spool events do not become Substrate memory. Install the matching v0.8.1 package and complete browser authorization instead.
+Uninstall those legacy plugins. Do not set `SUBSTRATE_API_KEY` by hand on any host; the current product does not issue API keys to users. (The Hermes plugin writes its own private credential after browser approval. Leave that alone.) Their local spools are not migrated; pending spool events do not become Substrate memory. Install the matching v0.9.0 package and complete browser authorization instead.
 
 ## Recovery and implementation boundary
 

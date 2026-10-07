@@ -1,6 +1,6 @@
 # Releasing
 
-Release `0.8.1` makes Hermes sign-in keep the user's approval (on top of `0.8.0`, which fixed Hermes install and sign-in after the `0.7.0` unified-connection release). The repository ships four deterministic archives (see `scripts/build_release.py` for the exact archive set; if the builder still lists the old two-archive layout, it must be extended to the four packages below before release):
+Release `0.9.0` adds the one-time offer to import past conversations right after connecting, with direct uploads for Claude Code and Codex (`memory_import_ticket`) so history never passes through the model (on top of `0.8.1`). The repository ships four deterministic archives (see `scripts/build_release.py` for the exact archive set; if the builder still lists the old two-archive layout, it must be extended to the four packages below before release):
 
 - `substrate-hermes.zip`: the Hermes package (`plugins/substrate-hermes`) with durable write-ahead spool, session boundaries, subagent capture, and device login.
 - `substrate-claude.zip`: the Claude package (`plugins/substrate-claude`) with `memory_*` hook wiring and the sync command for Cowork and Claude Code.

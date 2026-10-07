@@ -10,4 +10,4 @@ Do not put API keys, OAuth tokens, client secrets, passwords, or private credent
 
 ## Verification and import rules
 
-Do not report success without an authenticated smoke call: only a passed `memory_search` means **Connected to Substrate.** History import sends raw turns only for sessions the user confirms, redacted on both sides; nothing is written before confirmation. See [docs/threat-model.md](docs/threat-model.md) and [docs/installation.md](docs/installation.md).
+Do not report success without an authenticated smoke call: only a passed `memory_search` means **Connected to Substrate.** History import runs only after the user chooses **Import all** or picks sessions, sends redacted raw turns (redacted again server-side), and never sends the current session. Claude Code and Codex upload with a short-lived import-only ticket from `memory_import_ticket` (60 minutes, `memory_import`/`memory_import_status` only, revoked with its parent connection); the script reads it from the environment, never argv, and agents never show it in chat. See [docs/threat-model.md](docs/threat-model.md) and [docs/installation.md](docs/installation.md).

@@ -2,8 +2,9 @@
 
 One package serves both hosts. It registers a remote Substrate MCP server, a
 usage skill, three slash commands, and the hooks that capture turns
-automatically. There is no local server and no credential handling in the
-plugin: sign-in runs through the host browser flow.
+automatically. There is no local server and the plugin stores no credentials:
+sign-in runs through the host browser flow, and history import uses a
+short-lived, import-only ticket held in memory by the upload script.
 
 ## What you get
 
@@ -11,8 +12,8 @@ plugin: sign-in runs through the host browser flow.
   automatic capture of prompts, tool use, and answers, plus
   `/substrate-claude:substrate-connect`, `/substrate-claude:substrate-sync`,
   and `/substrate-claude:substrate-import`.
-- In **Claude Code**: the same skill, commands, and automatic capture, with
-  local transcript sync through `scripts/substrate_sync.py`.
+- In **Claude Code**: the same skill, commands, and automatic capture, plus
+  past-conversation import and catch-up sync through `scripts/substrate_sync.py`.
 
 ## How it works
 
@@ -24,6 +25,10 @@ plugin: sign-in runs through the host browser flow.
 - `PreCompact` calls `memory_session_boundary`. Claude Code allows no MCP tool
   hook at session start or end, so the first turn implies the start and the
   server seals a session after 30 minutes idle.
+- A second `UserPromptSubmit` hook runs `scripts/substrate_sync.py --offer-check`
+  (a local command, no network): until you have answered the import offer
+  once, it reminds the agent to offer it right after connecting. Afterwards it
+  is silent.
 - Every hook fails open: a failed memory call never blocks the session.
 
 ## Install for Cowork
@@ -42,24 +47,37 @@ plugin: sign-in runs through the host browser flow.
 
 ## Install for Claude Code
 
+If `claude plugin list` already shows `substrate-claude@synced` (synced from
+claude.ai), do not install another copy: just sign in. Otherwise:
+
 ```text
-/plugin marketplace add Substrate-memory/Substrate-memory-plugins
-/plugin install substrate-claude@substrate-marketplace
-/reload-plugins
+claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
+claude plugin install substrate-claude@substrate-marketplace
 ```
 
-Then run `/substrate-claude:substrate-connect`. Plugins enabled on claude.ai
-also sync to Claude Code automatically.
+Then `/reload-plugins` and `/substrate-claude:substrate-connect`.
 
-## Sign-in flow
+## Sign-in and import
 
 **Install → Sign in → Review → Approve connection → Connected to Substrate.**
 
-The first memory call opens **Connect your agent to Substrate**. Open the exact
-browser link, sign in, review the connection name and permissions, choose
-**Approve connection**, then return to the agent for verification. Only after an
-authenticated `memory_search` succeeds does the agent report
-**Connected to Substrate.** Never paste an API key or token into chat.
+The agent opens **Connect your agent to Substrate** for you. Sign in, review
+the connection name and permissions, choose **Approve connection**. The agent
+notices the approval by itself, checks it with `memory_search`, says
+**Connected to Substrate.**, and in the same reply offers once:
+
+> I found 87 past conversations on this computer (1,204 turns, 3 Mar to 7 Oct
+> 2026). Import them into Substrate? **Import all** / **Let me pick** / **Not now**
+
+- **Import all**: everything on this computer except the current conversation
+  (already captured live). The upload runs in the background straight from
+  the local script to Substrate with a short-lived import-only ticket, so your
+  history never passes through the chat. The agent reports progress and ends
+  with `Imported N sessions (T turns): S stored, D duplicate, R rejected.`
+- **Let me pick**: the agent lists conversations by date and title.
+- **Not now**: never asked again. Say "import my past conversations" any time.
+
+Never paste an API key or token into chat.
 
 ## What is captured
 
@@ -70,9 +88,11 @@ boundaries (start, clear, compact, end) seal extraction windows.
 ## Privacy and redaction
 
 Secrets (API keys, tokens, passwords, `sk_…` values) are redacted on the client
-before anything leaves the host, and redacted again on the server. The sync
-script never contacts the network; the agent passes its printed batches to
-`memory_import`. Never send credentials to a memory tool yourself.
+before anything leaves the host, and redacted again on the server. History
+import uploads only to the `mcp_url` returned by `memory_import_ticket`, with
+a ticket read from the environment (never the command line, never the chat).
+Catch-up sync prints batches for the agent to pass to `memory_import`. Never
+send credentials to a memory tool yourself.
 
 ## Known limits
 
@@ -97,3 +117,7 @@ script never contacts the network; the agent passes its printed batches to
   `/substrate-claude:substrate-sync` to send the missing turns.
 - **Authorization required:** follow the browser link, approve, and rerun the
   smoke test. **Connection approved** is not **Connected to Substrate.**
+- **"MCP server … not connected" on every prompt:** installed but not signed
+  in. Run `/substrate-claude:substrate-connect`; do not install a second copy.
+- **Import stopped:** ask the agent to continue the import; finished
+  conversations are skipped and the server ignores repeats.

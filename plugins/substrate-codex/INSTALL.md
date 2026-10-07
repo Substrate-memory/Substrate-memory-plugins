@@ -11,12 +11,17 @@
   `streamable-http`, `https://app.trysubstrate.co/mcp`).
 - `.mcp.json` — legacy MCP config, same server.
 - `hooks/hooks.json` — `mcp_tool` hooks against server `substrate-memory`
-  (bare key from `mcpServers`), platform `codex`, `turn_id` passed through.
-  No `SessionEnd` entry: Codex does not support MCP hooks there.
+  (bare key from `mcpServers`), platform `codex`, `turn_id` passed through,
+  plus one `command` hook on `UserPromptSubmit` running
+  `scripts/substrate_sync.py --host codex --offer-check` (local, no network,
+  silent once the import offer was answered; always exits 0). It finds the
+  script through `$CLAUDE_PLUGIN_ROOT`, then `$PLUGIN_ROOT`, then the working
+  directory. No `SessionEnd` entry: Codex does not support MCP hooks there.
 - `skills/` — `substrate-memory`, `substrate-connect`, `substrate-sync`,
   `substrate-import` (invoke as `$skill-name` in Codex).
-- `scripts/substrate_sync.py` — byte-identical copy of the Claude worker's
-  script; local transcript reader, stdlib only, never touches the network.
+- `scripts/substrate_sync.py` — byte-identical copy of the Claude script;
+  stdlib only. Reads local rollouts; `--upload` sends them straight to the
+  `mcp_url` from `memory_import_ticket` (ticket from the environment only).
 
 ## Contract mapping (docs/mcp-contract.md section 7)
 
@@ -28,6 +33,7 @@
 | `SubagentStop` | `memory_capture_turn` | `agent_context subagent, agent_id, parent_session_id=session_id, platform, turn_id` |
 | `SessionStart` (`startup\|resume\|clear\|compact`) | `memory_session_boundary` | `session_id, boundary=source, platform` |
 | `PreCompact` | `memory_session_boundary` | `boundary compact` |
+| `UserPromptSubmit` (command) | — | `substrate_sync.py --host codex --offer-check` |
 
 Timeouts 5 s. Every hook fails open. `${field}` placeholders filling a whole
 value keep JSON type.
@@ -43,9 +49,23 @@ CODEX_HOME=/tmp/sb-codex codex plugin add substrate-codex@substrate-marketplace
 CODEX_HOME=/tmp/sb-codex codex plugin list --json
 ```
 
+## Connect and import
+
+Follow `$substrate-connect`: sign in, `memory_search`, **Connected to
+Substrate.**, and in the same reply `SYNC --preview` plus the offer **Import
+all** / **Let me pick** / **Not now**; then `$substrate-import`. The skill path
+works even where the offer hook does not run (hooks untrusted, web).
+
 ## Notes for the operator
 
 - Plugin hooks need user trust via `/hooks`; tell the user.
+- Not yet verified on a live Codex: in a sandbox `CODEX_HOME` with API-key
+  auth, Codex 0.154 listed no plugin hooks in `/hooks` and never ran the
+  plugin's command hook (user-level hooks did run), so the offer hook is a
+  backstop; the connect skill makes the offer itself.
+- Codex runs hooks and commands inside its sandbox. The offer hook still
+  speaks when its state directory is read-only; the upload needs network
+  access (escalated permissions).
 - `server` in hooks is the bare `mcpServers` key `substrate-memory`
   (verified: docs example uses the bare server name; sandbox install shows
   no hook parse warnings — see worker report).

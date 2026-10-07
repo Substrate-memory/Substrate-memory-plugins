@@ -44,25 +44,21 @@ Keep the user-facing sequence the same everywhere:
    ```text
    Verify my Substrate connection with memory_search and report Connected to Substrate.
    ```
-3. **Nothing is configured.** Follow the host installation path in the guide, then return to the six-step flow.
-4. **Tools are present but authentication is required.** Do not call this connected. Show the exact browser URL returned by the tool or client and ask the user to open it, sign in, review, and choose **Approve connection**. After approval, finish in the agent and rerun the smoke test.
+3. **Nothing is configured.** Follow the host installation path in the guide, then return to the six-step flow. In Claude Code, first run `claude plugin list --json`: a `substrate-claude@synced` entry (synced from claude.ai) means it is installed; never install a second copy, just sign in.
+4. **Tools are present but authentication is required** (in Claude Code, "MCP server … not connected" hook errors or an `authenticate` tool). Do not call this connected and do not reinstall. Start sign-in immediately: show the exact browser URL returned by the tool or client and ask the user to open it, sign in, review, and choose **Approve connection**. Keep checking in the same turn (the package connect command says how) and rerun the smoke test as soon as the tools appear.
 
 Never infer authentication from a plugin file, marketplace entry, or browser state. Automate client setup where supported. For client-owned actions you cannot perform, give precise instructions from the shared guide, then resume the same flow. Never invent a local MCP server, bypass permissions, or use a pasted-token fallback. Preserve the Hermes runtime and active-profile credential isolation.
 
-## 4. Import past conversations (asked once)
+## 4. Import past conversations (offered once, same reply)
 
-After **Connected to Substrate.**, ask exactly once:
+Never go idle between steps: verify → **Connected to Substrate.** → offer, all in one reply. Pause only for the browser approval and the user's choice. Then start the import and report progress until it finishes, without waiting for the user.
 
-```text
-Do you want to import past conversations into Substrate? I will show you the sessions I can read on this host, and import only what you confirm. Nothing is written before you confirm.
-```
+1. Get counts from the package (`substrate_sync.py --preview` for Claude Code/Codex; the `substrate_import` tool or `onboard.py import` for Hermes). If nothing is readable (Cowork cloud) or a choice was already recorded, say nothing about import.
+2. Offer once: *I found N past conversations on this computer (T turns, FIRST to LAST). Import them into Substrate? **Import all** / **Let me pick** / **Not now***
+3. **Import all** (default): everything local except the current session (captured live). Claude Code/Codex: call `memory_import_ticket`, run the package upload in the background with the ticket in environment variables (never in chat), then poll its status and report each step and the final `Imported N sessions (T turns): S stored, D duplicate, R rejected.` Hermes: start its importer the same way. **Let me pick**: list by date and title, import the chosen ones. **Not now**: record it; never ask again; the user can ask any time.
+4. Conversation content never passes through the model. Secrets are redacted client- and server-side. Repeats are deduplicated.
 
-If the user says no, do not ask again. If yes:
-
-1. List the sessions this agent can read on this host (its own local transcripts, via the package sync command where one exists). Show the list first. The agent has no access to another app's chat history. If nothing is accessible, say so plainly and stop.
-2. Import only the confirmed sessions as raw, redacted turns (`memory_import` with `--origin history_replay` and a fresh `batch_id` where the package supports it; otherwise confirmed facts via `memory_remember`). Nothing is written before confirmation.
-3. Never import secrets, API keys, tokens, passwords, or private credentials. They are redacted client- and server-side.
-4. Report what was imported and any failures.
+Fallback MCP hosts without a package script follow `plugins/substrate-mcp/INSTALL.md` (confirmed turns via `memory_import`, or confirmed facts via `memory_remember`).
 
 ## 5. Rules
 

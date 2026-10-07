@@ -1,27 +1,39 @@
 ---
 name: substrate-connect
-description: Check Substrate wiring and sign-in before installing or reconnecting.
+description: Sign in to Substrate, verify, and offer to import past Codex conversations, in one go.
 ---
 
 # Substrate connect
 
-1. If `memory_search` is available, call it with a focused, non-secret query.
-   An empty result is valid. On success report exactly:
-   **Connected to Substrate.**
-2. If the plugin is configured but tools are absent, say it is installed but
-   not wired into this session. Start a new session and give the user this
-   prompt for the next session:
-   `Verify my Substrate connection with memory_search and report Connected to Substrate.`
-3. If nothing is configured, install through the host's documented interface:
-   ChatGPT/Codex app via Plugins → marketplace from the GitHub repo, or
-   Codex CLI via `/plugins` browser or
-   `codex plugin marketplace add Substrate-memory/Substrate-memory-plugins`
-   plus `codex plugin add substrate-codex@substrate-marketplace`.
-   Direct MCP fallback: `codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp`
-   then `codex mcp login substrate-memory`.
-4. If sign-in is required, show the exact browser URL. The user signs in,
-   reviews the request, and chooses **Approve connection**. Finish in the agent
-   and rerun the smoke test. **Connection approved** is not proof of a working
-   client. Never ask for a pasted token or secret.
-5. After the first successful smoke test, ask exactly once whether the user
-   wants to import past conversations (`$substrate-import`).
+Run this end to end. Pause only for the user's browser approval and their
+import choice; never end the turn just because a step finished.
+
+`SYNC` means `python3 "${PLUGIN_ROOT}/scripts/substrate_sync.py" --host codex`
+(`python` if `python3` is missing; if `${PLUGIN_ROOT}` is not filled in, the
+plugin is under `$CODEX_HOME/plugins/cache/*/substrate-codex/*/`, default
+`~/.codex`). A `[substrate] Import offer pending` note gives the exact command.
+
+1. **Connected already?** Call `memory_search` with a short, non-secret query.
+   Any successful result, even empty: say **Connected to Substrate.** and go to
+   step 4.
+2. **Not installed?** ChatGPT/Codex app: Plugins → add the marketplace from the
+   GitHub repo `Substrate-memory/Substrate-memory-plugins` → install
+   **Substrate Memory** → new chat. Codex CLI:
+   `codex plugin marketplace add Substrate-memory/Substrate-memory-plugins` and
+   `codex plugin add substrate-codex@substrate-marketplace`, then a new session.
+   If it is installed, do not install it again.
+3. **Sign in now.** If `memory_search` needs sign-in, run
+   `codex mcp login substrate-memory` (it may need network permission; the
+   user approves). Give the user the link in one line: *Open this link, sign
+   in, and choose **Approve connection**.* The command returns once they
+   approve; then rerun `memory_search`. Never ask for a token or key.
+4. **Same reply: offer the import.** Run `SYNC --preview`. If `decision` is set
+   or `sessions` is 0, stop. Otherwise ask once, in plain words:
+   *I found N past conversations on this computer (T turns, FIRST to LAST).
+   Import them into Substrate? **Import all** / **Let me pick** / **Not now***
+   Act on the answer with `$substrate-import`.
+5. Tell the user once to trust the Substrate hooks in `/hooks`; until then
+   Codex skips automatic capture.
+
+**Connection approved** is not **Connected to Substrate.**; only a successful
+`memory_search` is.

@@ -4,7 +4,7 @@
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.8.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer; install by repository URL) | `plugins/substrate-claude` | `plugins/substrate-claude`; new session required in the current build (observed) for server registration | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Released |
+| v0.9.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer; install by repository URL) | `plugins/substrate-claude` | `plugins/substrate-claude`; new session required in the current build (observed) for server registration | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
 
 ## Version policy
 
