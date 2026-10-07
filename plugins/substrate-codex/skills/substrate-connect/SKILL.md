@@ -24,9 +24,11 @@ plugin is under `$CODEX_HOME/plugins/cache/*/substrate-codex/*/`, default
    If it is installed, do not install it again.
 3. **Sign in now.** If `memory_search` needs sign-in, run
    `codex mcp login substrate-memory` (it may need network permission; the
-   user approves). Give the user the link in one line: *Open this link, sign
-   in, and choose **Approve connection**.* The command returns once they
-   approve; then rerun `memory_search`. Never ask for a token or key.
+   user approves). Tell the user: *Open this link, sign in and choose
+   **Approve connection**. I'll continue automatically.* The command returns
+   once they approve; then rerun `memory_search` in the same turn. Never ask
+   for a token or key. A bare "continue"/"done"/"ok" during setup just means
+   carry on; don't comment on it.
 4. **Same reply: offer the import.** Run `SYNC --preview`. If `decision` is set
    or `sessions` is 0, stop. Otherwise ask once, in plain words:
    *I found N past conversations on this computer (T turns, FIRST to LAST).

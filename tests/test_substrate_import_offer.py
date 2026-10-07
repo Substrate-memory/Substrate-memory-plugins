@@ -482,7 +482,11 @@ def test_setup_continues_until_connected(env) -> None:
     text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
     for phrase in ("Substrate setup is not finished", "memory_search", "Connected to Substrate.",
                    "--record-connected", "authenticate", "Approve connection",
-                   "--pause 15", "--preview", "Import all / Let me pick / Not now",
+                   "I'll continue automatically", "Do not repeat the tool's notes",
+                   "only if the user says the page showed an error",
+                   "do NOT end your turn", "--pause 15", "up to 20 times", "ToolSearch",
+                   'A bare "continue", "done"', "Do not comment on it",
+                   "--preview", "Import all / Let me pick / Not now",
                    "Never ask for a token", "/reload-plugins"):
         assert phrase in text, phrase
     assert str(SCRIPT) in text and '--exclude-session "current-1"' in text

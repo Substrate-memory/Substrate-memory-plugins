@@ -14,12 +14,17 @@ choice. Never end your turn just because a step finished.
 2. **Installed but not signed in.** "MCP server … not connected" hook errors mean
    the plugin is installed but not signed in. Do not install another copy.
 3. **Sign in now.** Call the Substrate `authenticate` tool (named like
-   `mcp__plugin_substrate-claude_substrate-memory__authenticate`) and give the
-   user its link in one line: *Open this link, sign in, and choose **Approve
-   connection**.* Then keep going: run `SYNC --pause 15`, retry `memory_search`,
-   and repeat for up to 5 minutes. The tools appear by themselves once the user
-   approves. If they never appear, ask the user to say "done" after approving,
-   or to sign in from `/mcp`. Never ask for a token or key.
+   `mcp__plugin_substrate-claude_substrate-memory__authenticate`) and tell the
+   user: *Open this link, sign in and choose **Approve connection**. I'll
+   continue automatically.* Don't relay the tool's notes about localhost errors
+   or pasting URLs; mention pasting the address-bar URL only if the user says
+   the page showed an error (remote or SSH machines). Do not end the turn: run
+   `SYNC --pause 15`, call `memory_search` again (via ToolSearch if deferred),
+   and repeat up to 20 times. The tools appear mid-turn once the user approves.
+   If they never appear, ask the user to say "done" after approving, or to sign
+   in from `/mcp`. Never ask for a token or key.
+   A bare "continue", "done", "ok" or "approved" during setup just means carry
+   on; don't comment on it.
 4. **Same reply: offer the import.** Run `SYNC --preview`. If `decision` is set
    or `sessions` is 0, stop here. Otherwise ask once, in plain words:
    *I found N past conversations on this computer (T turns, FIRST to LAST).
