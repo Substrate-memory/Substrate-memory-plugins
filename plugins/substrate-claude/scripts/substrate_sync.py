@@ -271,6 +271,10 @@ def _parse_claude_file(path: str) -> Tuple[str, List[Dict[str, Any]]]:
     for record in _read_jsonl_lines(path):
         if not isinstance(record, dict):
             continue
+        if record.get("isSidechain") is True:
+            # Subagent (sidechain) messages repeat the parent's session id;
+            # their result already reaches the parent as a tool result.
+            continue
         rtype = record.get("type")
         if not session_id:
             for key in ("sessionId", "session_id"):
@@ -466,8 +470,11 @@ def _iter_transcript_files(host: str):
             # results already arrive in the parent as tool results.
             dirnames[:] = [d for d in dirnames if d != "subagents"]
         for name in filenames:
-            if name.endswith(".jsonl"):
-                found.append(os.path.join(dirpath, name))
+            if not name.endswith(".jsonl"):
+                continue
+            if host == "claude" and name.startswith("agent-"):
+                continue  # older/flattened subagent transcripts
+            found.append(os.path.join(dirpath, name))
     found.sort()
     return found
 
@@ -640,6 +647,27 @@ def _fit_item(item: Dict[str, Any]) -> List[Dict[str, Any]]:
         if _item_fits(work):
             return [work]
     return _split_messages(work)
+
+
+def _seal_item(session_id: str, items: List[Dict[str, Any]], platform: str) -> Dict[str, Any]:
+    """``capture_session`` end boundary that seals an imported session.
+
+    The server extracts a session only once it is sealed. Its event id is
+    derived from kind, session, offset and payload, so a rerun is a duplicate.
+    """
+    water = max((item["offset"]["end"] for item in items), default=0)
+    created = max((item["created_at"] for item in items), default=None) or _utc_now()
+    return {
+        "kind": "capture_session",
+        "session_id": session_id,
+        "offset": {"start": water, "end": water},
+        "capture_origin": "history_replay",
+        "batch_id": "",
+        "speaker": {"id": "local", "role": "owner", "display": ""},
+        "created_at": created,
+        "payload": {"boundary": "end", "session_complete": True, "message_high_water": water,
+                    "platform": platform, "chat_type": "direct"},
+    }
 
 
 def _split_batches(
@@ -942,6 +970,8 @@ def _has_other_transcripts(host: str, current: str) -> bool:
             dirnames[:] = [d for d in dirnames if d != "subagents"]
         for name in filenames:
             if not name.endswith(".jsonl"):
+                continue
+            if host == "claude" and name.startswith("agent-"):
                 continue
             stem = name[:-6]
             if current and (stem == current or stem.endswith(current)):
@@ -1288,26 +1318,42 @@ def _with_retries(action, on_wait=None):  # noqa: ANN001, ANN202
 
 
 class Tally:
+    """Turn outcomes (the summary line) and session seals, counted apart."""
+
     def __init__(self) -> None:
         self.stored = 0
         self.duplicate = 0
         self.rejected = 0
+        self.sealed = 0
+        self.seal_failed = 0
 
-    def add(self, result: Dict[str, Any], sent: int) -> None:
+    def _count(self, item: Dict[str, Any], action: Any) -> None:
+        if item.get("kind") == "capture_session":
+            if action in ("stored", "queued", "sealed", "duplicate"):
+                self.sealed += 1
+            else:
+                self.seal_failed += 1
+        elif action in ("stored", "queued", "sealed"):
+            self.stored += 1
+        elif action == "duplicate":
+            self.duplicate += 1
+        else:
+            self.rejected += 1
+
+    def add(self, result: Dict[str, Any], batch: List[Dict[str, Any]]) -> None:
         rows = result.get("results")
         if isinstance(rows, list) and rows:
-            for row in rows:
-                action = row.get("action") if isinstance(row, dict) else None
-                if action in ("stored", "queued", "sealed"):
-                    self.stored += 1
-                elif action == "duplicate":
-                    self.duplicate += 1
-                else:
-                    self.rejected += 1
+            for position, row in enumerate(rows):
+                row = row if isinstance(row, dict) else {}
+                index = row.get("index", position)
+                if not isinstance(index, int) or not 0 <= index < len(batch):
+                    index = min(position, len(batch) - 1)
+                self._count(batch[index], row.get("action"))
             return
         rejected = result.get("rejected") if isinstance(result.get("rejected"), int) else 0
         self.rejected += rejected
-        self.stored += max(0, sent - rejected)
+        for item in batch[: max(0, len(batch) - rejected)]:
+            self._count(item, "stored")
 
 
 def _send_batch(client: McpClient, batch: List[Dict[str, Any]], batch_id: str,
@@ -1320,13 +1366,13 @@ def _send_batch(client: McpClient, batch: List[Dict[str, Any]], batch_id: str,
         )
     except BadBatch:
         if len(batch) == 1:
-            tally.rejected += 1
+            tally._count(batch[0], "rejected")
             return
         middle = len(batch) // 2
         _send_batch(client, batch[:middle], batch_id, tally, on_wait)
         _send_batch(client, batch[middle:], batch_id, tally, on_wait)
         return
-    tally.add(result, len(batch))
+    tally.add(result, batch)
 
 
 def _pid_alive(pid: Any) -> Optional[bool]:
@@ -1507,7 +1553,8 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
             "" if status.state.get("sessions_done", 0) == 1 else "s",
             turns_total, tally.stored, tally.duplicate, tally.rejected)
         status.update(state=state, message=message, summary=summary, stored=tally.stored,
-                      duplicate=tally.duplicate, rejected=tally.rejected, note="")
+                      duplicate=tally.duplicate, rejected=tally.rejected,
+                      sessions_sealed=tally.sealed, seal_failed=tally.seal_failed, note="")
         print(summary if state == "done" else message)
         return code
 
@@ -1519,11 +1566,15 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
             for item in _build_envelopes(entry["session_id"], entry["turns"],
                                          "history_replay", 0):
                 items.extend(_fit_item(item))
+            if items:
+                # Last, after every turn: seal the session so it is extracted.
+                items.append(_seal_item(entry["session_id"], items, host))
             digest = hashlib.sha256(_canonical_bytes(items)).hexdigest()
             turns_total += len(entry["turns"])
-            status.update(current_session=entry["session_id"], turns=turns_total)
+            status.update(uploading_session=entry["session_id"], turns=turns_total)
             if not args.force and sent_digests.get(entry["session_id"]) == digest:
-                tally.duplicate += len(items)
+                tally.duplicate += sum(1 for i in items if i["kind"] == "capture_turn")
+                tally.sealed += sum(1 for i in items if i["kind"] == "capture_session")
                 status.update(sessions_done=status.state["sessions_done"] + 1,
                               skipped_sessions=status.state["skipped_sessions"] + 1,
                               duplicate=tally.duplicate)

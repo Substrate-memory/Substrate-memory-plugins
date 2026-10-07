@@ -320,6 +320,11 @@ tool result through `PostToolUse`.
   `SUBSTRATE_MCP_URL` (4.9), runs `initialize` (sends `Mcp-Session-Id` back if
   the server sets one; accepts JSON or SSE bodies), then `tools/call
   memory_import` with redacted `history_replay` items and one fresh `batch_id`.
+  After a session's last turn it sends one `capture_session` seal (`boundary:
+  "end"`, `session_complete: true`, offset and `message_high_water` = the
+  session's final message index) so the server materializes and extracts it;
+  a rerun is a duplicate. Catch-up output (`--session`) never seals: that
+  session is still live.
   Turns over the limits are reduced (tool calls capped at 64 per message,
   shorter excerpts) or split into consecutive parts with exact offsets. Retries
   429/5xx/timeouts with backoff; a refused batch is bisected; `401`/`403` stops
@@ -336,6 +341,9 @@ tool result through `PostToolUse`.
   once connected and decided; always exit 0.
 - `--record-connected`, `--record-decision yes|no|picked|none`, `--pause S` (≤ 60 s wait, used while
   the user approves sign-in).
+- Claude subagent transcripts are skipped: `subagents/` folders, top-level
+  `agent-*.jsonl` files, and `isSidechain: true` records (they repeat the
+  parent's session id; the parent already holds their result).
 
 Catch-up: when a turn-context text ends with the `[substrate] … not saved yet`
 line, or on the sync command, the agent runs `memory_import_status` for the

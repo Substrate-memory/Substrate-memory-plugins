@@ -613,6 +613,67 @@ def test_subagent_transcripts_not_listed(env, capsys) -> None:
     assert [r["session_id"] for r in rows] == ["parent"]
 
 
+def _subagent_lines(parent: str, text: str) -> str:
+    rows = [{"type": "user", "sessionId": parent, "isSidechain": True, "timestamp": _ts(1),
+             "message": {"role": "user", "content": text}},
+            {"type": "assistant", "sessionId": parent, "isSidechain": True, "timestamp": _ts(1),
+             "message": {"role": "assistant", "content": [{"type": "text", "text": "sub answer"}]}}]
+    return "".join(json.dumps(r) + "\n" for r in rows)
+
+
+def test_flat_agent_transcripts_skipped(env, capsys, server, monkeypatch) -> None:
+    """Older layout: agent-*.jsonl next to the parent, same sessionId."""
+    write_claude_session(env["claude"], "parent", turns=2)
+    folder = env["claude"] / "projects" / "proj"
+    for n in range(3):
+        path = folder / f"agent-{n:04x}.jsonl"
+        path.write_text(_subagent_lines("parent", f"subagent task {n}"))
+        _age(path)
+    code, rows = main_json(capsys, "--host", "claude", "--list")
+    assert [(r["session_id"], r["turns"]) for r in rows] == [("parent", 2)]
+    assert rows[0]["path"].endswith("parent.jsonl")
+    ticket_env(monkeypatch, server.url)
+    assert sync.main(["--host", "claude", "--upload", "--all"]) == 0
+    sent = server.sent_items()
+    assert [i["kind"] for i in sent] == ["capture_turn", "capture_turn", "capture_session"]
+    assert "subagent task" not in json.dumps(sent)
+    assert [i["offset"]["start"] for i in sent] == [0, 2, 4]
+
+
+def test_sidechain_records_and_files_skipped(env, capsys) -> None:
+    """Any file name: sidechain-only transcripts vanish; sidechain lines in a
+    main transcript are ignored (no offset collisions with the parent)."""
+    write_claude_session(env["claude"], "parent", turns=2)
+    folder = env["claude"] / "projects" / "proj"
+    copy = folder / "flattened-copy.jsonl"
+    copy.write_text(_subagent_lines("parent", "flattened subagent"))
+    _age(copy)
+    main_file = folder / "parent.jsonl"
+    main_file.write_text(_subagent_lines("parent", "inline sidechain") + main_file.read_text())
+    _age(main_file)
+    code, rows = main_json(capsys, "--host", "claude", "--list")
+    assert [(r["session_id"], r["turns"]) for r in rows] == [("parent", 2)]
+    entry = sync._catalogue("claude")[0]
+    assert "sidechain" not in json.dumps(entry["turns"])
+    assert entry["path"].endswith("parent.jsonl")
+
+
+def test_offer_hook_ignores_flat_agent_files(env) -> None:
+    connect()
+    write_claude_session(env["claude"], "current-1")
+    path = env["claude"] / "projects" / "proj" / "agent-abc.jsonl"
+    path.write_text(_subagent_lines("current-1", "x"))
+    assert _offer(env).stdout == ""
+
+
+def test_status_names_uploading_session(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a")
+    ticket_env(monkeypatch, server.url)
+    sync.main(["--host", "claude", "--upload", "--all"])
+    status = json.loads((env["data"] / "import-status.json").read_text())
+    assert status["uploading_session"] == "a" and "current_session" not in status
+
+
 def test_windows_transcript_paths(env, capsys) -> None:
     write_claude_session(env["claude"], "win-1", project="C--Users-Pavel-Projects-app",
                          cwd="C:\\Users\\Pavel\\Projects\\app",
@@ -757,6 +818,60 @@ def test_upload_all_handshake_and_summary(env, capsys, monkeypatch, sse, statefu
         fake.close()
 
 
+def test_upload_seals_each_session_once_after_its_turns(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a", turns=3, day=1)
+    write_claude_session(env["claude"], "b", turns=70, day=2)   # two batches
+    ticket_env(monkeypatch, server.url)
+    code, out = upload(capsys, "--all")
+    assert code == 0
+    assert out == "Imported 2 sessions (73 turns): 73 stored, 0 duplicate, 0 rejected."
+    sent = server.sent_items()
+    _validate(sent)
+    for session in ("a", "b"):
+        mine = [i for i in sent if i["session_id"] == session]
+        seals = [i for i in mine if i["kind"] == "capture_session"]
+        assert len(seals) == 1 and mine[-1] is seals[0], session
+        last_end = max(i["offset"]["end"] for i in mine if i["kind"] == "capture_turn")
+        seal = seals[0]
+        assert seal["offset"] == {"start": last_end, "end": last_end}
+        assert seal["capture_origin"] == "history_replay"
+        assert seal["payload"] == {"boundary": "end", "session_complete": True,
+                                   "message_high_water": last_end, "platform": "claude",
+                                   "chat_type": "direct"}
+    status = json.loads((env["data"] / "import-status.json").read_text())
+    assert status["sessions_sealed"] == 2 and status["seal_failed"] == 0
+    # Rerun (forced past the local skip): the seals dedupe on the server too.
+    code, out = upload(capsys, "--all", "--force")
+    assert out.endswith("0 stored, 73 duplicate, 0 rejected.")
+    assert len(server.store) == 73 + 2
+
+
+def test_rejected_seal_does_not_break_import(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a", turns=2)
+    original = server.handle
+
+    def refuse_seals(raw, headers):
+        if b'"capture_session"' in raw:
+            message = json.loads(raw)
+            return 200, FakeMcp._tool_error(message, "invalid_request"), {}
+        return original(raw, headers)
+    server.handle = refuse_seals
+    ticket_env(monkeypatch, server.url)
+    code, out = upload(capsys, "--all")
+    assert code == 0 and out.endswith("2 stored, 0 duplicate, 0 rejected.")
+    status = json.loads((env["data"] / "import-status.json").read_text())
+    assert status["seal_failed"] == 1
+
+
+def test_catchup_session_output_never_seals(env, capsys) -> None:
+    write_claude_session(env["claude"], "live", turns=3)
+    for origin in ("catchup", "history_replay"):
+        code = sync.main(["--host", "claude", "--session", "live", "--origin", origin])
+        out = capsys.readouterr().out
+        kinds = {i["kind"] for line in out.splitlines() for i in json.loads(line)["items"]}
+        assert code == 0 and kinds == {"capture_turn"}
+
+
 def test_upload_wrong_server_identity_is_fatal(env, capsys, monkeypatch) -> None:
     fake = FakeMcp(server_name="someone-else")
     try:
@@ -850,7 +965,7 @@ def test_upload_401_stops_cleanly_and_resumes(env, capsys, monkeypatch) -> None:
         status = json.loads((env["data"] / "import-status.json").read_text())
         assert status["state"] == "stopped"
         stored_first = len(fake.store)
-        assert stored_first == 70 + 64
+        assert stored_first == 70 + 64 + 1  # s1 turns + its seal, half of s2
         # The agent mints a fresh ticket and runs the same command again.
         fake.auth_fail_after = None
         code, out = upload(capsys, "--all")
@@ -858,7 +973,7 @@ def test_upload_401_stops_cleanly_and_resumes(env, capsys, monkeypatch) -> None:
         # s1 skipped locally (counted as duplicate); s2's first batch is resent
         # and the server dedupes it; s2's rest and s3 are new.
         assert out == ("Imported 3 sessions (143 turns): 9 stored, 134 duplicate, 0 rejected.")
-        assert len(fake.store) == 143
+        assert len(fake.store) == 143 + 3  # plus one seal per session
     finally:
         fake.close()
 
@@ -941,7 +1056,8 @@ def test_redaction_applied_on_upload(env, capsys, server, monkeypatch) -> None:
     for case in REDACTION["text"]:
         expected = case["out"]
         assert any(expected in item["payload"]["messages"][0]["content"]
-                   for item in server.sent_items() if item["session_id"] == "red") or \
+                   for item in server.sent_items()
+                   if item["session_id"] == "red" and item["kind"] == "capture_turn") or \
             case["in"] == case["out"]
 
 

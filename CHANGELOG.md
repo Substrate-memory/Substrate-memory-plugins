@@ -12,7 +12,8 @@ Right after connecting, the agent offers to bring your past conversations into S
 - **One copy only.** If Claude Code already has `substrate-claude@synced` (synced from claude.ai), the agent signs it in instead of installing a second copy; "MCP server … not connected" errors mean "not signed in", not "not installed".
 - **Offer hook.** A small local `UserPromptSubmit` command hook (`substrate_sync.py --offer-check`) reminds the agent until you have answered; afterwards it is silent. It never blocks a prompt and never touches the network. Codex: the connect skill makes the offer itself, because plugin hooks need trust in `/hooks` (and did not load in our sandboxed Codex check).
 - **Hermes:** see below.
-- Claude subagent transcripts are no longer listed as separate sessions (they repeat the parent's id). Versions: `substrate-claude`, `substrate-codex`, `substrate-mcp` 0.9.0. `docs/mcp-contract.md` documents `memory_import_ticket` (4.9) and the new script modes (section 8).
+- **Imported history becomes recallable.** Each imported session now ends with one `capture_session` seal (`boundary: "end"`, `session_complete: true`), which is what makes the server materialize and extract it. Before, imports stored turns that were never extracted (also in 0.8.1). Reruns dedupe the seal; catch-up of the live session never seals.
+- Claude subagent transcripts (`subagents/` folders, older top-level `agent-*.jsonl` files, and any `isSidechain` lines) are skipped; they carry the parent's session id and used to collide with it. Versions: `substrate-claude`, `substrate-codex`, `substrate-mcp` 0.9.0. `docs/mcp-contract.md` documents `memory_import_ticket` (4.9) and the new script modes (section 8).
 
 ## 0.8.1
 
