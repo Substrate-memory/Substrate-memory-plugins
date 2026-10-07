@@ -14,8 +14,8 @@ plugin is under `$CODEX_HOME/plugins/cache/*/substrate-codex/*/`, default
 `~/.codex`). A `[substrate] Import offer pending` note gives the exact command.
 
 1. **Connected already?** Call `memory_search` with a short, non-secret query.
-   Any successful result, even empty: say **Connected to Substrate.** and go to
-   step 4.
+   Any successful result, even empty: say **Connected to Substrate.**, run
+   `SYNC --record-connected`, and go to step 4.
 2. **Not installed?** ChatGPT/Codex app: Plugins → add the marketplace from the
    GitHub repo `Substrate-memory/Substrate-memory-plugins` → install
    **Substrate Memory** → new chat. Codex CLI:

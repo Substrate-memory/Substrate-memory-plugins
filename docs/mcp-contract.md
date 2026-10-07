@@ -328,11 +328,13 @@ tool result through `PostToolUse`.
   session (named, or last seen by the offer hook, or the transcript written in
   the last 10 minutes) is never imported. Final line:
   `Imported N sessions (T turns): S stored, D duplicate, R rejected.`
-- `--offer-check` — `UserPromptSubmit` command hook. Until a decision is
-  recorded it prints hook JSON (`hookSpecificOutput.additionalContext`) telling
-  the agent to offer the import right after **Connected to Substrate.**; with no
-  other local sessions it records `none`. Silent once decided; always exit 0.
-- `--record-decision yes|no|picked|none`, `--pause S` (≤ 60 s wait, used while
+- `--offer-check` — `UserPromptSubmit` command hook printing hook JSON
+  (`hookSpecificOutput.additionalContext`). Until `--record-connected` it tells
+  the agent to finish setup now (sign in, `memory_search`, **Connected to
+  Substrate.**, then the offer); until a decision is recorded it tells it to
+  offer the import; with no other local sessions it records `none`. Silent
+  once connected and decided; always exit 0.
+- `--record-connected`, `--record-decision yes|no|picked|none`, `--pause S` (≤ 60 s wait, used while
   the user approves sign-in).
 
 Catch-up: when a turn-context text ends with the `[substrate] … not saved yet`

@@ -61,7 +61,7 @@ claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
 claude plugin install substrate-claude@substrate-marketplace
 ```
 
-The user types `/reload-plugins`, then `/substrate-claude:substrate-connect`. That command starts sign-in at once, keeps checking while the user approves in the browser (no "done" needed), verifies with `memory_search`, reports **Connected to Substrate.**, and offers the import in the same reply. The package wires `memory_*` hooks so recall is injected before every turn and every completed turn is captured automatically, including bounded redacted tool calls and results. The host transcript is the spool: if the server reports missing turns, the agent runs the package sync command to re-import them with deterministic ids.
+The agent ends its reply with: *Installed. Type `/reload-plugins`, then say "continue".* On that next message the plugin's offer hook tells the agent to finish setup: it starts sign-in at once, keeps checking while the user approves in the browser (no "done" needed), verifies with `memory_search`, reports **Connected to Substrate.**, and offers the import in the same reply. The package wires `memory_*` hooks so recall is injected before every turn and every completed turn is captured automatically, including bounded redacted tool calls and results. The host transcript is the spool: if the server reports missing turns, the agent runs the package sync command to re-import them with deterministic ids.
 
 Do not use the deprecated API-key plugin described below.
 

@@ -18,6 +18,7 @@ Usage:
     substrate_sync.py --host H --status [--wait SECONDS]
     substrate_sync.py --host H --offer-check          (UserPromptSubmit hook)
     substrate_sync.py --host H --record-decision yes|no|picked|none
+    substrate_sync.py --host H --record-connected     (after memory_search worked)
     substrate_sync.py --host H --pause SECONDS        (wait <= 60 s, e.g. for sign-in)
     (every mode also takes --data-dir DIR)
 
@@ -835,6 +836,18 @@ def _record_decision(data_dir: str, decision: str) -> None:
     _write_json(path, state)
 
 
+def _connected(data_dir: str) -> bool:
+    return isinstance(_read_json(os.path.join(data_dir, OFFER_FILE)).get("connected_at"), str)
+
+
+def _record_connected(data_dir: str) -> None:
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    if not isinstance(state.get("connected_at"), str):
+        state["connected_at"] = _utc_now()
+        _write_json(path, state)
+
+
 def _remember_session(data_dir: str, session_id: str) -> None:
     path = os.path.join(data_dir, OFFER_FILE)
     state = _read_json(path)
@@ -967,6 +980,35 @@ def _offer_text(host: str, data_dir: str, session_id: str) -> str:
     ) % {"base": base, "host": host}
 
 
+def _setup_text(host: str, data_dir: str, session_id: str, offer: bool) -> str:
+    script = os.path.abspath(__file__)
+    base = "%s %s --host %s --data-dir %s" % (
+        _quote(sys.executable or "python3"), _quote(script), host, _quote(data_dir))
+    if session_id:
+        base += " --exclude-session %s" % _quote(session_id)
+    text = (
+        "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
+        "reply, before answering anything else (keep it to a few short lines). SYNC means: "
+        "`%(base)s`.\n"
+        "1. Call memory_search with a short, non-secret query. If it works (even empty): say "
+        "\"Connected to Substrate.\" and run `SYNC --record-connected`.\n"
+        "2. If the Substrate tools need sign-in (only an `authenticate` tool for substrate-memory "
+        "is there, or memory_search is missing or says not connected/unauthorized): call that "
+        "authenticate tool now and give the user its link in one line: \"Open this link, sign "
+        "in, and choose Approve connection.\" Do not stop: run `SYNC --pause 15`, then retry "
+        "memory_search; repeat for up to 5 minutes. When it works, do step 1. If it never "
+        "works, ask them to say \"done\" after approving. Never ask for a token or key.\n"
+        "3. If no Substrate memory tools exist at all, tell the user to type /reload-plugins "
+        "and then say \"continue\"."
+    ) % {"base": base}
+    if offer:
+        text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: run "
+                 "`SYNC --preview` and, if it finds conversations, offer Import all / Let me "
+                 "pick / Not now with its count and date range (/substrate-claude:substrate-import "
+                 "or $substrate-import has the steps).")
+    return text
+
+
 def _cmd_offer_check(host: str, data_dir: str) -> int:
     try:
         session_id = ""
@@ -987,17 +1029,24 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
                 _remember_session(data_dir, session_id)
             except OSError:
                 pass  # read-only sandbox: the offer still works
-        if decided:
+        connected = _connected(data_dir)
+        if connected and decided:
             return 0
-        if not _has_other_transcripts(host, session_id):
+        if not decided and not _has_other_transcripts(host, session_id):
             try:
                 _record_decision(data_dir, "none")
             except OSError:
                 pass
+            decided = True
+        if connected and decided:
             return 0
+        if connected:
+            context = _offer_text(host, data_dir, session_id)
+        else:
+            context = _setup_text(host, data_dir, session_id, offer=not decided)
         output = {"hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": _offer_text(host, data_dir, session_id),
+            "additionalContext": context,
         }}
         sys.stdout.write(json.dumps(output, ensure_ascii=False))
         sys.stdout.flush()
@@ -1428,6 +1477,7 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
     if not args.all and not args.session:
         print(json.dumps({"error": "nothing_selected", "message": "Pass --all or --session <id>."}))
         return 2
+    _record_connected(data_dir)
     if _decision(data_dir) is None:
         _record_decision(data_dir, "yes" if args.all else "picked")
     if args.background:
@@ -1520,6 +1570,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--wait", type=float, default=0.0)
     parser.add_argument("--offer-check", action="store_true")
     parser.add_argument("--record-decision", choices=DECISIONS)
+    parser.add_argument("--record-connected", action="store_true")
     parser.add_argument("--data-dir", default="")
     parser.add_argument("--pause", type=float, default=0.0)
     parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)
@@ -1535,6 +1586,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Lets the agent wait for a browser sign-in without ending its turn.
         _sleep(max(0.0, min(args.pause, 60.0)))
         print(json.dumps({"paused": max(0.0, min(args.pause, 60.0))}))
+        return 0
+    if args.record_connected:
+        _record_connected(data_dir)
+        print(json.dumps({"connected": True}))
         return 0
     if args.record_decision:
         _record_decision(data_dir, args.record_decision)

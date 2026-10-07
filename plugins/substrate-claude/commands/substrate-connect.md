@@ -9,8 +9,8 @@ choice. Never end your turn just because a step finished.
 (use `python` if `python3` is missing).
 
 1. **Connected already?** Call `memory_search` with a short, non-secret query.
-   Any successful result, even empty, counts: say **Connected to Substrate.** and
-   go to step 4.
+   Any successful result, even empty, counts: say **Connected to Substrate.**,
+   run `SYNC --record-connected`, and go to step 4.
 2. **Installed but not signed in.** "MCP server … not connected" hook errors mean
    the plugin is installed but not signed in. Do not install another copy.
 3. **Sign in now.** Call the Substrate `authenticate` tool (named like

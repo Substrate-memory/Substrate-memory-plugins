@@ -299,12 +299,17 @@ def ticket_env(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
 # Offer hook (--offer-check)
 # ---------------------------------------------------------------------------
 
+def connect(host: str = "claude") -> None:
+    assert run("--host", host, "--record-connected").returncode == 0
+
+
 def _offer(env_paths: dict, stdin: str | None = '{"session_id": "current-1"}',
            host: str = "claude") -> subprocess.CompletedProcess:
     return run("--host", host, "--offer-check", stdin=stdin)
 
 
 def test_offer_emitted_when_undecided(env) -> None:
+    connect()
     write_claude_session(env["claude"], "old-1")
     write_claude_session(env["claude"], "current-1")
     proc = _offer(env)
@@ -325,11 +330,12 @@ def test_offer_emitted_when_undecided(env) -> None:
     # The hook remembers the live session so uploads exclude it by default.
     state = json.loads((env["data"] / "import-offer.json").read_text())
     assert state["last_session"]["id"] == "current-1"
-    assert "decision" not in state
+    assert "decision" not in state and state["connected_at"]
 
 
 @pytest.mark.parametrize("decision", ["yes", "no", "picked", "none"])
 def test_offer_silent_once_decided(env, decision: str) -> None:
+    connect()
     write_claude_session(env["claude"], "old-1")
     assert run("--host", "claude", "--record-decision", decision).returncode == 0
     proc = _offer(env)
@@ -338,6 +344,7 @@ def test_offer_silent_once_decided(env, decision: str) -> None:
 
 
 def test_offer_zero_sessions_records_none_silently(env) -> None:
+    connect()
     write_claude_session(env["claude"], "current-1")  # only the live session exists
     proc = _offer(env)
     assert proc.returncode == 0 and proc.stdout == ""
@@ -346,12 +353,14 @@ def test_offer_zero_sessions_records_none_silently(env) -> None:
     # Nothing at all (fresh Cowork-like profile).
     shutil.rmtree(env["claude"] / "projects")
     (env["data"] / "import-offer.json").unlink()
+    connect()
     proc = _offer(env)
     assert proc.returncode == 0 and proc.stdout == ""
     assert json.loads((env["data"] / "import-offer.json").read_text())["decision"] == "none"
 
 
 def test_offer_ignores_subagent_transcripts(env) -> None:
+    connect()
     write_claude_session(env["claude"], "current-1")
     sub = env["claude"] / "projects" / "proj" / "current-1" / "subagents" / "agent-a1.jsonl"
     sub.parent.mkdir(parents=True)
@@ -413,6 +422,7 @@ def test_offer_unwritable_bad_args_exit_zero(env) -> None:
 
 
 def test_offer_latency_200_transcripts(env) -> None:
+    connect()
     for n in range(200):
         write_claude_session(env["claude"], f"s-{n:03d}", turns=3, project=f"p{n % 7}")
     run("--host", "claude", "--offer-check", stdin='{"session_id": "s-000"}')  # warm caches
@@ -430,6 +440,7 @@ def test_offer_latency_200_transcripts(env) -> None:
 
 
 def test_offer_codex_host(env) -> None:
+    connect("codex")
     write_codex_session(env["codex"], "codex-old")
     proc = run("--host", "codex", "--offer-check", stdin='{"session_id": "codex-now"}')
     text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
@@ -439,6 +450,7 @@ def test_offer_codex_host(env) -> None:
 
 
 def test_offer_codex_current_rollout_not_counted(env) -> None:
+    connect("codex")
     write_codex_session(env["codex"], "codex-now")
     proc = run("--host", "codex", "--offer-check", stdin='{"session_id": "codex-now"}')
     assert proc.stdout == ""
@@ -460,6 +472,59 @@ def test_default_data_dir_follows_host_config(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.delenv("CLAUDE_CONFIG_DIR")
     assert sync._data_dir("claude") == os.path.join(os.path.expanduser("~"), ".claude",
                                                     "substrate-memory")
+
+
+def test_setup_continues_until_connected(env) -> None:
+    """Fresh install: after /reload-plugins any prompt carries setup forward."""
+    write_claude_session(env["claude"], "old-1")
+    proc = _offer(env)
+    assert proc.returncode == 0
+    text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+    for phrase in ("Substrate setup is not finished", "memory_search", "Connected to Substrate.",
+                   "--record-connected", "authenticate", "Approve connection",
+                   "--pause 15", "--preview", "Import all / Let me pick / Not now",
+                   "Never ask for a token", "/reload-plugins"):
+        assert phrase in text, phrase
+    assert str(SCRIPT) in text and '--exclude-session "current-1"' in text
+    # Still not connected on the next prompt: still carried forward.
+    assert "setup is not finished" in _offer(env).stdout
+    connect()
+    after = json.loads(_offer(env).stdout)["hookSpecificOutput"]["additionalContext"]
+    assert after.startswith("[substrate] Import offer pending")
+    run("--host", "claude", "--record-decision", "no")
+    assert _offer(env).stdout == ""
+
+
+def test_setup_without_history_skips_offer_part(env) -> None:
+    proc = _offer(env)  # no transcripts at all: decision none, but not connected
+    text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "setup is not finished" in text and "--preview" not in text
+    state = json.loads((env["data"] / "import-offer.json").read_text())
+    assert state["decision"] == "none" and "connected_at" not in state
+    connect()
+    assert _offer(env).stdout == ""
+
+
+def test_decided_but_not_connected_still_sets_up(env) -> None:
+    write_claude_session(env["claude"], "old-1")
+    run("--host", "claude", "--record-decision", "no")
+    text = json.loads(_offer(env).stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "setup is not finished" in text and "Import all" not in text
+
+
+def test_record_connected_is_idempotent(env, capsys) -> None:
+    code, rows = main_json(capsys, "--host", "claude", "--record-connected")
+    assert rows == [{"connected": True}]
+    first = json.loads((env["data"] / "import-offer.json").read_text())["connected_at"]
+    main_json(capsys, "--host", "claude", "--record-connected")
+    assert json.loads((env["data"] / "import-offer.json").read_text())["connected_at"] == first
+
+
+def test_upload_records_connected(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a")
+    ticket_env(monkeypatch, server.url)
+    assert sync.main(["--host", "claude", "--upload", "--all"]) == 0
+    assert json.loads((env["data"] / "import-offer.json").read_text())["connected_at"]
 
 
 # ---------------------------------------------------------------------------

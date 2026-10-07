@@ -17,11 +17,12 @@ only for the browser approval and the user's import choice.
    ```
 2. If the Substrate tools (or their `authenticate` tool) are already in this
    session, go straight to `/substrate-claude:substrate-connect` step 1.
-   Otherwise ask the user for one thing only: *Type `/reload-plugins`, then
-   `/substrate-claude:substrate-connect`.* That command signs in (the user
-   approves in the browser), verifies with `memory_search`, says **Connected to
-   Substrate.**, and in the same reply offers **Import all** / **Let me pick** /
-   **Not now**.
+   Otherwise end the install reply with exactly this, in plain words:
+   *Installed. Type `/reload-plugins`, then say "continue".* On the next
+   message the plugin's hook tells you to finish setup: sign in (the user
+   approves in the browser), verify with `memory_search`, say **Connected to
+   Substrate.**, and in the same reply offer **Import all** / **Let me pick** /
+   **Not now**. Nothing else to type.
 3. On **Import all**, follow `/substrate-claude:substrate-import`: it starts the
    upload in the background and reports progress until the final summary
    line, without waiting for the user.

@@ -26,9 +26,9 @@ short-lived, import-only ticket held in memory by the upload script.
   hook at session start or end, so the first turn implies the start and the
   server seals a session after 30 minutes idle.
 - A second `UserPromptSubmit` hook runs `scripts/substrate_sync.py --offer-check`
-  (a local command, no network): until you have answered the import offer
-  once, it reminds the agent to offer it right after connecting. Afterwards it
-  is silent.
+  (a local command, no network): until Substrate is connected it tells the
+  agent to finish setup (sign in, verify), and until you have answered the
+  import offer once it reminds the agent to offer it. Afterwards it is silent.
 - Every hook fails open: a failed memory call never blocks the session.
 
 ## Install for Cowork
@@ -55,7 +55,8 @@ claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
 claude plugin install substrate-claude@substrate-marketplace
 ```
 
-Then `/reload-plugins` and `/substrate-claude:substrate-connect`.
+Then type `/reload-plugins` and say "continue": the plugin's hook makes the
+agent finish setup on that message.
 
 ## Sign-in and import
 
