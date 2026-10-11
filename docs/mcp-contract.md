@@ -257,7 +257,7 @@ result_digest, result_bytes, result_truncated?}]}`, `capture_session` payload
 `{boundary, session_complete, next_session_id?, parent_session_id?,
 message_high_water, platform, chat_type, participants?}`, plus `memory_write`,
 `memory_forget`, `consent`. Limits: event ≤ 262144 bytes, tool call args ≤ 4096,
-tool result excerpt ≤ 8192, ≤ 4096 messages per turn, ≤ 64 tool calls per message.
+tool result excerpt ≤ 8192, ≤ 128 messages per envelope part (server redaction bound: longer arrays arrive as "[TRUNCATED]" and are refused), ≤ 64 tool calls per message. Plugins split a longer turn into consecutive parts of at most 128 messages and about 200 KiB each, with contiguous offsets; the `/mcp` request body limit is 262144 bytes.
 `chat_type` for MCP hosts is `direct`.
 
 ## 6. Redaction (identical on every side)
