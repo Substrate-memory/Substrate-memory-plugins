@@ -792,19 +792,22 @@ def _wait_for(predicate, timeout=15.0, interval=0.05):
     return predicate()
 
 
-def _capture_turn():
+def _capture_turn(turn=0):
+    """Capture turn ``turn`` of a growing session (Hermes history grows each turn)."""
     from substrate import plugin as _plugin
 
+    history = []
+    for i in range(turn + 1):
+        history.append({"role": "user", "content": f"hello {i}"})
+        history.append({"role": "assistant", "content": f"world {i}"})
     _plugin.sync_turn(
-        "hello",
-        "world",
+        f"hello {turn}",
+        f"world {turn}",
         session_id="s",
-        messages=[
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "world"},
-        ],
-        turn_id="t",
+        messages=history,
+        turn_id=f"t{turn}",
     )
+
 
 
 def _quarantined_count(spool) -> int:
@@ -836,7 +839,7 @@ def test_no_credential_capture_stays_pending_then_replays_after_login(
 
     # Simulate login: store the key, next capture starts the sender normally.
     credentials.store_token(home.resolve(), origin, "k")
-    _capture_turn()
+    _capture_turn(1)
     assert _wait_for(lambda: spool_module.get_spool().pending() == 0)
     delivered = [call for call in fake_mcp.calls
                  if call["method"] == "tools/call" and call["tool"] == "memory_import"]
@@ -868,7 +871,7 @@ def test_revoked_credential_retains_pending_through_reconnect(
     # must not swap the running sender to an empty key.
     onboarding.note_auth_failure()
     assert credentials.stored_api_key(home.resolve()) == ""
-    _capture_turn()
+    _capture_turn(1)
     assert spool_module.get_spool().pending() == 2
     time.sleep(0.5)
     assert spool_module.get_spool().pending() == 2
@@ -879,7 +882,7 @@ def test_revoked_credential_retains_pending_through_reconnect(
     # backoff), so this wait is bounded generously but polls out early.
     fake_mcp.http_status = 200
     credentials.store_token(home.resolve(), origin, "k")
-    _capture_turn()
+    _capture_turn(2)
     assert _wait_for(
         lambda: spool_module.get_spool().pending() == 0, timeout=75.0, interval=0.5
     )
@@ -1231,3 +1234,86 @@ def test_expiry_after_approval_is_not_called_unapproved(monkeypatch, device_serv
     device_server.token_mode = "expired_token"
     assert _poll_now(manager) is False
     assert _state(home)["error_class"] == "authenticated_health_check_failed"
+
+
+# ---------------------------------------------------------------------------
+# 0.9.0: the import offer arrives with the connection, never a separate step
+# ---------------------------------------------------------------------------
+
+
+def _history_db(home):
+    from test_substrate_history import T0, add_session, chat, make_db
+
+    db = make_db(home, 26)
+    add_session(db, "old-1", source="telegram", started=T0, ended_at=T0 + 9, messages=chat(2))
+    add_session(db, "old-2", source="cli", started=T0 + 86_400, ended_at=T0 + 86_409,
+                messages=chat(1))
+    db.close()
+
+
+def test_poll_success_ends_with_the_import_question(device_server, tmp_path):
+    home = tmp_path / "h"
+    home.mkdir()
+    _history_db(home)
+    env = _cli_env(home, device_server.origin)
+    device_server.token_mode = "approved"
+    device_server.token_body = {**device_server.token_body, "account": "owner@example.com"}
+    subprocess.run([sys.executable, str(PLUGIN_CLI), "start"], capture_output=True, text=True,
+                   timeout=60, env=env, check=True)
+    polled = subprocess.run([sys.executable, str(PLUGIN_CLI), "poll", "--timeout", "30"],
+                            capture_output=True, text=True, timeout=90, env=env)
+    assert polled.returncode == 0, polled.stdout + polled.stderr
+    out = polled.stdout
+    assert "Connected to Substrate as owner@example.com." in out
+    assert out.index("Connected to Substrate as") < out.index("Next, in this same reply")
+    assert ("I can also add your 2 earlier Hermes conversations (6 messages, March 3, 2026 "
+            "to March 4, 2026) to your Substrate memory") in out
+    assert out.rstrip().endswith("import --no (never ask again)")
+    assert f"python {PLUGIN_CLI.resolve()} import --yes" in out
+    assert TOKEN not in out and DEVICE_CODE not in out
+    again = subprocess.run([sys.executable, str(PLUGIN_CLI), "start", "--json"],
+                           capture_output=True, text=True, timeout=60, env=env)
+    payload = json.loads(again.stdout)
+    assert payload["status"] == "ready"
+    assert payload["import_offer"]["sessions"] == 2
+    assert payload["import_offer"]["commands"]["not_now"].endswith("import --no")
+    subprocess.run([sys.executable, str(PLUGIN_CLI), "import", "--no"], capture_output=True,
+                   timeout=60, env=env, check=True)
+    later = subprocess.run([sys.executable, str(PLUGIN_CLI), "start", "--json"],
+                           capture_output=True, text=True, timeout=60, env=env)
+    assert "import_offer" not in json.loads(later.stdout)
+
+
+def test_poll_without_history_has_no_offer(device_server, tmp_path):
+    home = tmp_path / "h"
+    home.mkdir()
+    env = _cli_env(home, device_server.origin)
+    device_server.token_mode = "approved"
+    subprocess.run([sys.executable, str(PLUGIN_CLI), "start"], capture_output=True,
+                   timeout=60, env=env, check=True)
+    polled = subprocess.run([sys.executable, str(PLUGIN_CLI), "poll", "--json", "--timeout", "30"],
+                            capture_output=True, text=True, timeout=90, env=env)
+    payload = json.loads(polled.stdout)
+    assert payload["status"] == "ready" and "import_offer" not in payload
+    assert json.loads((home / "substrate" / "import-offer.json").read_text())["decision"] == "none"
+
+
+def test_reply_after_approval_confirms_and_offers_import_together(monkeypatch, device_server):
+    """In chat: the message after approval connects, names the account, and
+    asks the import question in the same reply (no extra round trip)."""
+    from substrate import plugin
+
+    home = _isolated_home_path()
+    _history_db(home)
+    _origin(monkeypatch, device_server)
+    monkeypatch.setattr(plugin, "_version_notice_shown", True)
+    first = plugin.pre_llm_call("live", "Connect and use it as your main memory", [])["context"]
+    assert "Code: BCDF-GHJK" in first and "substrate-import-offer" not in first
+    device_server.token_mode = "approved"
+    device_server.token_body = {**device_server.token_body, "account": "owner@example.com"}
+    monkeypatch.setattr(onboarding, "_manager", None)
+    second = plugin.pre_llm_call("live", "Connection approved", [])["context"]
+    assert "Connected to Substrate as owner@example.com." in second
+    assert "<substrate-import-offer>" in second
+    assert second.index("Connected to Substrate as") < second.index("<substrate-import-offer>")
+    assert "2 earlier Hermes conversations (6 messages" in second

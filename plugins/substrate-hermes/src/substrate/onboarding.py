@@ -24,6 +24,8 @@ import os
 import re
 import socket
 import stat
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -985,14 +987,93 @@ def _failed(error_class: str) -> dict[str, Any]:
     return {"status": "failed", "error_class": error_class, "message": explain(error_class)}
 
 
-def _ready(credential: str, state: dict[str, Any] | None = None) -> dict[str, Any]:
+def _ready(credential: str, state: dict[str, Any] | None = None,
+           home: Path | None = None) -> dict[str, Any]:
     account = _clip(str((state or {}).get("account", "")), 256)
-    return {
+    payload: dict[str, Any] = {
         "status": "ready",
         "credential": credential,
         "account": account,
         "message": f"Connected to Substrate as {account}." if account else "Connected to Substrate.",
     }
+    if home is not None:
+        offer = import_offer(home)
+        if offer is not None:
+            payload["import_offer"] = offer
+    return payload
+
+
+def _history():
+    try:
+        from . import history as module
+    except ImportError:  # standalone script layout
+        try:
+            from substrate import history as module  # type: ignore[no-redef]
+        except ImportError:
+            import history as module  # type: ignore[no-redef]
+    return module
+
+
+def _onboard_cli() -> str:
+    """Absolute path of the stable ``onboard.py`` entry point."""
+    argv0 = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
+    if argv0 is not None and argv0.name == "onboard.py":
+        return str(argv0)
+    return str(Path(__file__).resolve().parents[2] / "onboard.py")
+
+
+def _cli_exclude(extra: list[str] | None = None) -> set[str]:
+    """The conversation running this command is captured live: never import it."""
+    exclude = {item for item in (extra or []) if item}
+    current = os.environ.get("HERMES_SESSION_ID", "").strip()
+    if current:
+        exclude.add(current)
+    return exclude
+
+
+def import_offer(home: Path, exclude: set[str] | None = None) -> dict[str, Any] | None:
+    """The one-time import offer after a connection, or None.
+
+    None when the user already answered, when there is nothing to import
+    (then "none" is recorded so it is never asked), or when the history
+    cannot be read right now.
+    """
+    history = _history()
+    try:
+        if history.read_decision(home):
+            return None
+        view = history.preview(home, exclude=_cli_exclude(list(exclude or ())))
+        if not view["sessions"]:
+            history.record_decision(home, "none")
+            return None
+    except Exception:
+        return None
+    cli = _onboard_cli()
+    return {
+        "sessions": view["sessions"],
+        "messages": view["messages"],
+        "first_at": view["first_at"],
+        "last_at": view["last_at"],
+        "question": history.offer_question(view),
+        "commands": {
+            "import_all": f"python {cli} import --yes",
+            "let_me_pick": f"python {cli} import --list",
+            "pick": f"python {cli} import --yes --session <id> [--session <id> ...]",
+            "not_now": f"python {cli} import --no",
+        },
+    }
+
+
+def offer_text(offer: dict[str, Any]) -> str:
+    commands = offer["commands"]
+    return (
+        "Next, in this same reply, ask the user:\n"
+        f"  \"{offer['question']}\"\n"
+        "Then run the command for their answer (nothing else is needed first):\n"
+        f"  Import all:  {commands['import_all']}\n"
+        f"  Let me pick: {commands['let_me_pick']}, show the list, then {commands['pick']}\n"
+        f"  Not now:     {commands['not_now']} (never ask again)"
+    )
 
 
 def _print_payload(payload: dict[str, Any], as_json: bool) -> None:
@@ -1014,10 +1095,10 @@ def _print_payload(payload: dict[str, Any], as_json: bool) -> None:
             flush=True,
         )
     else:
-        print(
-            str(payload.get("message") or f"Substrate sign-in status: {status}."),
-            flush=True,
-        )
+        text = str(payload.get("message") or f"Substrate sign-in status: {status}.")
+        if isinstance(payload.get("import_offer"), dict):
+            text += "\n\n" + offer_text(payload["import_offer"])
+        print(text, flush=True)
 
 
 def _resolve_cli_home(explicit: str | None) -> Path:
@@ -1048,12 +1129,12 @@ def _cli_start(home: Path, origin: str, as_json: bool) -> int:
             credentials.save_origin(home, origin)
         except credentials.CredentialError:
             pass
-        _print_payload(_ready("existing", _load_state(home)), as_json)
+        _print_payload(_ready("existing", _load_state(home), home), as_json)
         return 0
     manager = OnboardingManager(home, origin)
     status = manager.ensure(force=True)
     if status is None:
-        _print_payload(_ready("existing", _load_state(home)), as_json)
+        _print_payload(_ready("existing", _load_state(home), home), as_json)
         return 0
     _print_payload(status, as_json)
     return 0 if status.get("status") in {"authorization_pending", "finishing"} else 1
@@ -1063,7 +1144,7 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
     manager = OnboardingManager(home, origin)
     status = manager.ensure()
     if status is None:
-        _print_payload(_ready("existing", _load_state(home)), as_json)
+        _print_payload(_ready("existing", _load_state(home), home), as_json)
         return 0
     if status.get("status") not in {"authorization_pending", "finishing"}:
         _print_payload(status, as_json)
@@ -1076,7 +1157,7 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
         state = _load_state(home)
         phase = state.get("phase")
         if phase == "connected":
-            _print_payload(_ready("device_authorization", state), as_json)
+            _print_payload(_ready("device_authorization", state, home), as_json)
             return 0
         if phase in {"failed", "declined", "invalid"}:
             _print_payload(manager.describe(state), as_json)
@@ -1085,6 +1166,100 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
     # single JSON document so the agent can show it and re-poll.
     _print_payload(manager.describe(_load_state(home)), as_json)
     return 1
+
+
+def _cli_import(home: Path, args: argparse.Namespace, as_json: bool) -> int:
+    """``onboard.py import``: preview / --list / --yes / --no / --status / --run."""
+    history = _history()
+    os.environ["HERMES_HOME"] = str(home)  # the spool and child process agree
+    exclude = _cli_exclude(list(args.exclude_session or []))
+    picked = list(dict.fromkeys(args.session or [])) or None
+
+    def emit(payload: dict[str, Any], text: str, code: int = 0) -> int:
+        if as_json:
+            print(json.dumps(payload, sort_keys=True), flush=True)
+        else:
+            print(text, flush=True)
+        return code
+
+    if args.status:
+        state = history.status(home)
+        return emit(state, state["message"])
+    if args.no:
+        history.record_decision(home, "no")
+        return emit({"status": "declined"},
+                    "OK. Past conversations stay out of Substrate memory; this is not asked "
+                    "again. To import them later, run: "
+                    f"python {_onboard_cli()} import --yes")
+    try:
+        view = history.preview(home, exclude=exclude, limit=20 if args.list else 0,
+                               picked=set(picked) if picked else None)
+    except history.HistoryError as exc:
+        return emit({"status": "failed", "error_class": exc.category},
+                    "Could not read this profile's Hermes history (state.db). Nothing was "
+                    "changed; try again later.", 1)
+    if args.run or args.yes:
+        existing = os.environ.get(credentials.ENV_KEY) or credentials.stored_api_key(home)
+        if not existing:
+            return emit(_failed("missing_credential"),
+                        "Substrate memory is not connected yet. Connect first: "
+                        f"python {_onboard_cli()} start, then python {_onboard_cli()} poll.", 1)
+        if not view["sessions"]:
+            if not picked:
+                history.record_decision(home, "none")
+            return emit({"status": "nothing_to_import"},
+                        "There are no earlier conversations in this Hermes profile to import "
+                        "(automated runs, group chats and the current conversation are left out).")
+        history.record_decision(home, "picked" if picked else "yes")
+        if args.run:
+            try:
+                from .spool import get_spool
+            except ImportError:  # standalone script layout
+                from substrate.spool import get_spool  # type: ignore[no-redef]
+
+            spool = get_spool()
+            try:
+                result = history.ImportJob(home, spool=spool, client=SubstrateClient.from_env(),
+                                           exclude=exclude, picked=picked).run()
+            finally:
+                spool.close()
+            return emit(result, result["message"], 0 if result["state"] == "done" else 1)
+        if history.job_running(home):
+            state = history.status(home)
+            return emit({**state, "status": "already_running"}, state["message"])
+        command = [sys.executable, _onboard_cli(), "--hermes-home", str(home), "import", "--run"]
+        for item in sorted(exclude):
+            command += ["--exclude-session", item]
+        for item in picked or []:
+            command += ["--session", item]
+        subprocess.Popen(  # noqa: S603 - our own CLI, fixed argv
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True,
+        )
+        return emit(
+            {"status": "started", "sessions": view["sessions"], "messages": view["messages"]},
+            f"Started importing {history.describe_preview(view)} in the background. Live "
+            "messages are saved first. Tell the user it has started; check progress with "
+            f"python {_onboard_cli()} import --status",
+        )
+    if not view["sessions"]:
+        if not history.read_decision(home):
+            history.record_decision(home, "none")
+        return emit({**view, "status": "nothing_to_import"},
+                    "There are no earlier conversations in this Hermes profile to import.")
+    if args.list:
+        lines = [f"{history.describe_preview(view).capitalize()} can be imported. Most recent:"]
+        for entry in view["recent"]:
+            title = f" \"{entry['title']}\"" if entry["title"] else ""
+            lines.append(f"  {entry['session_id']}  {entry['started']}  {entry['platform']}"
+                         f"{title}  ({entry['messages']} messages)")
+        lines.append(f"Import chosen ones: python {_onboard_cli()} import --yes --session <id> ...")
+        return emit({**view, "status": "preview"}, "\n".join(lines))
+    offer = import_offer(home, exclude)
+    text = offer_text(offer) if offer else (
+        f"{history.describe_preview(view).capitalize()} can be imported: "
+        f"python {_onboard_cli()} import --yes")
+    return emit({**view, "status": "preview", "question": history.offer_question(view)}, text)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1108,7 +1283,19 @@ def build_parser() -> argparse.ArgumentParser:
     poll = sub.add_parser("poll", help="wait for browser approval (bounded)")
     poll.add_argument("--timeout", type=float, default=900.0,
                       help="maximum seconds to wait (default 900)")
-    for command_parser in (start, status, poll):
+    importer = sub.add_parser(
+        "import", help="import past conversations of this profile into Substrate memory")
+    choice = importer.add_mutually_exclusive_group()
+    choice.add_argument("--yes", action="store_true", help="import (in the background)")
+    choice.add_argument("--no", action="store_true", help="not now; never ask again")
+    choice.add_argument("--status", action="store_true", help="show import progress")
+    choice.add_argument("--list", action="store_true", help="list recent sessions to pick from")
+    choice.add_argument("--run", action="store_true", help=argparse.SUPPRESS)
+    importer.add_argument("--session", action="append", default=[],
+                          help="import only this session id (repeatable)")
+    importer.add_argument("--exclude-session", action="append", default=[],
+                          help="never import this session id (repeatable)")
+    for command_parser in (start, status, poll, importer):
         command_parser.add_argument("--json", dest="as_json", action="store_true",
                                     help="emit content-free JSON (no secrets)")
         command_parser.add_argument("--headless", action="store_true",
@@ -1133,6 +1320,12 @@ def main(argv: list[str] | None = None) -> int:
             return _cli_start(home, origin, bool(args.as_json))
         if command == "poll":
             return _cli_poll(home, origin, float(args.timeout), bool(args.as_json))
+        if command == "import":
+            try:
+                return _cli_import(home, args, bool(args.as_json))
+            except Exception:  # noqa: BLE001 - one plain message, never a traceback
+                _print_payload(_failed("internal_error"), bool(args.as_json))
+                return 1
         return _cli_status(home, bool(args.as_json))
     except (OnboardingError, credentials.CredentialError):
         _print_payload(_failed("internal_error"), bool(args.as_json))

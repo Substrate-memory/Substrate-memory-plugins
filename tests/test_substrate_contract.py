@@ -224,3 +224,77 @@ def test_handle_regex() -> None:
     assert c.HANDLE_RE.match("m:44a1b02e") and c.HANDLE_RE.match("p:" + "f" * 64)
     for bad in ("m:44A1B02E", "m:1234567", "x:44a1b02e", "m:" + "f" * 65, "44a1b02e", ""):
         assert not c.HANDLE_RE.match(bad), bad
+
+
+def _turn_envelope(count: int, *, content: str = "m") -> dict:
+    base = copy.deepcopy(_case("valid", "turn_with_tool")["envelope"])
+    messages = [
+        {"index": i, "role": "user" if i % 2 == 0 else "assistant",
+         "content": f"{content}{i}"}
+        for i in range(count)
+    ]
+    base["payload"]["messages"] = messages
+    base["offset"] = {"start": 0, "end": count}
+    base["event_id"] = str(uuid.uuid4())
+    return base
+
+
+def test_more_than_128_messages_per_turn_is_refused_like_the_server() -> None:
+    # Server redaction turns an array over 128 items into "[TRUNCATED]".
+    c.validate_envelope(_turn_envelope(128))
+    with pytest.raises(c.ContractError) as refused:
+        c.validate_envelope(_turn_envelope(129))
+    assert refused.value.category == "invalid_request"
+
+
+def test_strings_over_the_server_clip_are_refused_locally() -> None:
+    envelope = _turn_envelope(2)
+    envelope["payload"]["messages"][0]["content"] = "x" * 8192
+    c.validate_envelope(envelope)
+    envelope["payload"]["messages"][0]["content"] = "x" * 8193
+    with pytest.raises(c.ContractError):
+        c.validate_envelope(envelope)
+
+
+def test_capture_turn_parts_split_into_contiguous_valid_parts() -> None:
+    envelope = _turn_envelope(300)
+    parts = c.capture_turn_parts(envelope)
+    assert len(parts) == 3
+    seen = []
+    for part in parts:
+        c.validate_envelope(part, idempotency_key=part["event_id"])
+        assert len(part["payload"]["messages"]) <= c.MAX_PAYLOAD_ITEMS
+        assert part["offset"]["end"] - part["offset"]["start"] == len(part["payload"]["messages"])
+        seen.extend(m["index"] for m in part["payload"]["messages"])
+    assert seen == list(range(300))
+    assert len({part["event_id"] for part in parts}) == 3
+    # A fitting envelope is returned as the only part, unchanged.
+    small = _turn_envelope(5)
+    assert c.capture_turn_parts(small) == [small]
+
+
+def test_capture_turn_parts_respect_the_byte_budget() -> None:
+    envelope = _turn_envelope(40, content="y" * 8000)
+    parts = c.capture_turn_parts(envelope, budget=c.ENVELOPE_BUDGET_BYTES)
+    assert len(parts) > 1
+    for part in parts:
+        assert len(c.canonical_bytes(part)) <= c.ENVELOPE_BUDGET_BYTES
+        c.validate_envelope(part, idempotency_key=part["event_id"])
+
+
+def test_history_parts_have_deterministic_ids() -> None:
+    envelope = _turn_envelope(300)
+    envelope["capture_origin"] = "history_replay"
+    envelope["event_id"] = c.deterministic_event_id(
+        "capture_turn", envelope["session_id"], envelope["offset"], envelope["payload"])
+    first = c.capture_turn_parts(envelope)
+    again = c.capture_turn_parts(envelope)
+    assert [p["event_id"] for p in first] == [p["event_id"] for p in again]
+
+
+def test_one_message_over_the_budget_cannot_be_split() -> None:
+    envelope = _turn_envelope(2, content="z")
+    envelope["payload"]["messages"][0]["content"] = "z" * 8192
+    with pytest.raises(c.ContractError) as refused:
+        c.capture_turn_parts(envelope, budget=4096)
+    assert refused.value.category == "payload_too_large"

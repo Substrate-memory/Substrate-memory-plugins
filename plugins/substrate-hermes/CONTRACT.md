@@ -80,7 +80,14 @@ Known kinds: `capture_turn`, `capture_session`, `memory_write`, `memory_forget`,
 ### 5.2 `capture_turn`
 
 ```
-payload: {turn_id: <1..128>, messages: [1..4096 message]}
+payload: {turn_id: <1..128>, messages: [1..128 message]}
+Server bound (substrate-v5 redaction): any array or object with more than 128
+items or keys is replaced by "[TRUNCATED]" before validation, so a 129th message
+reaches the ledger as a string and the event is refused as `invalid_request`.
+Strings inside `payload` are clipped by the server to 8192 bytes; the plugin
+clips them first and refuses longer ones locally. Longer turns are sent as
+consecutive parts with contiguous offsets (`contract.capture_turn_parts`), and
+live capture sends only the messages since the last one enqueued for the session.
 message: {
   index: int ≥ 0, role: "user" | "assistant" | "tool", content: string,
   timestamp?: <timestamp>, speaker?: <speaker>, fragment?: <fragment>,
@@ -279,10 +286,14 @@ locally spooled item. The server copy of this file needs the same append.
   item_count, byte_count, updated_at)`, updated in the same transaction as
   enqueue, eviction, quarantine, claim, release, and ACK retirement, where
   `outcome` is one of `enqueued | evicted | quarantined | delivered |
-  claimed | released | spool_full`. Every retired item therefore has a
+  claimed | released | spool_full | split | trimmed`. Every retired item therefore has a
   matching ACK or an atomic durable eviction/quarantine counter.
 - Permanent delivery failures (400/404/409/413, bad responses) quarantine
-  the item with a durable counter; transient failures (timeout, transport,
+  the item with a durable counter. The exception is a capture_turn refused
+  as `invalid_request` or `payload_too_large`: it is split into smaller
+  consecutive parts (counter `split`), and a single oversized message is
+  trimmed to a 1024-byte excerpt as a last resort (counter `trimmed`); only
+  when neither applies is it quarantined. Transient failures (timeout, transport,
   401/403, 429, 5xx, malformed/mismatched ACKs) release the claim and back
   off from 1 s (30 s for auth errors), doubling to 300 s with jitter,
   honoring `Retry-After`.

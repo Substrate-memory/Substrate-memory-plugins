@@ -81,6 +81,21 @@ LIMITS: dict[str, int] = {
     "rules_refresh_seconds": 300,
 }
 
+# Server-side redaction bounds (substrate-v5 agent-api/redaction.mjs, contract
+# section 6). The server replaces any array or object with more than 128 items
+# or keys by "[TRUNCATED]", nests deeper than 8 levels as "[TRUNCATED]", and
+# clips strings inside objects to 8192 bytes. A capture_turn with more than 128
+# messages therefore reaches the ledger as payload.messages == "[TRUNCATED]" and
+# is refused as invalid_request. The local validator enforces the same bounds so
+# this is caught before anything is spooled.
+MAX_PAYLOAD_ITEMS = 128
+MAX_PAYLOAD_DEPTH = 8
+MAX_PAYLOAD_STRING_BYTES = 8192
+# Canonical size the plugin builds one envelope to. The /mcp body limit
+# (262144 bytes) also carries the JSON-RPC wrapper and the other items of a
+# batch, so one envelope stays well under it.
+ENVELOPE_BUDGET_BYTES = 200 * 1024
+
 MAX_SESSION_ID_BYTES = 512
 MAX_ID_BYTES = 128
 MAX_SPEAKER_ID_BYTES = 256
@@ -151,6 +166,69 @@ def canonical_json(obj: Any) -> str:
 
 def canonical_bytes(obj: Any) -> bytes:
     return canonical_json(obj).encode("utf-8")
+
+
+def _turn_with(envelope: Mapping[str, Any], group: list[dict[str, Any]], *,
+               turn_id: str) -> dict[str, Any]:
+    """A copy of a capture_turn envelope carrying ``group`` (ids fixed below)."""
+    offset = {"start": group[0]["index"], "end": group[-1]["index"] + 1}
+    part = dict(envelope)
+    part["offset"] = offset
+    part["payload"] = {"turn_id": turn_id, "messages": group}
+    if envelope.get("capture_origin") in ("history_replay", "catchup"):
+        part["event_id"] = deterministic_event_id(
+            "capture_turn", envelope["session_id"], offset, part["payload"])
+    else:
+        part["event_id"] = str(uuid.uuid4())
+    return part
+
+
+def capture_turn_parts(
+    envelope: Mapping[str, Any],
+    *,
+    max_items: int = MAX_PAYLOAD_ITEMS,
+    budget: int = ENVELOPE_BUDGET_BYTES,
+) -> list[dict[str, Any]]:
+    """Split a capture_turn into consecutive parts the server accepts.
+
+    Each part holds at most ``max_items`` (capped at 128) messages and at most
+    ``budget`` canonical bytes, with contiguous offsets. A fitting envelope is
+    returned unchanged as the only part. Live parts get fresh event ids;
+    history and catch-up parts get deterministic ids, so a rerun dedupes. A
+    part whose turn_id changes keeps the original as its prefix.
+    Raises ContractError("payload_too_large") when one message alone cannot fit.
+    """
+    if envelope.get("kind") != "capture_turn":
+        raise ContractError("invalid_request", "kind: expected capture_turn")
+    messages = envelope["payload"]["messages"]
+    max_items = max(1, min(int(max_items), MAX_PAYLOAD_ITEMS))
+    if len(messages) <= max_items and len(canonical_bytes(envelope)) <= budget:
+        return [dict(envelope)]
+    base_turn = str(envelope["payload"]["turn_id"])
+    overhead = len(canonical_bytes(_turn_with(envelope, messages[:1], turn_id=base_turn)))
+    groups: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    current_bytes = 0
+    for message in messages:
+        size = len(canonical_bytes(message)) + 1
+        if overhead + size > budget:
+            raise ContractError("payload_too_large", "message alone exceeds the envelope budget")
+        if current and (len(current) >= max_items or overhead + current_bytes + size > budget):
+            groups.append(current)
+            current, current_bytes = [], 0
+        current.append(message)
+        current_bytes += size
+    if current:
+        groups.append(current)
+    parts: list[dict[str, Any]] = []
+    for group in groups:
+        turn_id = base_turn
+        if len(groups) > 1:
+            turn_id = f"{base_turn[:100]}-{group[0]['index']}"
+        part = _turn_with(envelope, group, turn_id=turn_id)
+        validate_envelope(part, idempotency_key=part["event_id"])
+        parts.append(part)
+    return parts
 
 
 def deterministic_event_id(
@@ -354,7 +432,7 @@ def _message(value: Any, path: str) -> dict[str, Any]:
     _obj(value, path, _MESSAGE_FIELDS, {"index", "role", "content"})
     _int(value["index"], f"{path}.index", minimum=0)
     role = _enum(value["role"], f"{path}.role", MESSAGE_ROLES)
-    content = _str(value["content"], f"{path}.content", max_bytes=LIMITS["max_event_bytes"])
+    content = _str(value["content"], f"{path}.content", max_bytes=MAX_PAYLOAD_STRING_BYTES)
     if "timestamp" in value:
         _match(value["timestamp"], f"{path}.timestamp", RFC3339_RE)
     if "speaker" in value:
@@ -390,10 +468,29 @@ def _message(value: Any, path: str) -> dict[str, Any]:
     return value
 
 
+def _payload_bounds(value: Any, path: str, depth: int = 0) -> None:
+    """Refuse what the server's redaction would truncate or clip.
+
+    Mirrors substrate-v5 redaction.mjs: containers nested at depth 8 or more,
+    containers with more than 128 items or keys, and strings over 8192 bytes.
+    """
+    if isinstance(value, (dict, list)):
+        if depth >= MAX_PAYLOAD_DEPTH:
+            _fail("invalid_request", path, f"nested {MAX_PAYLOAD_DEPTH} levels or deeper")
+        children = list(value.items()) if isinstance(value, dict) else list(enumerate(value))
+        if len(children) > MAX_PAYLOAD_ITEMS:
+            _fail("invalid_request", path, f"more than {MAX_PAYLOAD_ITEMS} items or keys")
+        for key, child in children:
+            _payload_bounds(child, f"{path}.{key}", depth + 1)
+    elif isinstance(value, str) and _byte_len(value) > MAX_PAYLOAD_STRING_BYTES:
+        _fail("invalid_request", path, f"longer than {MAX_PAYLOAD_STRING_BYTES} bytes")
+
+
 def _payload_capture_turn(payload: Any, offset: Mapping[str, int], path: str) -> None:
     _obj(payload, path, _TURN_FIELDS, {"turn_id", "messages"})
     _str(payload["turn_id"], f"{path}.turn_id", max_bytes=MAX_ID_BYTES, min_bytes=1)
-    messages = _list(payload["messages"], f"{path}.messages", max_items=4096, min_items=1)
+    messages = _list(payload["messages"], f"{path}.messages",
+                     max_items=MAX_PAYLOAD_ITEMS, min_items=1)
     previous = -1
     previous_fragment = False
     for i, message in enumerate(messages):
@@ -528,6 +625,7 @@ def validate_envelope(
     if not isinstance(payload, dict):
         _fail("invalid_request", "payload", "expected object")
     _no_floats(payload, "payload")
+    _payload_bounds(payload, "payload")
     if kind == "capture_turn":
         _payload_capture_turn(payload, offset, "payload")
     elif kind == "capture_session":

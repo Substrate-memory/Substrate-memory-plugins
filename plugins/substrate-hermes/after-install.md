@@ -1,28 +1,47 @@
 # Substrate memory is installed
 
-Connect it now (one browser approval, no API key):
+Connect it now and keep going without stopping: do every step below in a row,
+and pause only where the user has to act (the browser approval and the
+import question). Never end a reply with "let me know when you are done".
 
-1. Start the sign-in and show the user the printed link and code:
+1. If the plugin is not enabled yet (it is when installed with `--enable`):
+   `hermes plugins enable substrate`. If the gateway runs this chat, the plugin
+   loads after `hermes gateway restart` (ask the user first); the steps below
+   work either way.
+2. Start the sign-in:
 
    ```sh
    python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" start
    ```
 
-2. The user opens the link, signs in, checks the code, and chooses
-   **Approve connection**.
-3. Wait for approval. It prints **Connected to Substrate as you@example.com.** (your account)
+3. Show the user the printed link and code in one short message: open the
+   link, sign in, check the code, choose **Approve connection**.
+4. Right after that message, without waiting for the user to reply, run the
+   wait command so approval is detected by itself (the user never has to type
+   "approved"). Prefer a background run that wakes you when it finishes:
+   `terminal(command="python .../onboard.py poll", background=true, notify_on_complete=true)`;
+   otherwise run it in the foreground:
 
    ```sh
    python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" poll
    ```
 
-4. Enable and load the plugin if it is not yet active:
-   `hermes plugins enable substrate`, then `hermes gateway restart` (with the
-   user's agreement, if the gateway is running this chat).
+   It prints **Connected to Substrate as you@example.com.** (your account).
+5. In the same reply, offer the import of past conversations. `poll` ends with
+   the exact question and commands when this profile has earlier
+   conversations: ask *Import all, let me pick, or not now?*, then run
+   `onboard.py import --yes` (all, in the background), `onboard.py import --list`
+   followed by `onboard.py import --yes --session <id> ...` (pick), or
+   `onboard.py import --no` (not now; never asked again). Report progress with
+   `onboard.py import --status` and the result when it is done.
 
-After a restart, the plugin also shows the link and code in chat by itself
-on the next message when it is not connected yet. Never paste an API key
-into chat.
+Once the plugin is loaded, the same flow also runs in chat by itself: when the
+profile is not connected, the next message shows the link and code; after the
+user approves, the next reply says **Connected to Substrate as you@example.com.**
+and asks the import question in the same reply (tool `substrate_import`).
+Automated runs (cron, batch, subagents), group chats and the current
+conversation are never imported; imported text is redacted like live turns.
+Never paste an API key into chat.
 
 Tested on Hermes 0.21.0 or newer. Other versions should work; if something
 does not, tell us at https://github.com/Substrate-memory/Substrate-memory-plugins/issues.

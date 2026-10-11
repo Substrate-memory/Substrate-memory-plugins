@@ -5,6 +5,7 @@ Usage:
     python /path/to/hermes-substrate/onboard.py start --json
     python /path/to/hermes-substrate/onboard.py status --json
     python /path/to/hermes-substrate/onboard.py poll --json [--timeout 900]
+    python /path/to/hermes-substrate/onboard.py import [--yes|--no|--status|--list]
 
 Works from the installed plugin directory with no PYTHONPATH or editable
 install: this shim adds the bundled ``src/`` to ``sys.path`` for its own
