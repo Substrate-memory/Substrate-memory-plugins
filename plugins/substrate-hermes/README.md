@@ -14,6 +14,8 @@ What you get:
   if the network is down, turns wait in the spool and send later.
 - Memory tools: `memory_search`, `memory_expand`, `memory_evidence`,
   `memory_remember`, and `memory_forget`.
+- Past conversations: after connecting, one question imports this
+  profile's earlier Hermes conversations (tool `substrate_import`).
 - Private sign-in: one browser approval per profile. No pasted keys.
 
 ## Install
@@ -27,28 +29,34 @@ hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plug
 The repository root is a Hermes plugin that loads this directory.
 Installing only this directory also works:
 `hermes plugins install Substrate-memory/Substrate-memory-plugins/plugins/substrate-hermes --enable`.
-To pin a release, add `--ref <40-character commit SHA of the v0.8.1 tag>`.
+To pin a release, add `--ref <40-character commit SHA of the v0.9.0 tag>`.
 
 ## Connect (one browser approval)
 
 The flow is: **Install → Sign in → Review → Approve connection →
-Connected to Substrate.**
+Connected to Substrate. → Import past conversations?** The agent chains
+the steps itself and only waits for you where you decide.
 
 ```sh
 python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" start
 python "$(dirname "$(hermes config path)")/plugins/substrate/onboard.py" poll
 ```
 
-`start` prints the approval link and a code. Open the link, sign in, check
-the code, and choose **Approve connection**. `poll` waits and ends with
-**Connected to Substrate as you@example.com.** (your account) (add `--json` for
-machine-readable output). The agent must never approve for you or ask for a
-pasted key.
+`start` prints the approval link and a code. The agent shows them and runs
+`poll` right away (in the background with `notify_on_complete`, or in the
+foreground), so your approval is picked up by itself: you never have to type
+"approved". Open the link, sign in, check the code, and choose **Approve
+connection**. `poll` ends with **Connected to Substrate as
+you@example.com.** (your account) and, when this profile has earlier
+conversations, the import question for the agent to ask in the same reply
+(add `--json` for machine-readable output). The agent must never approve for
+you or ask for a pasted key.
 
 Once the plugin is loaded (after `hermes gateway restart`), you do not need
 the CLI: when the profile is not connected, the agent shows the link and
 code in chat on your next message, the plugin finishes by itself after you
-approve, and the next turn says **Connected to Substrate as you@example.com.** (your account)
+approve, and the next reply says **Connected to Substrate as you@example.com.**
+(your account) and asks about importing past conversations.
 Every failure comes with a plain message and a next step.
 
 The plugin stores the tenant-scoped key privately in the active profile
@@ -79,11 +87,31 @@ It should work; if something does not, tell us.* It never upgrades Hermes. See
 
 ## Import past conversations
 
-After **Connected to Substrate.**, the agent asks once whether to import
-earlier sessions from this host. On yes, it shows the local session list
-and imports only the sessions you confirm. Turns already saved are never
-stored twice. If a turn ever reports earlier turns as not saved yet, the
-agent syncs the missing turns on request.
+Right after **Connected to Substrate.**, the agent asks once, with real
+numbers: *I can also add your 42 earlier Hermes conversations (1,234
+messages, March 3, 2026 to October 6, 2026) to your Substrate memory, so I
+remember them too. Import all, let me pick, or not now?*
+
+- **Import all** imports every earlier conversation of this profile in the
+  background. Live messages keep priority; the agent tells you when it is
+  done (*Imported 42 past Hermes conversations (310 turns): 300 new, 10
+  already in memory.*).
+- **Let me pick** lists recent conversations and imports the ones you choose.
+- **Not now** is remembered and never asked again. Ask the agent to import
+  your past conversations any time.
+
+What is left out: the current conversation (it is saved live), automated
+runs (cron, batch, subagents, webhooks, tests), group chats, hidden and
+empty sessions. Text is redacted exactly like live turns, and again by the
+server. The source is this profile's `state.db`, read-only; any Hermes
+schema from 4 to 30 works. Imports resume after a restart, and a second
+import never stores anything twice. The decision lives in
+`<profile>/substrate/import-offer.json`, progress in
+`<profile>/substrate/import.json`.
+
+Without chat, the same from a terminal:
+`onboard.py import` (preview), `--list`, `--yes [--session <id> ...]`,
+`--no`, `--status`.
 
 ## Privacy and redaction
 
@@ -99,7 +127,9 @@ are checked against `contract/redaction-fixtures.json`.
 
 Capture and boundary events enqueue into a profile-local write-ahead spool
 (`<profile>/substrate/spool`, owner-only) at live priority, and explicit
-writes (`memory_remember`, `memory_forget`) enqueue at explicit priority.
+writes (`memory_remember`, `memory_forget`) enqueue at explicit priority,
+and imported history at replay priority (sent last, a bounded window at a
+time).
 The spool survives restarts, retries with backoff, and delivers in order.
 The plugin fails open: a slow or failed memory call never blocks your turn
 (the plugin stops waiting for turn context after 500 ms and injects nothing;
@@ -122,7 +152,9 @@ The plugin registers:
   `time_bounded`, `transient`), which returns the server's `m:` handle;
 - `memory_forget` (exactly one handle plus a required non-empty reason),
   which marks one memory atom as no longer true without deleting its
-  record or evidence.
+  record or evidence;
+- `substrate_import` (`preview`, `start`, `status`, `decline`) for the
+  past-conversation import.
 
 Optional overrides are `SUBSTRATE_API_URL`, `SUBSTRATE_API_KEY`, and
 `SUBSTRATE_AGENT_NAME`. The agent name is what you and your agents see in

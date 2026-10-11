@@ -43,6 +43,8 @@ OUTCOME_DELIVERED = "delivered"
 OUTCOME_CLAIMED = "claimed"
 OUTCOME_RELEASED = "released"
 OUTCOME_SPOOL_FULL = "spool_full"
+# Counted in addition to "delivered" when the server already held the event.
+OUTCOME_DUPLICATE = "duplicate"
 
 _STATE_QUEUED = "queued"
 _STATE_CLAIMED = "claimed"
@@ -362,6 +364,33 @@ class Spool:
         with self._lock:
             row = self._db.execute("SELECT COUNT(*) FROM items").fetchone()
         return int(row[0])
+
+    def pending_at(self, priority: int) -> tuple[int, int]:
+        """(items, bytes) still spooled at one priority (queued or in flight)."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT COUNT(*), COALESCE(SUM(byte_count), 0) FROM items WHERE priority=?",
+                (priority,),
+            ).fetchone()
+        return int(row[0]), int(row[1])
+
+    def _note_duplicate(self, claimed: dict[str, Any], entry: dict[str, Any]) -> None:
+        if entry.get("action") != "duplicate":
+            return
+        try:
+            with self._lock:
+                self._db.execute("BEGIN IMMEDIATE")
+                try:
+                    self._bump_locked(
+                        claimed["kind"], claimed["capture_origin"], claimed["priority"],
+                        OUTCOME_DUPLICATE, 0,
+                    )
+                    self._db.execute("COMMIT")
+                except BaseException:
+                    self._db.execute("ROLLBACK")
+                    raise
+        except Exception:  # noqa: BLE001 - a counter never fails delivery
+            pass
 
     # -- enqueue / eviction ------------------------------------------------
 
@@ -964,7 +993,8 @@ class Spool:
                 ok = False
             if ok:
                 try:
-                    self.retire(claimed["item_id"])
+                    if self.retire(claimed["item_id"]):
+                        self._note_duplicate(claimed, entry)
                 except Exception:  # noqa: BLE001 - best effort retire
                     pass
             else:
@@ -1031,7 +1061,8 @@ class Spool:
             ok = False
         if ok:
             try:
-                self.retire(claimed["item_id"])
+                if self.retire(claimed["item_id"]):
+                    self._note_duplicate(claimed, entry)
             except Exception:  # noqa: BLE001 - best effort retire
                 pass
             self._streak = 0
@@ -1196,6 +1227,7 @@ __all__ = [
     "PRIORITY_REPLAY",
     "OUTCOME_CLAIMED",
     "OUTCOME_DELIVERED",
+    "OUTCOME_DUPLICATE",
     "OUTCOME_ENQUEUED",
     "OUTCOME_EVICTED",
     "OUTCOME_QUARANTINED",

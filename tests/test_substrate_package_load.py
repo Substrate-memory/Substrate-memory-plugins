@@ -35,6 +35,7 @@ EXPECTED_TOOLS = {
     "memory_evidence",
     "memory_remember",
     "memory_forget",
+    "substrate_import",
 }
 
 _LOADER = textwrap.dedent(

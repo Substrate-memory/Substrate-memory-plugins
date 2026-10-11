@@ -81,6 +81,24 @@ def clean_session_state():
 
 
 @pytest.fixture(autouse=True)
+def _isolated_hermes_home(monkeypatch, tmp_path_factory):
+    """Never read or write the real ~/.hermes (state.db, import offer files).
+
+    Modules that need a specific home set HERMES_HOME themselves; this only
+    gives every other test an empty profile of its own.
+    """
+    from substrate import plugin as _plugin
+
+    home = tmp_path_factory.mktemp("hermes-home")
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.delenv("HERMES_SESSION_ID", raising=False)
+    _plugin._PREVIEW_CACHE.clear()
+    _plugin._LIVE_SESSIONS.clear()
+    _plugin._RESUME_CHECKED.clear()
+    yield home
+
+
+@pytest.fixture(autouse=True)
 def _fresh_mcp_init_cache():
     """Never reuse a verified initialize across tests."""
     from substrate import client as _client
@@ -362,6 +380,12 @@ class _MCPHandler(BaseHTTPRequestHandler):
                 "accepted": accepted, "rejected": len(results) - accepted,
                 "results": results}))
             return
+        if name == "memory_import_status":
+            session = server.session_status.get(arguments.get("session_id"))
+            if session is not None:
+                self._send_json(200, _tool_ok(message_id, {
+                    "contract_version": 2, "session": dict(session)}))
+                return
         self._send_json(200, _tool_ok(message_id, {"contract_version": 2}))
 
 
@@ -385,6 +409,7 @@ def fake_mcp():
     server.turn_block = ""
     server.remember_handle = "m:44a1b02e"
     server.import_mode = "stored"
+    server.session_status = {}
     server.sse = False
     server.delay = 0.0
     server.http_status = 200

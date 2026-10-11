@@ -18,6 +18,7 @@ import json
 import math
 import re
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -167,6 +168,8 @@ def pre_llm_call(
     first turn after approval carries a one-time "connected as" note.
     """
     notes = [n for n in (_host_version_notice_once(),) if n]
+    _note_live_session(session_id)
+    client = None
     try:
         client = SubstrateClient.from_env()
         if not client.api_key:
@@ -181,21 +184,23 @@ def pre_llm_call(
             notes.append(announcement)
         args = _turn_context_args(session_id, user_message, **kwargs)
         if args is None:
-            return _with_notes([], notes)
+            return _with_notes(_import_notes(client), notes)
         structured, _text = client.call_tool("memory_turn_context", args, timeout=TURN_CONTEXT_TIMEOUT)
         checked = contract.validate_mcp_turn_context(structured)
         # Bind the response to this request, rather than trusting valid data
         # for another session.
         if checked["session_id"] != args["session_id"]:
-            return _with_notes([], notes)
+            return _with_notes(_import_notes(client), notes)
         block = checked["block"]
-        return _with_notes([block] if block else [], notes)
+        return _with_notes([block] if block else [], notes + _import_notes(client))
     except ClientError as exc:
         if exc.category == "invalid_config":
             return _with_notes([_login_notice(_start_login())], notes)
-        return _with_notes([], notes)
+        if exc.category in ("unauthorized", "forbidden"):
+            return _with_notes([], notes)
+        return _with_notes(_import_notes(client), notes)
     except Exception:
-        return _with_notes([], notes)
+        return _with_notes(_import_notes(client), notes)
 
 
 def _with_notes(parts: list[str], notes: list[str]) -> dict[str, str] | None:
@@ -267,6 +272,211 @@ def _connected_announcement() -> str:
         f"Substrate memory was just connected. Tell the user once, in these words: {message}\n"
         "</substrate-connect>"
     )
+
+
+# ---------------------------------------------------------------------------
+# Past-conversation import: the one-time offer and the substrate_import tool
+# ---------------------------------------------------------------------------
+
+_LIVE_SESSIONS: dict[str, float] = {}
+_MAX_LIVE_SESSIONS = 256
+_PREVIEW_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+PREVIEW_CACHE_SECONDS = 300.0
+_RESUME_CHECKED: dict[str, float] = {}
+RESUME_CHECK_SECONDS = 60.0
+
+
+def _note_live_session(session_id: Any) -> None:
+    """Sessions seen live in this process are captured live: never import them."""
+    sid = _bounded_text(session_id, contract.MAX_SESSION_ID_BYTES)
+    if not sid:
+        return
+    with _SESSION_LOCK:
+        _LIVE_SESSIONS[sid] = time.time()
+        while len(_LIVE_SESSIONS) > _MAX_LIVE_SESSIONS:
+            _LIVE_SESSIONS.pop(next(iter(_LIVE_SESSIONS)))
+
+
+def _live_sessions() -> set[str]:
+    with _SESSION_LOCK:
+        live = set(_LIVE_SESSIONS)
+        if _SESSION_STATE["active"]:
+            live.add(_SESSION_STATE["active"])
+    return live
+
+
+def _home() -> Path:
+    from . import credentials as _credentials
+
+    return _credentials.active_home()
+
+
+def _cached_preview(home: Path, *, fresh: bool = False) -> dict[str, Any]:
+    from . import history
+
+    key = str(home)
+    cached = _PREVIEW_CACHE.get(key)
+    if not fresh and cached is not None and time.monotonic() - cached[0] < PREVIEW_CACHE_SECONDS:
+        return cached[1]
+    view = history.preview(home, exclude=_live_sessions())
+    _PREVIEW_CACHE[key] = (time.monotonic(), view)
+    return view
+
+
+def import_offer_notice(view: dict[str, Any]) -> str:
+    """Injected each turn until the user answers the one-time import offer."""
+    from . import history
+
+    return (
+        "<substrate-import-offer>\n"
+        f"Substrate memory is connected. This Hermes profile also has "
+        f"{history.describe_preview(view)} that are not in Substrate memory yet. "
+        "In this same reply (after the connected line or your answer), ask the user once, "
+        f"in plain words, for example: \"{history.offer_question(view)}\"\n"
+        "When they answer: Import all -> call substrate_import with action \"start\", then "
+        "tell them it runs in the background and you will say when it is done. "
+        "Let me pick -> call substrate_import with action \"preview\" and limit 20, show "
+        "the list, then call action \"start\" with the session_ids they choose. "
+        "Not now -> call substrate_import with action \"decline\" and do not ask again "
+        "(they can ask you to import past conversations any time).\n"
+        "If you already asked in this conversation, do not ask again; act on their answer.\n"
+        "</substrate-import-offer>"
+    )
+
+
+def _import_notes(client: Any) -> list[str]:
+    """Import offer / finished line / auto-resume for a connected turn. Never raises."""
+    try:
+        from . import history
+
+        home = _home()
+        notes: list[str] = []
+        finished = history.take_finished_announcement(home)
+        if finished:
+            notes.append(
+                "<substrate-import>\nThe import of past conversations finished. Tell the "
+                f"user once, in plain words: {finished}\n</substrate-import>"
+            )
+        decision = history.read_decision(home)
+        if decision in ("yes", "picked"):
+            key = str(home)
+            if time.monotonic() - _RESUME_CHECKED.get(key, -RESUME_CHECK_SECONDS) >= RESUME_CHECK_SECONDS:
+                _RESUME_CHECKED[key] = time.monotonic()
+                history.resume_if_interrupted(home, client=client, exclude=_live_sessions())
+            return notes
+        if decision:
+            return notes
+        try:
+            view = _cached_preview(home)
+        except history.HistoryError:
+            return notes  # unreadable right now: ask on a later turn
+        if not view.get("sessions"):
+            history.record_decision(home, "none")
+            return notes
+        notes.append(import_offer_notice(view))
+        return notes
+    except Exception:
+        return []
+
+
+def _import_result(value: dict[str, Any]) -> str:
+    return _compact(value)
+
+
+def substrate_import(args: dict[str, Any], **kwargs: Any) -> str:
+    """Preview, start, check, or decline the import of past Hermes conversations."""
+    from . import history
+
+    try:
+        args = _strict_args(args, {"action", "session_ids", "limit"}, {"action"})
+        action = args["action"]
+        if action not in ("preview", "start", "status", "decline"):
+            raise ValueError
+        picked = args.get("session_ids")
+        if picked is not None:
+            if (not isinstance(picked, list) or not picked or len(picked) > history.MAX_PICKED
+                    or any(not isinstance(item, str) or not item for item in picked)):
+                raise ValueError
+        limit = args.get("limit", 0)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 0 <= limit <= 100:
+            raise ValueError
+    except Exception:
+        return _error("invalid_request")
+    try:
+        home = _home()
+        if action == "status":
+            return _import_result(history.status(home))
+        if action == "decline":
+            history.record_decision(home, "no")
+            return _import_result({
+                "status": "declined",
+                "message": "OK, past conversations stay out of Substrate memory. The user can "
+                           "ask to import them any time.",
+            })
+        exclude = _live_sessions()
+        view = history.preview(home, exclude=exclude, limit=limit,
+                               picked=set(picked) if picked else None)
+        if action == "preview":
+            view["question"] = history.offer_question(view) if view["sessions"] else ""
+            return _import_result(view)
+        client = SubstrateClient.from_env()
+        if not client.api_key:
+            return _login_grant_result()
+        if not view["sessions"]:
+            if not picked:
+                history.record_decision(home, "none")
+            return _import_result({
+                "status": "nothing_to_import",
+                "message": "There are no earlier conversations in this Hermes profile to import "
+                           "(automated runs, group chats and this conversation are left out).",
+            })
+        history.record_decision(home, "picked" if picked else "yes")
+        if not history.start_background(home, client=client, exclude=exclude, picked=picked):
+            return _import_result({**history.status(home), "status": "already_running"})
+        return _import_result({
+            "status": "started",
+            "sessions": view["sessions"],
+            "messages": view["messages"],
+            "message": (
+                f"Importing {history.describe_preview(view)} in the background. Live messages "
+                "are saved first. Ask for the status any time; the result is reported when "
+                "it finishes."
+            ),
+        })
+    except history.HistoryError as exc:
+        return _import_result({
+            "status": "failed", "error": exc.category,
+            "message": "Could not read this profile's Hermes history (state.db). Nothing was "
+                       "changed; try again later.",
+        })
+    except Exception:
+        return _error("transport_error")
+
+
+SUBSTRATE_IMPORT_SCHEMA = {
+    "name": "substrate_import",
+    "description": (
+        "Import the user's past Hermes conversations from this profile into Substrate memory "
+        "(only after the user says yes). preview: counts, dates, and with limit a list of "
+        "sessions to pick from. start: import all eligible sessions, or only session_ids, in "
+        "the background. status: progress or result. decline: the user said not now (never "
+        "ask again)."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["preview", "start", "status", "decline"]},
+            "session_ids": {
+                "type": "array", "items": {"type": "string"}, "maxItems": 500,
+                "description": "Only these sessions (from preview). Omit to import all.",
+            },
+            "limit": {"type": "integer", "minimum": 0, "maximum": 100,
+                      "description": "preview: how many recent sessions to list."},
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+    },
+}
 
 
 def _cli_hint() -> str:
@@ -1418,6 +1628,10 @@ def register(ctx: Any) -> None:
     )
     ctx.register_tool(
         name="memory_forget", toolset=TOOLSET, schema=MEMORY_FORGET_SCHEMA, handler=memory_forget
+    )
+    ctx.register_tool(
+        name="substrate_import", toolset=TOOLSET, schema=SUBSTRATE_IMPORT_SCHEMA,
+        handler=substrate_import,
     )
     # This static section is frozen per session; dynamic memory stays in the
     # supported pre_llm_call injection path.

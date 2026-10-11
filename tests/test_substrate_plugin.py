@@ -688,6 +688,7 @@ def test_register_matches_native_hermes_context_and_has_no_side_effect(
         "memory_evidence",
         "memory_remember",
         "memory_forget",
+        "substrate_import",
     }
     for name, entry in ctx.tools.items():
         assert entry["toolset"] == plugin.TOOLSET
