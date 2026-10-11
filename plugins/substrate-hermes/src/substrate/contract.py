@@ -125,7 +125,7 @@ RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$")
 HTTPS_URL_RE = re.compile(r"^https://[^\s/?#]+[^\s]*$")
 
 # Literal SHA-256 of contract/envelope-fixtures.json.  Asserted by the tests.
-FIXTURE_SHA256 = "627615398b726d04f32b5bab58b480b00ba85ca80c65d66864d7e8ea1a30ab85"
+FIXTURE_SHA256 = "92860f58dec2b0baa246f9ad4d5901f97aa7ac1595b2b9bbd39765d86268c85a"
 
 _FIXTURE_PATH = Path(__file__).resolve().parent / "contract" / "envelope-fixtures.json"
 

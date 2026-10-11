@@ -1988,7 +1988,7 @@
         "max_upload_bytes": 262144,
         "max_tool_call_bytes": 4096,
         "max_tool_result_bytes": 8192,
-        "turn_context_deadline_ms": 500,
+        "turn_context_deadline_ms": 1500,
         "action_cues_deadline_ms": 100,
         "rules_refresh_seconds": 300
       },
