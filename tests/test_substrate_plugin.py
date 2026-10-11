@@ -836,8 +836,15 @@ def test_tool_success_against_fake_mcp(
     assert calls[0]["arguments"]["operation_id"]
     assert calls[0]["auth"] == "Bearer k"
     assert calls[0]["accept"] == "application/json, text/event-stream"
-    # Explicit tools enqueue durably; the tool path never starts the sender.
-    assert real_spool.pending() == 1
+    # The write is also spooled durably. The sender now starts with the tool, so
+    # it delivers the same event id via memory_import; the server dedupes it.
+    operation_id = calls[0]["arguments"]["operation_id"]
+    assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
+    imports = _tool_calls(fake_mcp, "memory_import")
+    assert any(
+        item.get("event_id") == operation_id
+        for call in imports for item in call["arguments"]["items"]
+    ), imports
 
 
 def test_tool_timeout_against_slow_stub(
