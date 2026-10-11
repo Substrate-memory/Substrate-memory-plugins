@@ -102,7 +102,8 @@ Capture and boundary events enqueue into a profile-local write-ahead spool
 writes (`memory_remember`, `memory_forget`) enqueue at explicit priority.
 The spool survives restarts, retries with backoff, and delivers in order.
 The plugin fails open: a slow or failed memory call never blocks your turn
-(turn context gives up after 500 ms and injects nothing).
+(the plugin stops waiting for turn context after 500 ms and injects nothing;
+the server's own turn-context deadline is 1500 ms).
 
 ## Runtime
 

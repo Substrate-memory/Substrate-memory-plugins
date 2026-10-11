@@ -40,7 +40,7 @@ HTTP status by category: 401, 403, 400, 400, 400, 413, 404, 409, 429 (with `Retr
   "limits": {
     "max_event_bytes": 262144, "max_upload_bytes": 262144,
     "max_tool_call_bytes": 4096, "max_tool_result_bytes": 8192,
-    "turn_context_deadline_ms": 500, "action_cues_deadline_ms": 100,
+    "turn_context_deadline_ms": 1500, "action_cues_deadline_ms": 100,
     "rules_refresh_seconds": 300
   },
   "actions": ["stored", "duplicate", "sealed", "queued"],
@@ -198,7 +198,7 @@ Response:
  brief_version: int ≥ 0, latency_ms: number, empty_reason: "" | "no_candidates" | "gated" | "not_implemented"}
 ```
 
-The plugin's deadline is 500 ms wall clock. On deadline, transport error or an invalid response it injects the previous turn's block iff that block belongs to the same session and to `turn − 1`; otherwise nothing. A `brief_version` higher than the cached one triggers a background `GET /pages/pinned`. The server logs a content-free `retrieval_calls` row per request. Until the retrieval layer exists the server returns `block: ""` and `empty_reason: "not_implemented"`.
+The server's turn-context deadline is 1500 ms (`limits.turn_context_deadline_ms`). The plugin's own wall-clock wait is 500 ms; past that it treats the call as a timeout. On deadline, transport error or an invalid response it injects the previous turn's block iff that block belongs to the same session and to `turn − 1`; otherwise nothing. A `brief_version` higher than the cached one triggers a background `GET /pages/pinned`. The server logs a content-free `retrieval_calls` row per request. Until the retrieval layer exists the server returns `block: ""` and `empty_reason: "not_implemented"`.
 
 ### 8.2 `POST /api/v1/memory/action-cues`
 
@@ -319,8 +319,8 @@ now goes to `POST {origin}/mcp` as MCP JSON-RPC instead of the
   returned `block`. The `[substrate] ... not saved yet` sync line the
   contract appends is intentionally ignored: the Hermes write-ahead spool
   guarantees delivery of every captured turn, so there are no missing
-  turns to sync; the line exists for spool-less MCP hosts. The 500 ms
-  turn-context deadline is unchanged.
+  turns to sync; the line exists for spool-less MCP hosts. The plugin's
+  500 ms turn-context wait is unchanged; the server's deadline is 1500 ms.
 - Retrieval: `memory_search`, `memory_expand`, and `memory_evidence` call
   the same-named MCP tools. Hermes tool names, argument schemas, and
   result strings for the model are unchanged.

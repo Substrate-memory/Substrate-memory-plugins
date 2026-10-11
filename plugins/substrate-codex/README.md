@@ -63,10 +63,22 @@ conversations" any time.
 
 ## Hook trust step
 
-This plugin calls memory tools automatically during the agent loop. Codex
-treats these as hooks that need your review. Open `/hooks`, review the
-Substrate entries, and trust them. Until trusted, Codex skips automatic
-capture and recall still works when you ask.
+Automatic recall and capture run as Codex hooks. Codex 0.154 does not load a
+plugin's own hooks from a local install, so `$substrate-connect` adds the
+Substrate hook entries to your Codex hook file, `$CODEX_HOME/hooks.json`
+(default `~/.codex/hooks.json`). It backs the file up once and changes only
+its own entries. Then open `/hooks` once and approve the Substrate entries
+(one per event). Until you approve them, Codex skips automatic capture and
+recall still works when you ask.
+
+The hooks call the `substrate-memory` MCP server by name, so connect also registers it
+(`codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp`) when it is
+missing.
+
+To disconnect, run `$substrate-connect` and ask for the disconnect step, or run
+`python3 <plugin dir>/scripts/codex_user_hooks.py remove` yourself. This removes
+exactly the Substrate entries and their approval records. Run it before
+`codex plugin remove substrate-codex`, which does not remove them.
 
 ## What is captured
 

@@ -119,7 +119,7 @@ additional context, so it is NOT the JSON above. It is:
 An empty `block` with `missing_turns == 0` yields an empty string (nothing is
 injected). `missing_turns` is the count of server-numbered turns in this session
 that were opened but never closed, or that the client's own numbering reveals as
-absent; the server never blocks on it. Server deadline 500 ms; a slow recall
+absent; the server never blocks on it. Server deadline 1500 ms; a slow recall
 returns `block: ""`, `empty_reason: "gated"`.
 
 ### 4.4 `memory_capture_tool` (scope `capture`) — hook: tool used

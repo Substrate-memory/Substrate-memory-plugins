@@ -10,13 +10,16 @@
 - `mcp.json` — portable MCP config (`substrate-memory`,
   `streamable-http`, `https://app.trysubstrate.co/mcp`).
 - `.mcp.json` — legacy MCP config, same server.
-- `hooks/hooks.json` — `mcp_tool` hooks against server `substrate-memory`
-  (bare key from `mcpServers`), platform `codex`, `turn_id` passed through,
-  plus one `command` hook on `UserPromptSubmit` running
+- `hooks/hooks.json` — the plugin's hook table: `mcp_tool` hooks against server
+  `substrate-memory` (bare key from `mcpServers`), platform `codex`, `turn_id`
+  passed through, plus one `command` hook on `UserPromptSubmit` running
   `scripts/substrate_sync.py --host codex --offer-check` (local, no network,
-  silent once the import offer was answered; always exits 0). It finds the
-  script through `$CLAUDE_PLUGIN_ROOT`, then `$PLUGIN_ROOT`, then the working
-  directory. No `SessionEnd` entry: Codex does not support MCP hooks there.
+  silent once the import offer was answered; always exits 0). Codex 0.154 does
+  not load this file for a local install (see below), so the connect skill
+  copies the same table into the user hook file. No `SessionEnd` entry: Codex
+  does not support MCP hooks there.
+- `scripts/codex_user_hooks.py` — installs, checks and removes the Substrate
+  entries in the user hook file (standard library only).
 - `skills/` — `substrate-memory`, `substrate-connect`, `substrate-sync`,
   `substrate-import` (invoke as `$skill-name` in Codex).
 - `scripts/substrate_sync.py` — byte-identical copy of the Claude script;
@@ -43,11 +46,52 @@ value keep JSON type.
 ```text
 cd Substrate-memory-plugins  # your checkout
 python3 ~/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/substrate-codex
-.venv/bin/python -m pytest -q tests/test_substrate_codex_plugin.py
+.venv/bin/python -m pytest -q tests/test_substrate_codex_plugin.py tests/test_substrate_codex_user_hooks.py
 CODEX_HOME=/tmp/sb-codex codex plugin marketplace add "$PWD"
 CODEX_HOME=/tmp/sb-codex codex plugin add substrate-codex@substrate-marketplace
 CODEX_HOME=/tmp/sb-codex codex plugin list --json
 ```
+
+## User hook file (CDX-04)
+
+Codex 0.154 shows `0 installed` for every event when a plugin's hooks are
+loaded from a local install (`/hooks`). Plugin skills load; plugin hooks do
+not. Codex does load user hooks from `$CODEX_HOME/hooks.json` (default
+`~/.codex/hooks.json`; hook source `user`). Evidence: `codex app-server
+generate-json-schema` (`HookSource` includes `user`, `HookHandlerConfig`
+`command`/`mcpTool`), and `hooks/list` in an isolated `CODEX_HOME` reports a
+user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
+
+- **Install** (`$substrate-connect` runs it after a successful connect):
+  `python3 scripts/codex_user_hooks.py install`. It merges the seven Substrate
+  entries (six events) into `hooks.json`. Each entry carries
+  `"x-substrate-managed": "substrate-codex"`. Foreign entries are not changed.
+  Our entries go first in each event list. Running it twice writes nothing the
+  second time. The first write keeps `hooks.json.substrate-backup`. Writes are
+  atomic. A malformed file is reported and left as it is.
+- **Approve once**: Codex shows *Hooks need review*. Open `/hooks` and press
+  `t` (trust all), or review each entry. Codex stores approvals in
+  `config.toml` under `[hooks.state."<path>:<event>:<group>:<handler>"]` with a
+  `trusted_hash`. A changed command (for example a new plugin version path)
+  needs approval again.
+- **Remove**: `python3 scripts/codex_user_hooks.py remove`. It deletes exactly
+  the tagged entries and their `[hooks.state]` tables, keeps all other entries
+  and tables, and deletes `hooks.json` only if install created it.
+  `status` prints the current counts.
+- **Duplicates**: if a future Codex loads this plugin's hooks itself, install
+  detects it (`hooks/list`, source `plugin`) and removes its own copy instead.
+  If the check cannot run, install proceeds.
+- The `mcp_tool` entries call the `substrate-memory` server by name. In Codex
+  0.154 a local plugin install does not register that server (`/mcp` shows
+  "No MCP servers configured"), so each hook reports `unknown MCP server` on
+  every prompt until it exists. `$substrate-connect` therefore runs
+  `codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp` when
+  `codex mcp list` does not show it. With the server registered, the hooks
+  report `not connected` (authentication required) until sign-in, and the
+  prompt still goes through (verified; see the pull request).
+- The command hook points at the absolute path of the plugin's script when
+  installed. After a plugin upgrade, run `$substrate-connect` again and approve
+  the changed entry in `/hooks`.
 
 ## Connect and import
 
@@ -58,11 +102,13 @@ works even where the offer hook does not run (hooks untrusted, web).
 
 ## Notes for the operator
 
-- Plugin hooks need user trust via `/hooks`; tell the user.
-- Not yet verified on a live Codex: in a sandbox `CODEX_HOME` with API-key
-  auth, Codex 0.154 listed no plugin hooks in `/hooks` and never ran the
-  plugin's command hook (user-level hooks did run), so the offer hook is a
-  backstop; the connect skill makes the offer itself.
+- Plugin hooks do not load from a local install in Codex 0.154 (`/hooks`
+  shows 0 for every event). The connect skill installs the same entries in the
+  user hook file; the user approves them once in `/hooks`.
+- Not verified here: that `mcp_tool` hooks in the user file resolve the
+  `substrate-memory` server and fill `${...}` placeholders the same way as
+  plugin hooks. That needs a live, authenticated connection. Without one they
+  fail open (see the CDX-04 verification in the pull request).
 - Codex runs hooks and commands inside its sandbox. The offer hook still
   speaks when its state directory is read-only; the upload needs network
   access (escalated permissions).
@@ -71,3 +117,4 @@ works even where the offer hook does not run (hooks untrusted, web).
   no hook parse warnings — see worker report).
 - Never write to `~/.codex` or `~/.agents`; use sandbox `CODEX_HOME` under
   `/tmp` for probing.
+- `python3 scripts/codex_user_hooks.py status` shows what is installed.

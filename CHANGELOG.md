@@ -1,5 +1,14 @@
 # Changelog
 
+## substrate-codex 0.9.1
+
+Codex: connect now installs the Substrate hooks, so automatic recall and capture start after one approval.
+
+- **Why:** Codex 0.154 does not load a local plugin's hooks, so `/hooks` showed 0 for every event (CDX-04). Codex does load user hooks from `$CODEX_HOME/hooks.json`.
+- **What connect does:** `$substrate-connect` runs `scripts/codex_user_hooks.py install` after a successful connect. It merges the plugin's hook table into your `hooks.json`, tags each entry (`x-substrate-managed`), keeps foreign entries untouched, backs the file up once, and writes atomically. The user approves the entries once in `/hooks`.
+- **Disconnect:** `codex_user_hooks.py remove` removes exactly the tagged entries and their `config.toml` approval records.
+- **Duplicates:** if Codex starts loading the plugin's own hooks, the installer removes its copy instead.
+
 ## 0.9.0
 
 Right after connecting, the agent offers to bring your past conversations into Substrate, and does it without you babysitting it.
