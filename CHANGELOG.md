@@ -1,5 +1,17 @@
 # Changelog
 
+## substrate-codex 0.9.2
+
+Codex: the setup nag clears as soon as `codex mcp login` succeeds, without a model turn.
+
+- **Why:** the UserPromptSubmit hook only learned about a connection when the model ran `--record-connected` after a working `memory_search`. With the model unable to run, "Substrate setup is not finished" was repeated on every prompt after a successful OAuth login (CDX-06).
+- **What changed:** the hook checks Codex's own sign-in state (`codex mcp list --json`, `auth_status`, never the token) with a 2 s budget and records the connection itself. The same check runs for Claude Code (its `mcpOAuth` entry in `.credentials.json`, read only for existence).
+- **Bounded nags:** the setup nag and the import offer each stop after 12 prompts while the connection is unrecorded, so a session that never gets to run the model no longer repeats them forever. Import offer decisions are unchanged.
+
+## substrate-claude 0.9.1
+
+Claude Code: the same connection check as substrate-codex 0.9.2 (CDX-06 pattern), and the same bounded nags. See that entry.
+
 ## substrate-codex 0.9.1
 
 Codex: connect now installs the Substrate hooks, so automatic recall and capture start after one approval.

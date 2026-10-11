@@ -1200,3 +1200,107 @@ def test_codex_hook_command_finds_plugin_root(env, tmp_path: Path) -> None:
                           capture_output=True, text=True, timeout=30, env=dict(os.environ),
                           cwd=str(CODEX_PLUG))
     assert "additionalContext" in json.loads(proc.stdout)["hookSpecificOutput"]
+
+
+# ---------------------------------------------------------------------------
+# Connection probe (CDX-06): the host's own sign-in state, no model turn needed
+# ---------------------------------------------------------------------------
+
+def _fake_codex(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> None:
+    bin_dir = tmp_path / "fakebin"
+    bin_dir.mkdir(exist_ok=True)
+    script = bin_dir / "codex"
+    script.write_text("#!/bin/sh\n" + body + "\n")
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+
+def _codex_list(status: str) -> str:
+    rows = [{"name": "substrate-memory", "enabled": True, "auth_status": status}]
+    return "cat <<'JSON'\n" + json.dumps(rows) + "\nJSON"
+
+
+def _claude_credentials(env_paths: dict, url: str = sync.MCP_SERVER_URL) -> None:
+    store = {"mcpOAuth": {"plugin:substrate-claude:substrate-memory|abc": {
+        "serverName": "plugin:substrate-claude:substrate-memory", "serverUrl": url,
+        "accessToken": "at-test", "refreshToken": "rt-test", "expiresAt": 4102444800000}}}
+    (env_paths["claude"] / ".credentials.json").write_text(json.dumps(store))
+
+
+def _state(env_paths: dict) -> dict:
+    return json.loads((env_paths["data"] / "import-offer.json").read_text())
+
+
+def test_codex_signed_in_records_connected_without_model(env, tmp_path, monkeypatch) -> None:
+    _fake_codex(tmp_path, monkeypatch, _codex_list("o_auth"))
+    proc = _offer(env, host="codex")
+    assert proc.returncode == 0 and proc.stdout == ""  # no transcripts: decided, connected, silent
+    assert _state(env)["connected_at"] and _state(env)["decision"] == "none"
+
+
+def test_codex_signed_in_offers_import_once(env, tmp_path, monkeypatch) -> None:
+    write_codex_session(env["codex"], "codex-old")
+    _fake_codex(tmp_path, monkeypatch, _codex_list("o_auth"))
+    text = json.loads(_offer(env, host="codex").stdout)["hookSpecificOutput"]["additionalContext"]
+    assert text.startswith("[substrate] Import offer pending")
+    run("--host", "codex", "--record-decision", "no")
+    assert _offer(env, host="codex").stdout == ""
+
+
+@pytest.mark.parametrize("status", ["not_logged_in", "unsupported", ""])
+def test_codex_not_signed_in_keeps_setup_nag(env, tmp_path, monkeypatch, status: str) -> None:
+    _fake_codex(tmp_path, monkeypatch, _codex_list(status))
+    text = json.loads(_offer(env, host="codex").stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "Substrate setup is not finished" in text
+    assert not (env["data"] / "import-offer.json").exists() or "connected_at" not in _state(env)
+
+
+def test_codex_probe_is_bounded_when_codex_hangs(env, tmp_path, monkeypatch) -> None:
+    _fake_codex(tmp_path, monkeypatch, "sleep 60")
+    started = time.monotonic()
+    proc = _offer(env, host="codex")
+    assert time.monotonic() - started < sync.PROBE_TIMEOUT + 4
+    assert proc.returncode == 0
+    assert "Substrate setup is not finished" in json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+
+
+def test_codex_missing_binary_is_not_signed_in(env, monkeypatch) -> None:
+    monkeypatch.setenv("PATH", str(env["tmp"] / "empty"))
+    assert sync._codex_mcp_signed_in() is False
+
+
+def test_claude_credentials_entry_records_connected(env) -> None:
+    _claude_credentials(env)
+    assert _offer(env).stdout == ""  # decided "none" (no transcripts) and connected: silent
+    assert _state(env)["connected_at"]
+
+
+def test_claude_credentials_for_other_server_do_not_count(env) -> None:
+    _claude_credentials(env, url="https://example.invalid/mcp")
+    text = json.loads(_offer(env).stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "Substrate setup is not finished" in text
+    assert sync._claude_mcp_signed_in() is False
+
+
+def test_claude_probe_never_prints_or_refreshes_tokens(env, capsys) -> None:
+    _claude_credentials(env)
+    before = (env["claude"] / ".credentials.json").read_text()
+    assert sync._probe_connected("claude") is True
+    assert (env["claude"] / ".credentials.json").read_text() == before
+    assert "rt-test" not in capsys.readouterr().out
+
+
+def test_setup_nag_stops_after_limit(env) -> None:
+    """Model never runs: the setup nag is finite, not a loop."""
+    write_claude_session(env["claude"], "old-1")
+    shown = [_offer(env).stdout for _ in range(sync.NAG_LIMIT + 5)]
+    assert sum(1 for out in shown if "setup is not finished" in out) == sync.NAG_LIMIT
+    assert shown[-1] == ""
+
+
+def test_import_offer_nag_stops_after_limit(env) -> None:
+    write_claude_session(env["claude"], "old-1")
+    connect()
+    shown = [_offer(env).stdout for _ in range(sync.NAG_LIMIT + 5)]
+    assert sum(1 for out in shown if "Import offer pending" in out) == sync.NAG_LIMIT
+    assert shown[-1] == ""
