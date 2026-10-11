@@ -419,7 +419,7 @@ def test_live_turns_go_before_replay_and_replay_is_windowed(home, real_spool, mo
             time.sleep(0.02)
         time.sleep(0.2)  # no sender: the importer must wait, not overfill
         assert real_spool.pending_at(PRIORITY_REPLAY)[0] == 4
-        live = plugin._capture_envelope("now", "reply", session_id="live", messages=[])
+        live = plugin._capture_envelopes("now", "reply", session_id="live", messages=[])[0]
         real_spool.enqueue(live, priority=PRIORITY_LIVE, kind="capture_turn",
                            capture_origin="live")
         batch = real_spool.claim_batch()
@@ -476,22 +476,42 @@ def _turn_context(monkeypatch, block="<memory-context>\n- fact\n</memory-context
     monkeypatch.setattr(plugin, "_version_notice_shown", True)
 
 
-def test_offer_is_injected_until_the_user_answers(home, monkeypatch, fake_spool):
+def test_offer_is_shown_once_per_connection_and_the_answer_is_remembered(
+    home, monkeypatch, fake_spool
+):
     standard_history(home, 26)
     _turn_context(monkeypatch)
-    for _ in range(3):
-        context = plugin.pre_llm_call("live-1", "hi", [])["context"]
-        assert context.endswith("<memory-context>\n- fact\n</memory-context>")
-        assert context.startswith("<substrate-import-offer>")
-        assert "2 earlier Hermes conversations (10 messages, March 3, 2026 to March 5, 2026)" \
-            in context
-        assert "Import all, let me pick, or not now?" in context
-        assert "substrate_import" in context
+    context = plugin.pre_llm_call("live-1", "hi", [])["context"]
+    assert context.endswith("<memory-context>\n- fact\n</memory-context>")
+    assert context.startswith("<substrate-import-offer>")
+    assert "2 earlier Hermes conversations (10 messages, March 3, 2026 to March 5, 2026)" \
+        in context
+    assert "Import all, let me pick, or not now?" in context
+    assert "substrate_import" in context
+    assert history.was_asked(home)
+    # Asked once: later turns of the connection stay quiet until the user answers.
+    for _ in range(2):
+        assert plugin.pre_llm_call("live-1", "hi", [])["context"] == \
+            "<memory-context>\n- fact\n</memory-context>"
     assert json.loads(plugin.substrate_import({"action": "decline"}))["status"] == "declined"
     assert history.read_decision(home) == "no"
+    assert history.was_asked(home)  # the decline keeps the asked record
     plugin._PREVIEW_CACHE.clear()  # a new process remembers too
     assert plugin.pre_llm_call("live-1", "hi", [])["context"] == \
         "<memory-context>\n- fact\n</memory-context>"
+
+
+def test_unanswered_offer_is_not_repeated_but_a_direct_request_still_imports(
+    home, monkeypatch, real_spool, connected
+):
+    standard_history(home, 26)
+    _turn_context(monkeypatch)
+    assert "substrate-import-offer" in plugin.pre_llm_call("live-1", "hi", [])["context"]
+    plugin._PREVIEW_CACHE.clear()
+    assert "substrate-import-offer" not in plugin.pre_llm_call("live-1", "hi", [])["context"]
+    started = json.loads(plugin.substrate_import({"action": "start"}))
+    assert started["status"] == "started"
+    assert history.read_decision(home) == "yes"
 
 
 def test_offer_comes_with_an_empty_memory_block_too(home, monkeypatch, fake_spool):
@@ -698,3 +718,27 @@ def test_import_stops_resumably_when_substrate_accepts_nothing(home, real_spool,
     assert job.stalled
     assert result["state"] == "interrupted"
     assert history.read_job(home)["state"] == "running"
+
+
+def test_long_turn_over_128_messages_splits_and_resumes_part_by_part(home, monkeypatch):
+    """A turn the server would truncate (>128 messages) is split; a crash after
+    part 1 resumes at part 2, not after the whole turn."""
+    db = make_db(home, 26)
+    messages = [("user", "go")] + [("assistant", f"step {i}") for i in range(199)]
+    add_session(db, "long", started=T0, messages=messages)
+    row = next(history.StateDB(history.state_db_path(home)).iter_sessions(None))
+    everything = list(history.iter_session_envelopes(
+        history.StateDB(history.state_db_path(home)), row, batch_id="b" * 8))
+    turns = [(env, resume) for env, resume in everything if env["kind"] == "capture_turn"]
+    assert len(turns) >= 2
+    assert all(len(env["payload"]["messages"]) <= contract.MAX_PAYLOAD_ITEMS for env, _ in turns)
+    assert turns[0][0]["offset"]["start"] == 0 and turns[-1][0]["offset"]["end"] == 200
+    # Resume after part 1: the next part is still yielded.
+    first_resume = turns[0][1]
+    resumed = [
+        env for env, _ in history.iter_session_envelopes(
+            history.StateDB(history.state_db_path(home)), row, batch_id="b" * 8,
+            start_index=first_resume)
+        if env["kind"] == "capture_turn"
+    ]
+    assert [e["event_id"] for e in resumed] == [e["event_id"] for e, _ in turns[1:]]

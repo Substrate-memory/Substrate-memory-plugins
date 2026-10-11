@@ -31,6 +31,7 @@ from .spool import (
     PRIORITY_LIVE,
     SpoolFull,
     get_spool,
+    is_transient_category,
 )
 
 STATIC_MEMORY_PROMPT = (
@@ -40,6 +41,9 @@ STATIC_MEMORY_PROMPT = (
     "`memory_expand` before relying on it. `[as of DATE]` means it may have "
     "changed. Call `memory_evidence` when the user asks why you believe something. "
     "Call `memory_search` with your intended action before irreversible operations. "
+    "Importing past conversations or sessions is the substrate_import tool, never "
+    "memory_remember. If substrate_import cannot run, say so; do not claim an import. "
+    "A result that says queued is saved and syncs by itself; do not retry it. "
     "Pinned pages follow."
 )
 
@@ -364,7 +368,9 @@ def _import_notes(client: Any) -> list[str]:
                 _RESUME_CHECKED[key] = time.monotonic()
                 history.resume_if_interrupted(home, client=client, exclude=_live_sessions())
             return notes
-        if decision:
+        if decision or history.was_asked(home):
+            # Answered, or already put to the agent once for this connection.
+            # The user can still ask for the import directly (substrate_import).
             return notes
         try:
             view = _cached_preview(home)
@@ -373,6 +379,7 @@ def _import_notes(client: Any) -> list[str]:
         if not view.get("sessions"):
             history.record_decision(home, "none")
             return notes
+        history.record_asked(home)
         notes.append(import_offer_notice(view))
         return notes
     except Exception:
@@ -432,7 +439,11 @@ def substrate_import(args: dict[str, Any], **kwargs: Any) -> str:
             })
         history.record_decision(home, "picked" if picked else "yes")
         if not history.start_background(home, client=client, exclude=exclude, picked=picked):
-            return _import_result({**history.status(home), "status": "already_running"})
+            return _import_result({
+                **history.status(home), "status": "already_running",
+                "message": "An import is already running in the background. Ask for the "
+                           "status any time; the result is reported when it finishes.",
+            })
         return _import_result({
             "status": "started",
             "sessions": view["sessions"],
@@ -456,11 +467,16 @@ def substrate_import(args: dict[str, Any], **kwargs: Any) -> str:
 SUBSTRATE_IMPORT_SCHEMA = {
     "name": "substrate_import",
     "description": (
-        "Import the user's past Hermes conversations from this profile into Substrate memory "
-        "(only after the user says yes). preview: counts, dates, and with limit a list of "
-        "sessions to pick from. start: import all eligible sessions, or only session_ids, in "
-        "the background. status: progress or result. decline: the user said not now (never "
-        "ask again)."
+        "Import the user's past Hermes conversations, chats and sessions (earlier history) "
+        "from this profile into Substrate memory. Use this tool for any request to import, "
+        "bring in, add or sync earlier or past conversations, including when the user asks "
+        "directly. Never use memory_remember for that: it stores one fact per call and "
+        "cannot import sessions. Start only after the user agrees. preview: counts, dates, "
+        "and with limit a list of sessions to pick from. start: import all eligible "
+        "sessions, or only session_ids, in the background. status: progress or result. "
+        "decline: the user said not now (never ask again). If the result is failed, "
+        "nothing_to_import or authorization_required, say so plainly; never say "
+        "conversations were imported unless status reports completed."
     ),
     "parameters": {
         "type": "object",
@@ -644,7 +660,7 @@ def _capture_message(item: Any, index: int) -> dict[str, Any] | None:
         message = {
             "index": index,
             "role": role,
-            "content": _bounded_text(item.get("content", ""), 32_768),
+            "content": _bounded_text(item.get("content", ""), contract.MAX_PAYLOAD_STRING_BYTES),
         }
         if role == "assistant" and isinstance(item.get("tool_calls"), list):
             calls = [
@@ -664,13 +680,16 @@ def _completed_messages(
     history: Any, user_content: Any, assistant_content: Any
 ) -> list[dict[str, Any]]:
     raw_history = history if isinstance(history, list) else []
+    # Session-absolute indices: the window is the newest 4096 messages, but the
+    # index of a message never changes when older ones fall out of it.
+    first = max(0, len(raw_history) - 4096)
     messages = [
         message
-        for index, item in enumerate(raw_history[-4096:])
+        for index, item in enumerate(raw_history[first:], first)
         if (message := _capture_message(item, index)) is not None
     ]
-    user = _bounded_text(user_content, 32_768)
-    assistant = _bounded_text(assistant_content, 32_768)
+    user = _bounded_text(user_content, contract.MAX_PAYLOAD_STRING_BYTES)
+    assistant = _bounded_text(assistant_content, contract.MAX_PAYLOAD_STRING_BYTES)
     if not messages or messages[-1]["role"] != "assistant":
         if user and (not messages or messages[-1]["role"] != "user"):
             next_index = messages[-1]["index"] + 1 if messages else 0
@@ -688,53 +707,82 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _capture_envelope(
+def _message_fingerprint(message: Mapping[str, Any]) -> str:
+    """Identity of the last message sent for a session: role plus leading content."""
+    head = str(message.get("content", "")).encode("utf-8")[:512]
+    return hashlib.sha256(str(message.get("role", "")).encode() + b"\0" + head).hexdigest()
+
+
+def _send_from(session_id: str, clean_messages: list[dict[str, Any]]) -> int:
+    """Index to send from: just past the last message already enqueued for this session.
+
+    Falls back to the whole window (the server dedupes by event id) when this
+    process has no record for the session, or when the message at the
+    recorded position is not the one that was sent (a rewound, edited or
+    compressed history).
+    """
+    first = clean_messages[0]["index"]
+    with _SESSION_LOCK:
+        state = _SESSION_STATE["sent_tail"].get(session_id)
+    if state is None:
+        return first
+    end, fingerprint = state
+    if end <= first:
+        return first
+    previous = next((m for m in clean_messages if m["index"] == end - 1), None)
+    if previous is None or _message_fingerprint(previous) != fingerprint:
+        return first
+    return end
+
+
+def _capture_envelopes(
     user_content: Any,
     assistant_content: Any,
     *,
     session_id: Any,
     messages: Any,
     **kwargs: Any,
-) -> dict[str, Any] | None:
+) -> list[dict[str, Any]]:
+    """Capture envelopes for one completed turn: only new messages, chunked to fit.
+
+    Each turn sends the messages since the last one enqueued for the session
+    (not the whole history again), split into parts of at most 128 messages and
+    the envelope byte budget, with contiguous offsets. Returns [] when there is
+    nothing new or no session.
+    """
     clean_messages = _completed_messages(messages, user_content, assistant_content)
     if not clean_messages:
-        return None
-    event_id = str(uuid.uuid4())
+        return []
     sid = _bounded_text(session_id, contract.MAX_SESSION_ID_BYTES)
     if not sid:
-        return None
-    turn_id = _bounded_text(kwargs.get("turn_id", ""), contract.MAX_ID_BYTES) or event_id
+        return []
+    send_from = _send_from(sid, clean_messages)
+    pending = [message for message in clean_messages if message["index"] >= send_from]
+    if not pending:
+        return []
+    turn_id = _bounded_text(kwargs.get("turn_id", ""), contract.MAX_ID_BYTES) or str(uuid.uuid4())
     sender_id = _bounded_text(kwargs.get("sender_id", ""), contract.MAX_SPEAKER_ID_BYTES) or "user"
     envelope: dict[str, Any] = {
         "schema_version": contract.SCHEMA_VERSION,
         "contract_version": contract.CONTRACT_VERSION,
-        "event_id": event_id,
+        "event_id": str(uuid.uuid4()),
         "kind": "capture_turn",
         "session_id": sid,
-        "offset": {"start": clean_messages[0]["index"], "end": clean_messages[-1]["index"] + 1},
+        "offset": {"start": pending[0]["index"], "end": pending[-1]["index"] + 1},
         "capture_origin": "live",
         "batch_id": "",
         "speaker": {"id": sender_id, "role": "owner", "display": ""},
         "created_at": _utc_now(),
-        "payload": {"turn_id": turn_id, "messages": clean_messages},
+        "payload": {"turn_id": turn_id, "messages": pending},
     }
-    # The wire envelope is capped at 256 KiB. Retain the newest complete part
-    # of unusually large histories, with original message indices as offsets.
-    while len(contract.canonical_bytes(envelope)) > contract.LIMITS["max_event_bytes"] and len(clean_messages) > 1:
-        clean_messages.pop(0)
-        envelope["offset"]["start"] = clean_messages[0]["index"]
-    if len(contract.canonical_bytes(envelope)) > contract.LIMITS["max_event_bytes"]:
-        clean_messages[0]["content"] = _clip_utf8(clean_messages[0]["content"], 1024)
-        if clean_messages[0]["role"] == "tool":
-            # Digest/byte count still describe the bounded redacted source; only
-            # the posted excerpt is reduced further to fit the envelope.
-            clean_messages[0]["result_truncated"] = True
-    contract.validate_envelope(envelope, idempotency_key=event_id)
-    return envelope
+    parts = contract.capture_turn_parts(envelope)
+    for part in parts:
+        contract.validate_envelope(part, idempotency_key=part["event_id"])
+    return parts
 
 
 _SESSION_LOCK = threading.Lock()
-_SESSION_STATE: dict[str, Any] = {"active": None, "high_water": {}}
+_SESSION_STATE: dict[str, Any] = {"active": None, "high_water": {}, "sent_tail": {}}
 
 
 def _note_turn(session_id: str, end_offset: int) -> None:
@@ -761,6 +809,7 @@ def _forget_session(session_id: str) -> None:
         if _SESSION_STATE["active"] == session_id:
             _SESSION_STATE["active"] = None
         _SESSION_STATE["high_water"].pop(session_id, None)
+        _SESSION_STATE["sent_tail"].pop(session_id, None)
 
 
 def _enqueue_spool(
@@ -805,27 +854,34 @@ def sync_turn(
 ) -> None:
     """Capture a completed Hermes turn via the durable spool.
 
-    This is the sole live-capture path. The envelope is validated, the
-    session binding and high-water mark are updated, and the envelope is
-    enqueued at ``PRIORITY_LIVE``. Never raises and never waits on I/O.
+    This is the sole live-capture path. The new messages are validated and
+    split into parts the server accepts, the session binding and high-water
+    mark are updated, and each part is enqueued at ``PRIORITY_LIVE``. Never
+    raises and never waits on I/O.
     """
     try:
-        envelope = _capture_envelope(
+        envelopes = _capture_envelopes(
             user_content,
             assistant_content,
             session_id=session_id,
             messages=messages or [],
             **kwargs,
         )
-        if envelope is None:
+        if not envelopes:
             return
-        _note_turn(envelope["session_id"], int(envelope["offset"]["end"]))
-        _enqueue_spool(
-            envelope,
-            priority=PRIORITY_LIVE,
-            kind="capture_turn",
-            capture_origin="live",
-        )
+        sid = envelopes[-1]["session_id"]
+        last_end = int(envelopes[-1]["offset"]["end"])
+        last_fingerprint = _message_fingerprint(envelopes[-1]["payload"]["messages"][-1])
+        _note_turn(sid, max(int(part["offset"]["end"]) for part in envelopes))
+        for envelope in envelopes:
+            _enqueue_spool(
+                envelope,
+                priority=PRIORITY_LIVE,
+                kind="capture_turn",
+                capture_origin="live",
+            )
+        with _SESSION_LOCK:
+            _SESSION_STATE["sent_tail"][sid] = (last_end, last_fingerprint)
     except Exception:
         pass
 
@@ -1366,6 +1422,37 @@ def _mcp_handle(structured: Any, tool: str) -> str:
     return handle
 
 
+_QUEUED_REMEMBER = {
+    "status": "queued",
+    "message": (
+        "Saved and queued. It syncs to Substrate automatically once the service is "
+        "reachable; there is nothing to retry. Do not call memory_remember again for "
+        "this fact."
+    ),
+}
+_QUEUED_FORGET = {
+    "status": "queued",
+    "message": (
+        "Queued. The change syncs to Substrate automatically once the service is "
+        "reachable; there is nothing to retry. Do not call memory_forget again for "
+        "this handle."
+    ),
+}
+
+
+def _queued_or_error(queued: bool, category: str, tool_name: str) -> str:
+    """A spooled write is never reported as failed: it will be delivered.
+
+    ``queued`` means the envelope is durable in the spool, so the spool sender
+    delivers it (idempotently, by event id) even when this synchronous call
+    could not. Only a write that was neither sent nor queued reports failure.
+    """
+    if not queued:
+        return _error(category)
+    result = _QUEUED_FORGET if tool_name == "memory_forget" else _QUEUED_REMEMBER
+    return json.dumps(result, separators=(",", ":"))
+
+
 def _ledger_call(envelope: dict[str, Any], tool_name: str, arguments: dict[str, Any]) -> str:
     """Durably enqueue an explicit envelope, call its MCP tool, return its handle.
 
@@ -1373,14 +1460,18 @@ def _ledger_call(envelope: dict[str, Any], tool_name: str, arguments: dict[str, 
     ``memory_import`` so the write stays durable) and the same operation is
     additionally sent synchronously as ``memory_remember``/``memory_forget``
     under the same ``operation_id`` so the tool can return the server's
-    handle. Returns compact JSON ``{"handle": "m:..."}`` on success and only
-    ``{"error": category}`` on failure. Enqueue failures never fail the
-    call: the synchronous tool call still decides the result.
+    handle. Returns compact JSON ``{"handle": "m:..."}`` when the server
+    answered. When the write is spooled but the answer is not available
+    (offline, transient or unknown outcome), returns a ``queued`` status: the
+    spool delivers it with the same event id, so a retry would duplicate it.
+    Returns ``{"error": category}`` only for a write that was neither sent nor
+    queued, or that the server refused permanently.
     """
     try:
         contract.validate_envelope(envelope, idempotency_key=envelope["event_id"])
     except Exception:
         return _error("invalid_request")
+    queued = False
     try:
         get_spool().enqueue(
             envelope,
@@ -1388,6 +1479,7 @@ def _ledger_call(envelope: dict[str, Any], tool_name: str, arguments: dict[str, 
             kind=envelope["kind"],
             capture_origin=envelope["capture_origin"],
         )
+        queued = True
     except SpoolFull:
         pass
     except Exception:
@@ -1395,7 +1487,15 @@ def _ledger_call(envelope: dict[str, Any], tool_name: str, arguments: dict[str, 
     try:
         client = SubstrateClient.from_env()
     except Exception:
-        return _error("transport_error")
+        return _queued_or_error(queued, "transport_error", tool_name)
+    if queued:
+        # Start the sender so a queued write is delivered without waiting for
+        # the next capture. Idempotent; a missing key leaves it spooled.
+        try:
+            if client.api_key:
+                get_spool().start(client)
+        except Exception:
+            pass
     try:
         structured, _text = client.call_tool(
             tool_name,
@@ -1406,13 +1506,17 @@ def _ledger_call(envelope: dict[str, Any], tool_name: str, arguments: dict[str, 
         handle = _mcp_handle(structured, tool_name)
         return json.dumps({"handle": handle}, separators=(",", ":"))
     except contract.ContractError:
-        return _error("invalid_response")
+        # The server answered something unusable: the outcome is unknown, so
+        # the spooled copy (same event id) is the source of truth.
+        return _queued_or_error(queued, "invalid_response", tool_name)
     except ClientError as exc:
         if exc.category in ("unauthorized", "forbidden"):
             _note_auth_failure(client.api_key)
+        if exc.category in ("unauthorized", "forbidden") or is_transient_category(exc.category):
+            return _queued_or_error(queued, exc.category, tool_name)
         return _error(exc.category)
     except Exception:
-        return _error("transport_error")
+        return _queued_or_error(queued, "transport_error", tool_name)
 
 
 def memory_remember(args: dict[str, Any], **kwargs: Any) -> str:
@@ -1541,7 +1645,11 @@ MEMORY_EVIDENCE_SCHEMA = {
 
 MEMORY_REMEMBER_SCHEMA = {
     "name": "memory_remember",
-    "description": "Write a fact to Substrate memory. Returns the new m: handle.",
+    "description": (
+        "Write one fact to Substrate memory. Returns the new m: handle. If the result "
+        "says queued, the fact is saved and syncs automatically; do not retry. Not for "
+        "importing past conversations or sessions: that is substrate_import."
+    ),
     "parameters": {
         "type": "object",
         "properties": {
@@ -1563,7 +1671,8 @@ MEMORY_FORGET_SCHEMA = {
         "marks a memory as no longer true; it stays in the record, keeps its evidence, "
         "and can be revived by later information. "
         "Takes exactly one handle plus a required reason; applies to that atom only, "
-        "never to related atoms, and a list of handles is refused."
+        "never to related atoms, and a list of handles is refused. If the result says "
+        "queued, the change syncs automatically; do not retry."
     ),
     "parameters": {
         "type": "object",

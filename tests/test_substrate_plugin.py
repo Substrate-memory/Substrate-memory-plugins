@@ -160,7 +160,7 @@ def test_capture_envelope_has_full_completed_messages_and_validates():
         {"role": "tool", "tool_call_id": "call-1", "name": "terminal", "content": "token=hide"},
         {"role": "assistant", "content": "old visible answer"},
     ]
-    envelope = plugin._capture_envelope(
+    (envelope,) = plugin._capture_envelopes(
         "first",
         "final visible answer",
         session_id="session",
@@ -168,7 +168,6 @@ def test_capture_envelope_has_full_completed_messages_and_validates():
         turn_id="turn",
         sender_id="owner",
     )
-    assert envelope is not None
     messages = envelope["payload"]["messages"]
     assert [row["role"] for row in messages] == ["user", "assistant", "tool", "assistant"]
     assert messages[-1]["content"] == "final visible answer"
@@ -583,10 +582,10 @@ def test_memory_forget_says_invalidation_not_removal():
 @pytest.mark.parametrize(
     "structured,expected",
     [
-        ({"contract_version": 3, "handle": "m:44a1b02e"}, "invalid_response"),  # 1 and 2 are valid
-        ({"contract_version": 2, "handle": "p:44a1b02e"}, "invalid_response"),
-        ({"contract_version": 2}, "invalid_response"),
-        ({"contract_version": 2, "handle": "m:xyz"}, "invalid_response"),
+        ({"contract_version": 3, "handle": "m:44a1b02e"}, "queued"),  # 1 and 2 are valid
+        ({"contract_version": 2, "handle": "p:44a1b02e"}, "queued"),
+        ({"contract_version": 2}, "queued"),
+        ({"contract_version": 2, "handle": "m:xyz"}, "queued"),
         ({"contract_version": 2, "handle": "m:44a1b02e", "extra": "ok"}, None),
     ],
 )
@@ -599,13 +598,17 @@ def test_explicit_tools_reject_bad_result(monkeypatch, fake_spool, callback, str
         args = {"handle": "m:44a1b02e", "reason": "no longer true"}
     if expected is None:
         assert json.loads(callback(args)) == {"handle": "m:44a1b02e"}
+    elif expected == "queued":
+        result = json.loads(callback(args))
+        assert result["status"] == "queued"
+        assert "handle" not in result and "error" not in result
     else:
         assert json.loads(callback(args)) == {"error": expected}
 
 
 @pytest.mark.parametrize(
     "raised,expected",
-    [("timeout", "timeout"), ("rate_limited", "transport_error")],
+    [("timeout", "queued"), ("rate_limited", "queued"), ("invalid_request", "invalid_request")],
 )
 @pytest.mark.parametrize("callback", [plugin.memory_remember, plugin.memory_forget])
 def test_explicit_tools_surface_tool_error_category(
@@ -623,7 +626,12 @@ def test_explicit_tools_surface_tool_error_category(
         args = {"text": "fact", "durability": "durable"}
     else:
         args = {"handle": "m:44a1b02e", "reason": "no longer true"}
-    assert json.loads(callback(args)) == {"error": expected}
+    result = json.loads(callback(args))
+    if expected == "queued":
+        # Transient: the spooled copy is delivered later, so it is not a failure.
+        assert result["status"] == "queued"
+    else:
+        assert result == {"error": expected}
 
 
 @pytest.mark.parametrize("callback", [plugin.memory_remember, plugin.memory_forget])
@@ -638,7 +646,8 @@ def test_explicit_tools_hide_backend_detail(monkeypatch, fake_spool, callback):
     else:
         args = {"handle": "m:44a1b02e", "reason": "no longer true"}
     result = callback(args)
-    assert json.loads(result) == {"error": "transport_error"}
+    # Enqueued before the call failed: queued, and no backend detail leaks.
+    assert json.loads(result)["status"] == "queued"
     assert "secret" not in result and "stack" not in result
 
 
@@ -839,8 +848,9 @@ def test_tool_timeout_against_slow_stub(
     result = json.loads(
         plugin.memory_remember({"text": "fact", "durability": "durable"})
     )
-    assert result == {"error": "timeout"}
-    assert fake_mcp.hits == 1
+    assert result["status"] == "queued"
+    assert "handle" not in result and "error" not in result
+    assert fake_mcp.hits >= 1
 
 
 def test_tool_404_carries_permanent_signal(
@@ -857,7 +867,13 @@ def test_tool_404_carries_permanent_signal(
     )
     assert result == {"error": "transport_error"}
     assert fake_mcp.hits == 1
-    assert real_spool.pending() == 1
+    # The write is spooled and the sender is started, so the permanent refusal
+    # is settled by the sender (quarantined with a counter), not retried.
+    assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
+    assert any(
+        key.endswith("|quarantined") and value["item_count"] >= 1
+        for key, value in real_spool.counters().items()
+    ), real_spool.counters()
     from substrate.client import ClientError, SubstrateClient
 
     try:
@@ -943,30 +959,36 @@ def test_tool_makes_single_attempt_on_500(
     # No client-side retry: redelivery is the spool sender's job.
     _mcp_env(monkeypatch, fake_mcp)
     fake_mcp.http_status = 500
-    assert json.loads(plugin.memory_remember({"text": "f", "durability": "durable"})) == {
-        "error": "transport_error"
-    }
+    result = json.loads(plugin.memory_remember({"text": "f", "durability": "durable"}))
+    assert result["status"] == "queued"
     assert fake_mcp.hits == 1
 
 
 def test_rejected_items_quarantine_while_rest_retire(
     real_spool, fake_mcp, monkeypatch, clean_session_state
 ):
-    """Per-item semantics: rejected quarantines, stored/duplicate retire."""
+    """Per-item semantics: an irreducible rejection quarantines; the rest retire.
+
+    A refused two-message turn is split first (HER-08); its refused single
+    message then quarantines with a counter, while the accepted half retires.
+    """
     from substrate.client import SubstrateClient
 
     _mcp_env(monkeypatch, fake_mcp)
-    fake_mcp.import_mode = lambda index, item: "stored" if index == 0 else "rejected"
+    fake_mcp.import_mode = (
+        lambda index, item: "rejected" if "poison" in json.dumps(item) else "stored"
+    )
     plugin.sync_turn(
         "hello", "world", session_id="s",
         messages=[{"role": "user", "content": "hello"}],
         turn_id="t",
     )
     plugin.sync_turn(
-        "bye", "moon", session_id="s",
-        messages=[{"role": "user", "content": "bye"}],
+        "poison", "moon", session_id="s",
+        messages=[{"role": "user", "content": "poison"}],
         turn_id="t2",
     )
+
     def _outcome(kind: str) -> bool:
         return any(
             key.endswith(f"|{kind}") and value["item_count"] >= 1
@@ -976,5 +998,134 @@ def test_rejected_items_quarantine_while_rest_retire(
     assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
     # Counters are written by the sender thread after the item leaves the
     # queue, so wait for the outcomes rather than sampling once.
-    assert _wait_for(lambda: _outcome("delivered") and _outcome("quarantined"), timeout=15.0), real_spool.counters()
+    assert _wait_for(
+        lambda: _outcome("delivered") and _outcome("split") and _outcome("quarantined"),
+        timeout=15.0,
+    ), real_spool.counters()
     assert SubstrateClient is not None
+
+
+def test_remember_while_offline_is_queued_not_failed(real_spool, monkeypatch, clean_session_state):
+    """HER-07: the write is spooled; the tool must say so, not ask for a retry."""
+    _dead_env(monkeypatch)
+    result = json.loads(
+        plugin.memory_remember(
+            {"text": "the user prefers tea", "durability": "durable"},
+            session_id="s",
+            sender_id="owner",
+        )
+    )
+    assert result["status"] == "queued"
+    assert "handle" not in result and "error" not in result
+    assert "syncs to Substrate automatically" in result["message"]
+    assert "Do not call memory_remember again" in result["message"]
+    assert any(
+        key.startswith("memory_write|") and key.endswith("|enqueued")
+        for key in real_spool.counters()
+    ), real_spool.counters()
+
+
+def test_forget_while_offline_is_queued_not_failed(real_spool, monkeypatch, clean_session_state):
+    _dead_env(monkeypatch)
+    result = json.loads(
+        plugin.memory_forget({"handle": "m:44a1b02e", "reason": "no longer true"})
+    )
+    assert result["status"] == "queued"
+    assert "error" not in result
+    assert "Do not call memory_forget again" in result["message"]
+    assert any(
+        key.startswith("memory_forget|") and key.endswith("|enqueued")
+        for key in real_spool.counters()
+    ), real_spool.counters()
+
+
+def test_write_that_was_neither_sent_nor_queued_still_fails(monkeypatch, clean_session_state):
+    from substrate import spool as spool_module
+
+    class Full:
+        def enqueue(self, *a, **k):
+            raise spool_module.SpoolFull("full")
+
+    monkeypatch.setattr(plugin, "get_spool", lambda: Full())
+    _dead_env(monkeypatch)
+    assert json.loads(
+        plugin.memory_remember({"text": "fact", "durability": "durable"})
+    ) == {"error": "transport_error"}
+
+
+def test_import_is_routed_to_the_import_tool_not_remember():
+    """HER-02: a direct import request must reach substrate_import, never remember."""
+    remember = plugin.MEMORY_REMEMBER_SCHEMA["description"]
+    assert "substrate_import" in remember and "Not for importing" in remember
+    import_description = plugin.SUBSTRATE_IMPORT_SCHEMA["description"]
+    assert "Use this tool for any request to import" in import_description
+    assert "Never use memory_remember" in import_description
+    assert "never say conversations were imported" in import_description
+    assert "substrate_import" in plugin.STATIC_MEMORY_PROMPT
+    assert "never memory_remember" in plugin.STATIC_MEMORY_PROMPT
+    assert len(plugin.STATIC_MEMORY_PROMPT) < 2000
+
+
+def test_long_session_capture_stays_under_the_limits_for_150_turns(fake_spool, clean_session_state):
+    """HER-08: captures are incremental and chunked; nothing grows past the bounds."""
+    history: list[dict] = []
+    for turn in range(150):
+        user = f"question {turn} " + "u" * 300
+        answer = f"answer {turn} " + "a" * 900
+        history.append({"role": "user", "content": user})
+        history.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": f"c{turn}", "function": {
+                "name": "terminal", "arguments": '{"command":"ls"}'}}],
+        })
+        history.append({"role": "tool", "tool_call_id": f"c{turn}",
+                        "name": "terminal", "content": "out " * 2000})
+        history.append({"role": "assistant", "content": answer})
+        plugin.sync_turn(user, answer, session_id="long", messages=list(history), turn_id=f"t{turn}")
+    envelopes = [item["envelope"] for item in fake_spool.items]
+    assert envelopes
+    indices: list[int] = []
+    for envelope in envelopes:
+        contract.validate_envelope(envelope, idempotency_key=envelope["event_id"])
+        messages = envelope["payload"]["messages"]
+        assert len(messages) <= 128
+        assert len(contract.canonical_bytes(envelope)) <= contract.ENVELOPE_BUDGET_BYTES
+        indices.extend(message["index"] for message in messages)
+    # Every message of the 600-message session is sent once, in order (no replay).
+    assert indices == list(range(len(history)))
+    total = sum(len(contract.canonical_bytes(envelope)) for envelope in envelopes)
+    assert total < 4 * len(history) * 1024 * 3  # linear in the session, not quadratic
+
+
+def test_oversized_turn_is_split_not_quarantined(real_spool, fake_mcp, monkeypatch,
+                                                  clean_session_state):
+    """HER-08: a turn the server refuses for size is split and delivered, not quarantined."""
+    _mcp_env(monkeypatch, fake_mcp)
+    fake_mcp.import_mode = (
+        lambda index, item: "rejected" if len(item["payload"]["messages"]) > 2 else "stored"
+    )
+    messages = []
+    for turn in range(3):
+        messages.append({"role": "user", "content": f"q{turn}"})
+        messages.append({"role": "assistant", "content": f"a{turn}"})
+    plugin.sync_turn("q", "a", session_id="split", messages=messages, turn_id="big")
+    assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
+    counters = real_spool.counters()
+    assert any(k.endswith("|split") and v["item_count"] >= 1 for k, v in counters.items()), counters
+    assert not any(k.endswith("|quarantined") for k in counters), counters
+    delivered = sum(
+        v["item_count"] for k, v in counters.items() if k.endswith("|delivered")
+    )
+    assert delivered >= 2
+
+
+def test_client_refuses_an_oversized_request_as_payload_too_large(monkeypatch):
+    from substrate.client import ClientError, SubstrateClient
+
+    client = SubstrateClient("http://127.0.0.1:9", "k")
+    with pytest.raises(ClientError) as refused:
+        client._rpc("tools/call", {"name": "memory_import",
+                                   "arguments": {"items": ["x" * 300_000]}}, timeout=1.0)
+    assert refused.value.category == "payload_too_large"
+    assert refused.value.transient is False

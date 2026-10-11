@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import contract
 from .contract import import_ack_ok, to_import_item, validate_mcp_import_response
 
 # Priorities: lower number sends first and is evicted last.
@@ -43,6 +44,15 @@ OUTCOME_DELIVERED = "delivered"
 OUTCOME_CLAIMED = "claimed"
 OUTCOME_RELEASED = "released"
 OUTCOME_SPOOL_FULL = "spool_full"
+# A refused capture_turn that was split into smaller parts, or whose single
+# oversized message was trimmed. Both keep the turn; the counter says it happened.
+OUTCOME_SPLIT = "split"
+OUTCOME_TRIMMED = "trimmed"
+# Excerpt bound for a single message trimmed as a last resort (bytes).
+_TRIM_CONTENT_BYTES = 1024
+# Permanent refusals that are about size or shape of a capture_turn. Only these
+# are salvaged by splitting or trimming; anything else is quarantined.
+_SALVAGE_CATEGORIES = frozenset({"invalid_request", "payload_too_large"})
 # Counted in addition to "delivered" when the server already held the event.
 OUTCOME_DUPLICATE = "duplicate"
 
@@ -784,8 +794,8 @@ class Spool:
                 self._db.execute("ROLLBACK")
                 raise
 
-    def retire(self, item_id: str) -> bool:
-        """Remove an item after a valid ACK, with a durable delivered counter."""
+    def retire(self, item_id: str, outcome: str = OUTCOME_DELIVERED) -> bool:
+        """Remove an item after a valid ACK, with a durable counter (delivered by default)."""
         with self._lock:
             self._db.execute("BEGIN IMMEDIATE")
             try:
@@ -802,7 +812,7 @@ class Spool:
                 # a file, which recovery rewrites from the payload BLOB.
                 self._unlink_file_locked(filename)
                 self._db.execute("DELETE FROM items WHERE item_id=?", (item_id,))
-                self._bump_locked(kind, origin, priority, OUTCOME_DELIVERED, byte_count)
+                self._bump_locked(kind, origin, priority, outcome, byte_count)
                 self._db.execute("COMMIT")
             except BaseException:
                 self._db.execute("ROLLBACK")
@@ -947,6 +957,66 @@ class Spool:
         )
         return structured
 
+    def _salvage(self, claimed: dict[str, Any], category: str) -> str:
+        """Handle a permanently refused item without losing its turn.
+
+        A capture_turn refused for its size or shape (server redaction bounds,
+        or the request body limit) is split into smaller consecutive parts,
+        each re-enqueued at the same priority. A single oversized message is
+        trimmed to an excerpt as a last resort. Each path leaves a durable
+        counter. Anything else, or a salvage that cannot be applied, is
+        quarantined. Returns "split", "trimmed" or "quarantined".
+        """
+        envelope = claimed.get("envelope")
+        if (
+            category in _SALVAGE_CATEGORIES
+            and claimed.get("kind") == "capture_turn"
+            and isinstance(envelope, dict)
+        ):
+            messages = (envelope.get("payload") or {}).get("messages")
+            if isinstance(messages, list) and len(messages) > 1:
+                try:
+                    parts = contract.capture_turn_parts(
+                        envelope, max_items=(len(messages) + 1) // 2
+                    )
+                except Exception:  # noqa: BLE001 - fall through to quarantine
+                    parts = []
+                if len(parts) > 1 and self._replace_with(claimed, parts, OUTCOME_SPLIT):
+                    return "split"
+            elif isinstance(messages, list) and category == "payload_too_large":
+                trimmed = _trim_single_message(envelope)
+                if trimmed is not None and self._replace_with(claimed, [trimmed], OUTCOME_TRIMMED):
+                    return "trimmed"
+        try:
+            self.quarantine(claimed["item_id"])
+        except Exception:  # noqa: BLE001 - best effort quarantine
+            pass
+        return "quarantined"
+
+    def _replace_with(self, claimed: dict[str, Any], parts: list[dict[str, Any]], outcome: str) -> bool:
+        """Enqueue replacement parts, then retire the original with ``outcome``.
+
+        If any part cannot be enqueued the original is released and kept, so
+        nothing is lost; parts already enqueued carry their own event ids.
+        """
+        try:
+            for part in parts:
+                self.enqueue(
+                    part, priority=claimed["priority"], kind=claimed["kind"],
+                    capture_origin=claimed["capture_origin"],
+                )
+        except Exception:  # noqa: BLE001 - keep the original for a later try
+            try:
+                self.release(claimed["item_id"])
+            except Exception:  # noqa: BLE001 - best effort release
+                pass
+            return False
+        try:
+            self.retire(claimed["item_id"], outcome=outcome)
+        except Exception:  # noqa: BLE001 - best effort retire
+            pass
+        return True
+
     def _settle_batch(
         self, batch: list[dict[str, Any]], structured: Any
     ) -> bool:
@@ -982,10 +1052,7 @@ class Spool:
                 continue
             action = entry.get("action")
             if action == "rejected":
-                try:
-                    self.quarantine(claimed["item_id"])
-                except Exception:  # noqa: BLE001 - best effort quarantine
-                    pass
+                self._salvage(claimed, str(entry.get("error") or "invalid_request"))
                 continue
             try:
                 ok = import_ack_ok(entry, claimed["event_id"])
@@ -1050,11 +1117,9 @@ class Spool:
             )
             return "retry"
         if entry.get("action") == "rejected":
-            try:
-                self.quarantine(claimed["item_id"])
-            except Exception:  # noqa: BLE001 - best effort quarantine
-                pass
-            return "quarantined"
+            outcome = self._salvage(claimed, str(entry.get("error") or "invalid_request"))
+            self._streak = 0
+            return "retired" if outcome != "quarantined" else "quarantined"
         try:
             ok = import_ack_ok(entry, claimed["event_id"])
         except Exception:  # noqa: BLE001 - a bad entry is never fatal
@@ -1099,12 +1164,9 @@ class Spool:
         if not transient:
             if len(batch) > 1:
                 return "split"
-            try:
-                self.quarantine(batch[0]["item_id"])
-            except Exception:  # noqa: BLE001 - best effort quarantine
-                pass
+            outcome = self._salvage(batch[0], category)
             self._streak = 0
-            return "quarantined"
+            return "quarantined" if outcome == "quarantined" else "retired"
         self._release_all(batch)
         self._streak += 1
         self._sleep_interruptible(
@@ -1168,6 +1230,24 @@ class Spool:
 _DEFAULT_DIR_ENV = "SUBSTRATE_SPOOL_DIR"
 _global_lock = threading.Lock()
 _global_spool: "Spool | None" = None
+
+
+def _trim_single_message(envelope: dict[str, Any]) -> dict[str, Any] | None:
+    """Last resort: clip the one message of a refused turn to a bounded excerpt."""
+    try:
+        trimmed = json.loads(json.dumps(envelope))
+        message = trimmed["payload"]["messages"][0]
+        raw = str(message.get("content", "")).encode("utf-8")
+        if len(raw) <= _TRIM_CONTENT_BYTES:
+            return None
+        message["content"] = raw[:_TRIM_CONTENT_BYTES].decode("utf-8", errors="ignore")
+        if message.get("role") == "tool":
+            message["result_truncated"] = True
+        trimmed["event_id"] = str(uuid.uuid4())
+        contract.validate_envelope(trimmed, idempotency_key=trimmed["event_id"])
+        return trimmed
+    except Exception:  # noqa: BLE001 - not trimmable: caller quarantines
+        return None
 
 
 def default_spool_dir() -> Path:

@@ -28,7 +28,8 @@ from typing import Any
 
 PLUGIN_VERSION = "0.9.0"
 _MCP_PATH = "/mcp"
-_MAX_REQUEST_BYTES = 512 * 1024
+# The /mcp request body limit (substrate-v5 mcp-api.mjs, contract section 1).
+_MAX_REQUEST_BYTES = 262144
 
 
 class ClientError(RuntimeError):
@@ -249,7 +250,8 @@ class SubstrateClient:
             body, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
         if len(data) > _MAX_REQUEST_BYTES:
-            raise ClientError("invalid_request", transient=False)
+            # Same category the server returns for HTTP 413: the caller splits.
+            raise ClientError("payload_too_large", transient=False)
         headers = {
             "Accept": "application/json, text/event-stream",
             "Authorization": f"Bearer {self.api_key}",

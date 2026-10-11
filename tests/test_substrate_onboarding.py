@@ -792,19 +792,22 @@ def _wait_for(predicate, timeout=15.0, interval=0.05):
     return predicate()
 
 
-def _capture_turn():
+def _capture_turn(turn=0):
+    """Capture turn ``turn`` of a growing session (Hermes history grows each turn)."""
     from substrate import plugin as _plugin
 
+    history = []
+    for i in range(turn + 1):
+        history.append({"role": "user", "content": f"hello {i}"})
+        history.append({"role": "assistant", "content": f"world {i}"})
     _plugin.sync_turn(
-        "hello",
-        "world",
+        f"hello {turn}",
+        f"world {turn}",
         session_id="s",
-        messages=[
-            {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "world"},
-        ],
-        turn_id="t",
+        messages=history,
+        turn_id=f"t{turn}",
     )
+
 
 
 def _quarantined_count(spool) -> int:
@@ -836,7 +839,7 @@ def test_no_credential_capture_stays_pending_then_replays_after_login(
 
     # Simulate login: store the key, next capture starts the sender normally.
     credentials.store_token(home.resolve(), origin, "k")
-    _capture_turn()
+    _capture_turn(1)
     assert _wait_for(lambda: spool_module.get_spool().pending() == 0)
     delivered = [call for call in fake_mcp.calls
                  if call["method"] == "tools/call" and call["tool"] == "memory_import"]
@@ -868,7 +871,7 @@ def test_revoked_credential_retains_pending_through_reconnect(
     # must not swap the running sender to an empty key.
     onboarding.note_auth_failure()
     assert credentials.stored_api_key(home.resolve()) == ""
-    _capture_turn()
+    _capture_turn(1)
     assert spool_module.get_spool().pending() == 2
     time.sleep(0.5)
     assert spool_module.get_spool().pending() == 2
@@ -879,7 +882,7 @@ def test_revoked_credential_retains_pending_through_reconnect(
     # backoff), so this wait is bounded generously but polls out early.
     fake_mcp.http_status = 200
     credentials.store_token(home.resolve(), origin, "k")
-    _capture_turn()
+    _capture_turn(2)
     assert _wait_for(
         lambda: spool_module.get_spool().pending() == 0, timeout=75.0, interval=0.5
     )

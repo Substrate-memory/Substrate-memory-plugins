@@ -1,5 +1,14 @@
 # Changelog
 
+## substrate-hermes 0.9.0
+
+Hermes: past-conversation import is offered after connecting, direct import requests reach the import tool, offline writes report queued, and long sessions are captured within the server's limits.
+
+- **Import offer:** after "Connected to Substrate", the agent asks once per connection whether to import earlier Hermes conversations (Import all / Let me pick / Not now). "Not now" is remembered in the profile. Import runs through `substrate_import` and the spool's `memory_import`; progress is reported. A direct request to import goes to `substrate_import`, never `memory_remember`.
+- **Offline writes:** `memory_remember` and `memory_forget` that are spooled but could not reach Substrate return `status: "queued"` (it syncs automatically; do not retry). Only a write that was neither sent nor queued reports an error.
+- **Long sessions (HER-08):** Substrate's redaction bound is 128 items per array, so a turn with more messages was refused and quarantined. Captures now send only new messages since the last enqueued one, in parts of at most 128 messages and 200 KiB. The local validator enforces the same bounds. A turn the server still refuses for size or shape is split (counter `split`), not quarantined.
+- **Versions:** `substrate-hermes` 0.9.0, matching the repository `VERSION`.
+
 ## substrate-codex 0.9.2
 
 Codex: the setup nag clears as soon as `codex mcp login` succeeds, without a model turn.

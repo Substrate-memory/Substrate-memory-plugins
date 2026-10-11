@@ -173,8 +173,25 @@ def read_decision(home: Path) -> str:
 def record_decision(home: Path, decision: str) -> None:
     if decision not in DECISIONS:
         raise ValueError(decision)
-    _write_json(substrate_dir(home) / OFFER_FILE,
-                {"version": 1, "decision": decision, "decided_at": _now_iso()})
+    path = substrate_dir(home) / OFFER_FILE
+    asked = (_read_json(path, 4096) or {}).get("asked_at")
+    _write_json(path, {"version": 1, "decision": decision, "decided_at": _now_iso(),
+                       "asked_at": asked if isinstance(asked, str) else _now_iso()})
+
+
+def was_asked(home: Path) -> bool:
+    """True once the offer has been put to the agent for this connection."""
+    value = _read_json(substrate_dir(home) / OFFER_FILE, 4096) or {}
+    return isinstance(value.get("asked_at"), str)
+
+
+def record_asked(home: Path) -> None:
+    """Remember that the offer was put to the agent: asked once per connection."""
+    if was_asked(home):
+        return
+    path = substrate_dir(home) / OFFER_FILE
+    value = _read_json(path, 4096) or {}
+    _write_json(path, {**value, "version": 1, "asked_at": _now_iso()})
 
 
 # ---------------------------------------------------------------------------
@@ -504,26 +521,17 @@ def _turn_envelope(session_id: str, messages: list[dict[str, Any]],
 
 def _turn_envelopes(session_id: str, messages: list[dict[str, Any]],
                     batch_id: str) -> list[dict[str, Any]]:
-    """One envelope per turn; an oversized turn splits into consecutive parts."""
+    """One envelope per turn; a turn over the server's bounds splits into consecutive parts.
+
+    The parts come from ``contract.capture_turn_parts``: at most 128 messages
+    each (the server's redaction bound) and the import byte budget, with
+    deterministic event ids so a rerun is a duplicate.
+    """
     whole = _turn_envelope(session_id, messages, batch_id)
-    if len(messages) <= 4096 and len(contract.canonical_bytes(whole)) <= MAX_IMPORT_EVENT_BYTES:
-        return [_validated(whole)]
-    parts: list[dict[str, Any]] = []
-    chunk: list[dict[str, Any]] = []
-    for message in messages:
-        candidate = [*chunk, message]
-        if chunk and (
-            len(candidate) > 4096
-            or len(contract.canonical_bytes(_turn_envelope(session_id, candidate, batch_id)))
-            > MAX_IMPORT_EVENT_BYTES
-        ):
-            parts.append(_validated(_turn_envelope(session_id, chunk, batch_id)))
-            chunk = [message]
-        else:
-            chunk = candidate
-    if chunk:
-        parts.append(_validated(_turn_envelope(session_id, chunk, batch_id)))
-    return parts
+    return [
+        _validated(part)
+        for part in contract.capture_turn_parts(whole, budget=MAX_IMPORT_EVENT_BYTES)
+    ]
 
 
 def session_end_envelope(row: dict[str, Any], high_water: int, batch_id: str) -> dict[str, Any]:
@@ -574,9 +582,14 @@ def iter_session_envelopes(
         start, end = turn[0]["index"], turn[-1]["index"] + 1
         if start >= start_index and end <= server_high_water and stats is not None:
             stats["held"] = stats.get("held", 0) + 1
-        if start >= start_index and end > server_high_water:
+        if end > server_high_water:
+            # Parts of one turn resume part by part: a crash after part 1 must
+            # not skip part 2, so each part is judged by its own offsets.
             for envelope in _turn_envelopes(sid, list(turn), batch_id):
-                yield envelope, end
+                part_start = envelope["offset"]["start"]
+                part_end = envelope["offset"]["end"]
+                if part_start >= start_index and part_end > server_high_water:
+                    yield envelope, part_end
 
     for raw in db.iter_messages(sid):
         message = _capture_message(_message_item(raw), index)

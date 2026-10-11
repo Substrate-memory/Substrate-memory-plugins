@@ -98,7 +98,9 @@ remember them too. Import all, let me pick, or not now?*
   already in memory.*).
 - **Let me pick** lists recent conversations and imports the ones you choose.
 - **Not now** is remembered and never asked again. Ask the agent to import
-  your past conversations any time.
+  your past conversations any time; it uses `substrate_import`, not
+  `memory_remember`. The offer is put to the agent once per connection, so
+  an unanswered offer is not repeated.
 
 What is left out: the current conversation (it is saved live), automated
 runs (cron, batch, subagents, webhooks, tests), group chats, hidden and
@@ -131,6 +133,10 @@ writes (`memory_remember`, `memory_forget`) enqueue at explicit priority,
 and imported history at replay priority (sent last, a bounded window at a
 time).
 The spool survives restarts, retries with backoff, and delivers in order.
+A `memory_remember` or `memory_forget` that cannot reach Substrate right away
+reports `queued`: it is saved and syncs by itself, so the agent does not retry
+it and you will not get a duplicate. Long conversations are sent as new
+messages only, in parts within Substrate's per-event limits (128 messages).
 The plugin fails open: a slow or failed memory call never blocks your turn
 (the plugin stops waiting for turn context after 500 ms and injects nothing;
 the server's own turn-context deadline is 1500 ms).

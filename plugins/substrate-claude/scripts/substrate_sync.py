@@ -541,13 +541,13 @@ def _build_envelopes(
 
 # ---------------------------------------------------------------------------
 # Item fitting: a turn must satisfy the server limits (one event <= 262144
-# bytes, <= 64 tool calls per message, <= 4096 messages per turn). Items that
+# bytes, <= 64 tool calls per message, <= 128 messages per turn). Items that
 # already fit are returned unchanged, so their deterministic ids never move.
 # ---------------------------------------------------------------------------
 
 MAX_ITEM_BYTES = MAX_BATCH_BYTES - 1024
 MAX_CALLS_PER_MESSAGE = 64
-MAX_MESSAGES_PER_ITEM = 4096
+MAX_MESSAGES_PER_ITEM = 128  # server redaction bound: longer arrays arrive as "[TRUNCATED]"
 
 
 def _item_fits(item: Dict[str, Any]) -> bool:

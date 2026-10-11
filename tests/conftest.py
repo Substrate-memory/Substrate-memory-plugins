@@ -73,10 +73,12 @@ def clean_session_state():
 
     _plugin._SESSION_STATE["active"] = None
     _plugin._SESSION_STATE["high_water"].clear()
+    _plugin._SESSION_STATE["sent_tail"].clear()
     _plugin._SUBAGENT_PARENTS.clear()
     yield
     _plugin._SESSION_STATE["active"] = None
     _plugin._SESSION_STATE["high_water"].clear()
+    _plugin._SESSION_STATE["sent_tail"].clear()
     _plugin._SUBAGENT_PARENTS.clear()
 
 
