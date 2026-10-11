@@ -817,6 +817,14 @@ PROGRESS_FILE = "import-progress.json"
 LOG_FILE = "import.log"
 DECISIONS = ("yes", "no", "picked", "none")
 LAST_SESSION_MAX_AGE = 12 * 3600
+# The offer hook nags only while the model can act on it. Each nag kind stops
+# after NAG_LIMIT injections when the connection is still not recorded (the
+# model never ran, or cannot run), so no state can keep the hook talking forever.
+NAG_LIMIT = 12
+# Connection probe budget. The hook has a 5 s timeout; the probe must leave room.
+PROBE_TIMEOUT = 2.0
+MCP_SERVER_NAME = "substrate-memory"
+MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 
 
 def _data_dir(host: str, override: str = "") -> str:
@@ -874,6 +882,81 @@ def _record_connected(data_dir: str) -> None:
     if not isinstance(state.get("connected_at"), str):
         state["connected_at"] = _utc_now()
         _write_json(path, state)
+
+
+def _claude_mcp_signed_in() -> bool:
+    """True when Claude Code holds an MCP OAuth credential for the Substrate server.
+
+    Claude Code keeps MCP OAuth entries under ``mcpOAuth`` in
+    ``$CLAUDE_CONFIG_DIR/.credentials.json`` (or ``~/.claude``). The file is read
+    only to see whether such an entry exists: no token is printed, sent, or
+    refreshed, so the probe cannot race the running session's own refresh. A
+    store that is not a readable file (the macOS keychain) reads as not signed in.
+    """
+    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    entries = _read_json(os.path.join(base, ".credentials.json")).get("mcpOAuth")
+    if not isinstance(entries, dict):
+        return False
+    for entry in entries.values():
+        if not isinstance(entry, dict) or entry.get("serverUrl") != MCP_SERVER_URL:
+            continue
+        for field in ("accessToken", "refreshToken"):
+            if isinstance(entry.get(field), str) and entry[field]:
+                return True
+    return False
+
+
+def _codex_mcp_signed_in() -> bool:
+    """True when ``codex mcp login`` stored OAuth for the substrate-memory server.
+
+    ``codex mcp list --json`` reports ``auth_status`` from Codex's own credential
+    store; the token itself is never read or printed. Anything other than
+    ``not_logged_in`` or ``unsupported`` means signed in. The call is bounded by
+    PROBE_TIMEOUT, and any failure reads as not signed in.
+    """
+    try:
+        proc = subprocess.run(["codex", "mcp", "list", "--json"], stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, timeout=PROBE_TIMEOUT, check=False)
+        rows = json.loads(proc.stdout or "[]") if proc.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False
+    if not isinstance(rows, list):
+        return False
+    for row in rows:
+        if isinstance(row, dict) and row.get("name") == MCP_SERVER_NAME:
+            status = row.get("auth_status")
+            return isinstance(status, str) and status not in ("", "not_logged_in", "unsupported")
+    return False
+
+
+def _probe_connected(host: str) -> bool:
+    """Connection check that needs no model turn: the host's own sign-in state."""
+    if host == "codex":
+        return _codex_mcp_signed_in()
+    if host == "claude":
+        return _claude_mcp_signed_in()
+    return False
+
+
+def _take_nag(data_dir: str, kind: str) -> bool:
+    """Count one injected nag of ``kind``. False once NAG_LIMIT is reached.
+
+    A data dir that cannot be written keeps the old behaviour: the nag still
+    shows (there is no state to count in), but nothing is ever recorded.
+    """
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    counts = state.get("nags") if isinstance(state.get("nags"), dict) else {}
+    count = counts.get(kind) if isinstance(counts.get(kind), int) else 0
+    if count >= NAG_LIMIT:
+        return False
+    counts[kind] = count + 1
+    state["nags"] = counts
+    try:
+        _write_json(path, state)
+    except OSError:
+        pass
+    return True
 
 
 def _remember_session(data_dir: str, session_id: str) -> None:
@@ -1065,6 +1148,15 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
             except OSError:
                 pass  # read-only sandbox: the offer still works
         connected = _connected(data_dir)
+        if not connected and _probe_connected(host):
+            # The host already holds a working sign-in (`codex mcp login` or
+            # Claude Code's /mcp Authenticate). Record it here so the setup
+            # nag clears without the model having to run --record-connected.
+            try:
+                _record_connected(data_dir)
+            except OSError:
+                pass
+            connected = True
         if connected and decided:
             return 0
         if not decided and not _has_other_transcripts(host, session_id):
@@ -1076,8 +1168,12 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
         if connected and decided:
             return 0
         if connected:
+            if not _take_nag(data_dir, "offer"):
+                return 0
             context = _offer_text(host, data_dir, session_id)
         else:
+            if not _take_nag(data_dir, "setup"):
+                return 0
             context = _setup_text(host, data_dir, session_id, offer=not decided)
         output = {"hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
