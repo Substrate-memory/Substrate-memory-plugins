@@ -1,63 +1,50 @@
 # Install Substrate memory for Claude (agent runbook)
 
-Use this six-step experience:
-**Install → Sign in → Review → Approve connection → Finish in the agent → Verify.**
+**Install → Sign in → Review → Approve connection → Connected to Substrate. →
+offer to import past conversations.** Chain every step in the same turn. Pause
+only for the browser approval and the user's import choice.
 
-## Before you start
+## Claude Code
 
-The agent can prepare supported settings. The user must click host permission
-controls and the exact browser link, then **Approve connection**.
+1. **One copy only.** Run `claude plugin list --json`. If any
+   `substrate-claude@…` entry exists (a copy synced from claude.ai is
+   `substrate-claude@synced`), do not install another. If it is disabled, run
+   `claude plugin enable <id>`. Otherwise install it yourself:
 
-## Self-check before installing
+   ```text
+   claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
+   claude plugin install substrate-claude@substrate-marketplace
+   ```
+2. If the Substrate tools (or their `authenticate` tool) are already in this
+   session, go straight to `/substrate-claude:substrate-connect` step 1.
+   Otherwise end the install reply with exactly this, in plain words:
+   *Installed. Type `/reload-plugins`, then say "continue".* On the next
+   message the plugin's hook tells you to finish setup: sign in (the user
+   approves in the browser), verify with `memory_search`, say **Connected to
+   Substrate.**, and in the same reply offer **Import all** / **Let me pick** /
+   **Not now**. Nothing else to type.
+3. On **Import all**, follow `/substrate-claude:substrate-import`: it starts the
+   upload in the background and reports progress until the final summary
+   line, without waiting for the user.
 
-1. If `memory_search` is present, run an authenticated smoke test. An empty
-   result is valid. On success report **Connected to Substrate.** and do not
-   reinstall.
-2. If the package/server is configured but tools are absent, say that it is not
-   wired into this session. Start a new session (Cowork registers plugin MCP
-   servers at session start) or run `/reload-plugins` (Claude Code), then paste:
+## Cowork
+
+1. **Cowork → Customize → Plugins → Personal plugins → + → Add marketplace →
+   Add from a repository (GitHub URL)**:
+   `https://github.com/Substrate-memory/Substrate-memory-plugins`. **Browse**,
+   install `substrate-claude`.
+2. **Start a new session** (plugin MCP servers register at session start; if
+   tools still do not appear, quit and reopen the app). There, paste:
 
    ```text
    Verify my Substrate connection with memory_search and report Connected to Substrate.
    ```
-3. If nothing is configured, use the host section below and then continue the
-   common flow.
-4. If tools are present but authorization is required, show the exact browser
-   URL. The user signs in, reviews it, and chooses **Approve connection**.
-   Finish in the agent and rerun `memory_search` before reporting success.
+3. Cowork cloud sessions have no local history, so the import offer is skipped.
 
-## Cowork
+## Rules
 
-1. Open **Cowork → Customize → Plugins → Personal plugins → + → Add
-   marketplace**.
-2. Choose **Add from a repository (GitHub URL)** and enter
-   `https://github.com/Substrate-memory/Substrate-memory-plugins`.
-3. Choose **Browse**, then install `substrate-claude`.
-4. **Start a new Cowork session.** The plugin MCP server registers only at
-   session start. If tools still do not appear, quit and reopen the app.
-5. In the new session, run the self-check above.
-
-## Claude Code
-
-```text
-/plugin marketplace add Substrate-memory/Substrate-memory-plugins
-/plugin install substrate-claude@substrate-marketplace
-/reload-plugins
-```
-
-Complete browser authorization and run the self-check. Plugins enabled on
-claude.ai also sync to Claude Code automatically.
-
-## Sign-in and verification
-
-Open the exact browser link returned by the client. Review the connection name,
-permissions, and proof details, then choose **Approve connection** or deny.
-Only the user can approve. Only after the authenticated request succeeds report
-**Connected to Substrate.** Never request API keys, manual tokens, or client
-secrets.
-
-## Import past conversations (asked once)
-
-After **Connected to Substrate.**, ask exactly once whether the user wants to
-import past conversations, then follow
-`/substrate-claude:substrate-import`. If the user says no, do not ask again.
+- Only the user approves, in the browser. **Connection approved** is not
+  **Connected to Substrate.**; only a successful `memory_search` is.
+- Never request or accept API keys, tokens, or client secrets. Never show the
+  import ticket in a reply.
+- Use the plugin or the claude.ai Substrate connector, not both.

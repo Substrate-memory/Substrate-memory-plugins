@@ -40,7 +40,11 @@ every host.
 - Scopes per tool: `retrieve` for `memory_search`, `memory_expand`,
   `memory_evidence`, `memory_shares`, `memory_turn_context`, `memory_import_status`;
   `capture` for `memory_remember`, `memory_forget`, `memory_capture_tool`,
-  `memory_capture_turn`, `memory_session_boundary`, `memory_import`.
+  `memory_capture_turn`, `memory_session_boundary`, `memory_import`,
+  `memory_import_ticket`.
+- **Import ticket** `sk_imp_…` (from `memory_import_ticket`, 4.9): a short-lived
+  bearer for a local, non-model import script on `/mcp`, limited to
+  `memory_import` and `memory_import_status`.
 
 ## 2. Error shape
 
@@ -216,6 +220,33 @@ extracted, pending, complete, last_event_at`). Text content: JSON.
 
 Clients use `message_high_water` to send only the turns the server does not hold.
 
+### 4.9 `memory_import_ticket` (scope `capture`) — bulk history without the model
+
+Input (closed): `{platform: ≤64, batch_id?: 8..64 hex}` (bookkeeping only).
+
+Output (`structuredContent`; text is the same JSON):
+
+```
+{contract_version: 2, ticket: "sk_imp_…", mcp_url: "<origin>/mcp", expires_at, expires_in: 3600,
+ max_items: 64, max_batch_bytes: 245760}
+```
+
+- The ticket is a bearer for `POST mcp_url` (same Streamable HTTP JSON-RPC) for a
+  local script the agent runs. Agents pass it through the environment
+  (`SUBSTRATE_IMPORT_TICKET`, `SUBSTRATE_MCP_URL`), never argv, never chat text.
+- Bound to the minting tenant, agent and credential; expires after 60 minutes;
+  every use re-checks the parent credential, so disconnecting the agent or
+  suspending the tenant ends it (`401` / `403`).
+- Allowed: `initialize`, `ping`, notifications, `tools/list` (exactly
+  `memory_import`, `memory_import_status`), and `tools/call` of those two. Any
+  other tool is `forbidden`; any other method is HTTP 403.
+- Through a ticket, `memory_import` accepts only `capture_turn` /
+  `capture_session` items with `capture_origin` `history_replay` or `catchup`;
+  any other item is rejected on its own (`error: "forbidden"`).
+- Limits are `memory_import`'s (64 items, 262144-byte body). Calling the tool
+  again mints a fresh ticket. On `401` the script stops and asks the agent for a
+  new one; re-sending is safe (4.7 dedupe).
+
 ## 5. Ledger envelope (shared with CONTRACT.md §5, unchanged)
 
 The server stores every capture, from every host, as the schema_version 3
@@ -262,7 +293,7 @@ hook event. Reference mapping (the plugin packages ship the exact files):
 | `PreCompact` | `memory_session_boundary` | `boundary: compact` |
 | `SessionEnd` | — (Claude Code and Codex both refuse MCP tool hooks here) | |
 
-Timeouts: 5 s for every hook. Every hook fails open. Known host limits,
+Timeouts: 5 s for every hook. Every hook fails open. Both packages add one `type: "command"` hook on `UserPromptSubmit`: `substrate_sync.py --offer-check` (section 8), local and silent once the import offer is answered. Known host limits,
 documented to users (verified on Claude Code 2.1.289): Claude Code refuses
 `mcp_tool` hooks on `SessionStart` and `SessionEnd` (no MCP client context), so
 the first turn implies the start and the server seals a session after 30
@@ -274,25 +305,53 @@ tool result through `PostToolUse`.
 ## 8. Sync and history import (client side)
 
 `scripts/substrate_sync.py` (standard library only, byte-identical in
-`substrate-claude` and `substrate-codex`):
+`substrate-claude` and `substrate-codex`; transcripts at
+`$CLAUDE_CONFIG_DIR|~/.claude/projects/**/*.jsonl` without `subagents/`, and
+`$CODEX_HOME|~/.codex/sessions/**/*.jsonl`; state in
+`<that config dir>/substrate-memory/` or `$SUBSTRATE_DATA_DIR`):
 
-- `--host claude|codex --list` prints the local sessions it can read
-  (`~/.claude/projects/**/*.jsonl`, `$CODEX_HOME/sessions/**/*.jsonl`; honouring
-  `CLAUDE_CONFIG_DIR` / `CODEX_HOME`).
-- `--host … --session <id> [--after-index N] --origin catchup|history_replay`
-  prints `memory_import` items for that session's turns after the given message
-  index, applying section 6 redaction, in batches ≤ 64 items / ≤ 240 KiB each,
-  one JSON batch per line.
-- Never prints credentials, never contacts the network. The agent passes each
-  batch to `memory_import` and reports the summary line to the user.
+- `--list` / `--preview` — local sessions (`--preview` prints one JSON line
+  `{sessions, turns, first_at, last_at, bytes_estimate, excluded, decision}`).
+- `--session <id> [--after-index N] --origin catchup|history_replay` — prints
+  `memory_import` batches (≤ 64 items, ≤ 240 KiB) for catch-up; the agent passes
+  each to `memory_import`.
+- `--upload --all|--session <id>… [--exclude-session <id>] [--background]` —
+  history import without the model: reads `SUBSTRATE_IMPORT_TICKET` and
+  `SUBSTRATE_MCP_URL` (4.9), runs `initialize` (sends `Mcp-Session-Id` back if
+  the server sets one; accepts JSON or SSE bodies), then `tools/call
+  memory_import` with redacted `history_replay` items and one fresh `batch_id`.
+  After a session's last turn it sends one `capture_session` seal (`boundary:
+  "end"`, `session_complete: true`, offset and `message_high_water` = the
+  session's final message index) so the server materializes and extracts it;
+  a rerun is a duplicate. Catch-up output (`--session`) never seals: that
+  session is still live.
+  Turns over the limits are reduced (tool calls capped at 64 per message,
+  shorter excerpts) or split into consecutive parts with exact offsets. Retries
+  429/5xx/timeouts with backoff; a refused batch is bisected; `401`/`403` stops
+  cleanly. Progress goes to `import-status.json`; `--status [--wait S]` reads it.
+  Finished sessions are remembered locally and skipped on a rerun. The current
+  session (named, or last seen by the offer hook, or the transcript written in
+  the last 10 minutes) is never imported. Final line:
+  `Imported N sessions (T turns): S stored, D duplicate, R rejected.`
+- `--offer-check` — `UserPromptSubmit` command hook printing hook JSON
+  (`hookSpecificOutput.additionalContext`). Until `--record-connected` it tells
+  the agent to finish setup now (sign in, `memory_search`, **Connected to
+  Substrate.**, then the offer); until a decision is recorded it tells it to
+  offer the import; with no other local sessions it records `none`. Silent
+  once connected and decided; always exit 0.
+- `--record-connected`, `--record-decision yes|no|picked|none`, `--pause S` (≤ 60 s wait, used while
+  the user approves sign-in).
+- Claude subagent transcripts are skipped: `subagents/` folders, top-level
+  `agent-*.jsonl` files, and `isSidechain: true` records (they repeat the
+  parent's session id; the parent already holds their result).
 
 Catch-up: when a turn-context text ends with the `[substrate] … not saved yet`
-line, or on `/substrate:sync`, the agent runs `memory_import_status` for the
-session, then the script with `--after-index <message_high_water>`, then
-`memory_import` per batch. History import: after **Connected to Substrate.** the
-agent asks once; on yes it lists sessions, shows the list, and imports the ones
-the user confirms with `--origin history_replay` and a fresh `batch_id`, then
-reports `memory_import_status` for the batch.
+line, or on the sync command, the agent runs `memory_import_status` for the
+session, then `--session … --after-index <message_high_water>`, then
+`memory_import` per batch. History import: after **Connected to Substrate.**,
+in the same reply, the agent runs `--preview` and offers **Import all** / **Let
+me pick** / **Not now** once; on a yes it calls `memory_import_ticket`, starts
+`--upload --background`, and polls `--status` until done.
 
 ## 9. Versioning
 

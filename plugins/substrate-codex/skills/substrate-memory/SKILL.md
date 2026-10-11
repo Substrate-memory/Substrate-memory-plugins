@@ -7,18 +7,14 @@ description: Use Substrate long-term memory in Codex and ChatGPT Work — recall
 
 Substrate memory. Lines in `<memory-context>` are facts from the user's knowledge base, selected for this turn. Use them naturally and do not announce that you remembered. `[contested]` means sources disagree; call `memory_expand` before relying on it. `[as of DATE]` means it may have changed. Call `memory_evidence` when the user asks why you believe something. Call `memory_search` with your intended action before irreversible operations. Pinned pages follow.
 
-## Self-check before installing or reconnecting
+## Connecting and importing
 
-1. If `memory_search` is available, call it with a focused, non-secret query.
-   An empty result is valid. On success report **Connected to Substrate.**
-2. If the plugin is configured but tools are absent, say it is installed but
-   not wired into this session. Start a new session, then ask the user to paste:
-   `Verify my Substrate connection with memory_search and report Connected to Substrate.`
-3. If nothing is configured, install through the host's documented interface,
-   then follow Install → Sign in → Review → Approve connection → Connected to Substrate.
-4. If tools are present but sign-in is required, show the exact browser URL.
-   The user signs in, reviews the request, and chooses **Approve connection**.
-   Never ask for or accept a pasted token or secret.
+- To connect or reconnect, follow `$substrate-connect`: sign in, verify with
+  `memory_search`, say **Connected to Substrate.**, and in the same reply offer
+  to import past conversations (**Import all** / **Let me pick** / **Not now**),
+  once per computer. `$substrate-import` runs it; the user can ask any time.
+- A `[substrate] Import offer pending` note from the plugin hook carries the
+  exact commands; follow it once the memory tools work.
 
 ## Recall
 
@@ -37,8 +33,6 @@ Substrate memory. Lines in `<memory-context>` are facts from the user's knowledg
   (`$substrate-sync`): call `memory_import_status` for the session, run the
   bundled `scripts/substrate_sync.py` with `--after-index <message_high_water>`,
   and pass each batch to `memory_import`.
-- After the first successful smoke test, ask exactly once whether the user
-  wants to import past conversations (`$substrate-import`).
 
 ## Writes
 

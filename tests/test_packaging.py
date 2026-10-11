@@ -49,7 +49,7 @@ def test_archives_are_deterministic_and_clean(tmp_path: Path) -> None:
     assert "substrate-hermes/plugin.yaml" in zipfile.ZipFile(tmp_path / ARCHIVE_NAME).namelist()
 
 def test_release_metadata_and_mcp_manifest() -> None:
-    assert (REPOSITORY_ROOT / "VERSION").read_text().strip() == "0.8.1"
+    assert (REPOSITORY_ROOT / "VERSION").read_text().strip() == "0.9.0"
     plugin_manifest = json.loads((REPOSITORY_ROOT / "plugins/substrate-mcp/.claude-plugin/plugin.json").read_text())
     assert plugin_manifest["name"] == "substrate-mcp"
     manifest = json.loads((REPOSITORY_ROOT / "plugins/substrate-mcp/.mcp.json").read_text())

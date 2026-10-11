@@ -13,24 +13,17 @@ changed. Call `memory_evidence` when the user asks why you believe something.
 Call `memory_search` with your intended action before irreversible operations.
 Pinned pages follow.
 
-## Self-check before installing or reconnecting
+## Connecting and importing
 
-1. If the expected memory tools are present, run an authenticated `memory_search`
-   smoke test. An empty result is valid. Report **Connected to Substrate.** only
-   when the request succeeds.
-2. If the plugin/server is configured but the tools are absent, say that it is
-   installed but not wired into this session. Start a new session or restart the
-   host as documented; Cowork requires a new session because plugin MCP servers
-   register at session start. Then ask the user to paste:
-
-   ```text
-   Verify my Substrate connection with memory_search and report Connected to Substrate.
-   ```
-3. If nothing is configured, use the host's documented installation interface.
-4. If tools are present but authentication is required, show the exact browser
-   URL. The user signs in, reviews the request, and chooses **Approve connection**.
-   Finish in the agent and rerun the smoke test. **Connection approved** is not
-   **Connected to Substrate.**
+- To connect or reconnect, follow `/substrate-claude:substrate-connect`: sign in,
+  verify with `memory_search`, say **Connected to Substrate.**, and in the same
+  reply offer to import past conversations (**Import all** / **Let me pick** /
+  **Not now**). It is offered once per computer; `/substrate-claude:substrate-import`
+  runs it, and the user can ask for it any time later.
+- A `[substrate] Import offer pending` note from the plugin hook carries the
+  exact commands for this computer; follow it once the memory tools work.
+- "MCP server … not connected" hook errors mean the plugin is installed but not
+  signed in: sign in, do not install a second copy.
 
 ## Catch-up rule
 
@@ -41,7 +34,7 @@ When a turn-context reply ends with this line:
 ```
 
 run the sync flow (`/substrate-claude:substrate-sync`): call
-`memory_import_status` for this session, run `scripts/substrate_sync.py` with
+`memory_import_status` for this session, run `${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py` with
 `--after-index <message_high_water>`, and pass each printed batch to
 `memory_import`. Then continue the turn.
 

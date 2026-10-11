@@ -63,19 +63,27 @@ If Cowork needs manual installation, use **Cowork tab → Customize → Plugins 
 - **Redaction on both sides.** Secrets are redacted client-side before sending and again server-side on ingest. Captured tool arguments are bounded (4096 bytes) and tool results are stored as excerpts (8192 bytes plus a digest).
 - **Tenant isolation.** Every credential is tenant-scoped. The server owns account identity; clients never send tenant or account ids.
 - **What is stored.** Redacted turn content, session boundaries, explicit memories you confirm, and retraction records with their evidence.
-- **What is not stored.** Passwords, API keys, tokens, and other secrets are redacted before storage. During history import nothing is written before you confirm.
+- **What is not stored.** Passwords, API keys, tokens, and other secrets are redacted before storage. History import runs only after you choose it.
 
 See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md).
 
 ## Import past conversations
 
-After **Connected to Substrate.**, the agent asks once whether to import past conversations. It lists the sessions it can read on that host, shows the list, and imports only what you confirm. Turns are raw, redacted replays from that host's own transcripts. Nothing is written before confirmation. Secrets are redacted client- and server-side. If you say no, the agent does not ask again.
+Right after **Connected to Substrate.**, in the same reply, the agent offers once, with what it found on this computer:
+
+> I found 87 past conversations on this computer (1,204 turns, 3 Mar to 7 Oct 2026). Import them into Substrate? **Import all** / **Let me pick** / **Not now**
+
+- **Import all** imports every local conversation except the current one (already captured live). It runs in the background; the agent reports progress and the final line (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`) without waiting for you.
+- **Let me pick** lists conversations by date and title; only those are imported.
+- **Not now** is remembered and never asked again. Ask "import my past conversations" any time.
+
+Claude Code and Codex upload straight from the package script with a short-lived, import-only ticket (`memory_import_ticket`), so your history never passes through the chat. Hermes reads its own profile history and sends it through its spool. Cowork cloud sessions have no local history, so the offer is skipped. Imports are redacted client- and server-side, and repeats are ignored.
 
 ## Supported hosts and versions
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.8.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Released |
+| v0.9.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
 
 Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0 or newer; you are on X. It should work; tell us if not.* Newer Hermes versions get no note. See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
 
@@ -101,7 +109,7 @@ Claude Cowork and Claude Code use `plugins/substrate-claude`. ChatGPT Work, the 
 The agent runs an authenticated memory smoke test. Only a passed `memory_search` means **Connected to Substrate.**
 
 **What exactly is sent to Substrate?**
-Each completed turn: your message, the agent's answer, and bounded tool calls and results, all redacted before sending and again on the server. History import sends the same redacted turn content, and only for the sessions you confirm.
+Each completed turn: your message, the agent's answer, and bounded tool calls and results, all redacted before sending and again on the server. History import sends the same redacted turn content, only after you choose **Import all** or pick sessions.
 
 **What about my old August 2026 API-key plugin?**
 Those plugins (`substrate_capture`, local spool paths, `SUBSTRATE_API_KEY` setups) are deprecated. Uninstall them and connect with the browser flow. Their local spools are not migrated.

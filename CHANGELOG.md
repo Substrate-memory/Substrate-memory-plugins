@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0
+
+Right after connecting, the agent offers to bring your past conversations into Substrate, and does it without you babysitting it.
+
+- **Offered once, in the same reply as "Connected to Substrate."** The agent counts the conversations on this computer and asks: *I found 87 past conversations on this computer (1,204 turns, 3 Mar to 7 Oct 2026). Import them into Substrate? Import all / Let me pick / Not now.* "Not now" is remembered and never asked again; you can still say "import my past conversations" any time. Previously the offer lived only inside the connect command, so connecting through Claude Code's own sign-in never offered it.
+- **Import all, in the background.** Everything on this computer except the current conversation (already captured live) is imported while the agent keeps reporting progress (*Importing past conversations: 12 of 87 done*) and ends with `Imported 87 sessions (1204 turns): 1190 stored, 14 duplicate, 0 rejected.` No "done" to type.
+- **Your history never passes through the chat.** Claude Code and Codex get a short-lived, import-only ticket from the new `memory_import_ticket` tool; the bundled `substrate_sync.py --upload` posts redacted batches straight to Substrate (60-minute ticket, import tools only, revoked with the connection, read from the environment, never shown in chat). Relaying a session through the model cost about 860 KB of context per conversation; now it costs one status line.
+- **Robust uploads.** Batches respect 64 items / 240 KiB; very long agent turns (more than 64 tool calls, megabytes of tool output) are trimmed or split instead of rejected; 429 and server errors are retried with backoff; a refused batch is narrowed down to the one bad turn; an expired ticket stops cleanly and the next run skips finished conversations (the server ignores repeats).
+- **Sign-in starts at once and continues by itself.** After a fresh install the only thing to type is `/reload-plugins` (then "continue"): the plugin's hook makes the agent finish setup on that message, open the sign-in link immediately, and keep checking while you approve in the browser.
+- **One copy only.** If Claude Code already has `substrate-claude@synced` (synced from claude.ai), the agent signs it in instead of installing a second copy; "MCP server … not connected" errors mean "not signed in", not "not installed".
+- **Offer hook.** A small local `UserPromptSubmit` command hook (`substrate_sync.py --offer-check`) reminds the agent until you have answered; afterwards it is silent. It never blocks a prompt and never touches the network. Codex: the connect skill makes the offer itself, because plugin hooks need trust in `/hooks` (and did not load in our sandboxed Codex check).
+- **Hermes:** see below.
+- **Imported history becomes recallable.** Each imported session now ends with one `capture_session` seal (`boundary: "end"`, `session_complete: true`), which is what makes the server materialize and extract it. Before, imports stored turns that were never extracted (also in 0.8.1). Reruns dedupe the seal; catch-up of the live session never seals.
+- Claude subagent transcripts (`subagents/` folders, older top-level `agent-*.jsonl` files, and any `isSidechain` lines) are skipped; they carry the parent's session id and used to collide with it. Versions: `substrate-claude`, `substrate-codex`, `substrate-mcp` 0.9.0. `docs/mcp-contract.md` documents `memory_import_ticket` (4.9) and the new script modes (section 8).
+
 ## 0.8.1
 
 Hermes sign-in keeps the user's approval.
