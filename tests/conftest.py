@@ -101,6 +101,20 @@ def _isolated_hermes_home(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_spool_singleton():
+    """The process-wide spool resolves its directory from HERMES_HOME once.
+
+    Without a reset, a spool created under the real ~/.hermes by one test would
+    capture every later test's writes into the user's profile.
+    """
+    import substrate.spool as spool_module
+
+    spool_module.reset_spool()
+    yield
+    spool_module.reset_spool()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_mcp_init_cache():
     """Never reuse a verified initialize across tests."""
     from substrate import client as _client

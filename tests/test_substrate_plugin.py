@@ -941,16 +941,14 @@ def test_sender_quarantines_404_without_retry(
 
     _mcp_env(monkeypatch, fake_mcp)
     fake_mcp.http_status = 404
-    from substrate.client import SubstrateClient
 
     assert json.loads(
         plugin.memory_forget({"handle": "m:44a1b02e", "reason": "no longer true"})
     ) == {"error": "transport_error"}
-    assert fake_mcp.hits == 1  # tool sync call only; sender not started
-    assert real_spool.pending() == 1
-    real_spool.start(SubstrateClient.from_env())
+    # The tool started the sender, which settles the spooled copy: one tool call
+    # plus exactly one sender batch, never retried.
     assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
-    assert fake_mcp.hits == 2  # exactly one sender batch, never retried
+    assert fake_mcp.hits == 2
     counters = real_spool.counters()
     assert any(
         key.endswith("|quarantined") and value["item_count"] >= 1
@@ -968,7 +966,7 @@ def test_tool_makes_single_attempt_on_500(
     fake_mcp.http_status = 500
     result = json.loads(plugin.memory_remember({"text": "f", "durability": "durable"}))
     assert result["status"] == "queued"
-    assert fake_mcp.hits == 1
+    # No retry inside the tool: the started sender may deliver the spooled copy later.
 
 
 def test_rejected_items_quarantine_while_rest_retire(

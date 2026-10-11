@@ -504,14 +504,25 @@ def test_offer_is_shown_once_per_connection_and_the_answer_is_remembered(
 def test_unanswered_offer_is_not_repeated_but_a_direct_request_still_imports(
     home, monkeypatch, real_spool, connected
 ):
+    from substrate.client import SubstrateClient
+
     standard_history(home, 26)
+    real_call_tool = SubstrateClient.call_tool
     _turn_context(monkeypatch)
     assert "substrate-import-offer" in plugin.pre_llm_call("live-1", "hi", [])["context"]
     plugin._PREVIEW_CACHE.clear()
     assert "substrate-import-offer" not in plugin.pre_llm_call("live-1", "hi", [])["context"]
+    # The turn-context stub fakes every MCP tool; the import needs the real client.
+    monkeypatch.setattr(SubstrateClient, "call_tool", real_call_tool)
     started = json.loads(plugin.substrate_import({"action": "start"}))
     assert started["status"] == "started"
     assert history.read_decision(home) == "yes"
+    # Let the background import finish inside this test, so it does not hold the
+    # job lock into the next test.
+    deadline = time.monotonic() + 60
+    while history.status(home)["state"] != "done" and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert history.status(home)["state"] == "done", history.status(home)
 
 
 def test_offer_comes_with_an_empty_memory_block_too(home, monkeypatch, fake_spool):
