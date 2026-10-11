@@ -6,6 +6,8 @@ It registers one remote HTTP MCP server and one usage skill. It contains no loca
 
 The endpoint is `https://app.trysubstrate.co/mcp` over remote **Streamable HTTP**. The remote service and browser connection flow are backend-owned. Every host uses the same sign-in, review and approval screen. Do not report an installation as successful until an authenticated `memory_search` smoke test passes.
 
+Named guides for OpenClaw and Grok are in [docs/openclaw.md](../../docs/openclaw.md) and [docs/grok.md](../../docs/grok.md).
+
 ## Install and host mechanics
 
 Start with:
