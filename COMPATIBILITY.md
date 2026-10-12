@@ -4,7 +4,7 @@
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.9.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer; install by repository URL) | `plugins/substrate-claude` | `plugins/substrate-claude`; new session required in the current build (observed) for server registration | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
+| v0.9.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer; install by repository URL) | `plugins/substrate-claude` | `plugins/substrate-claude`; new session required in the current build (observed) for server registration | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
 
 ## Version policy
 
@@ -17,7 +17,7 @@ One rule for every package in this repository:
   Tested on <host> <tested range>; you are on <version>. It should work; if something does not, tell us at https://github.com/Substrate-memory/Substrate-memory-plugins/issues.
   ```
 
-- **Who shows it.** The Hermes plugin shows it by itself on the first turn (it reads the running Hermes version). For Claude, Cowork, Codex, and other MCP hosts the installing agent compares the host version with the table and shows the same sentence (see `AGENTS.md`).
+- **Who shows it.** The Hermes plugin shows it once, when the connection is made (it reads the running Hermes version; a 0.0.0 or unknown build gets no note and is never treated as old). It is never added to ordinary answers. For Claude, Cowork, Codex, and other MCP hosts the installing agent compares the host version with the table and shows the same sentence (see `AGENTS.md`).
 - Failures after install are reported with a plain message and a next step, never a bare error code.
 
 | Package | Host | Tested range |

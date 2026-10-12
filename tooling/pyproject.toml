@@ -1,0 +1,19 @@
+# Repository tooling only (CI, lint, tests). This file is deliberately NOT at
+# the repository root: Hermes treats a root pyproject.toml as a plugin
+# dependency project and installs it when a user runs
+# `hermes plugins install <repo URL>`. The Hermes plugin is standard-library
+# only and must install nothing. Run tooling with:
+#   UV_PROJECT_ENVIRONMENT=$PWD/.venv uv sync --project tooling --frozen --extra dev
+[project]
+name = "substrate-retrieval"
+version = "0.3.0"
+description = "Substrate retrieval plugin for Hermes Agent (repository tooling)"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.0.3",
+  "pytest-timeout==2.3.1",
+  "ruff==0.9.10",
+]

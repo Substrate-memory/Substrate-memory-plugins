@@ -1,6 +1,6 @@
 # Releasing
 
-Release `0.9.0` adds the one-time offer to import past conversations right after connecting, with direct uploads for Claude Code and Codex (`memory_import_ticket`) so history never passes through the model (on top of `0.8.1`). The repository ships four deterministic archives (see `scripts/build_release.py` for the exact archive set; if the builder still lists the old two-archive layout, it must be extended to the four packages below before release):
+Release `0.9.1` is the Hermes fix release after the 2026-10-11 customer test: explicit memory searches survive a slow server (one retry inside a 15 s budget), an unknown Hermes build gets no version note, the install no longer picks up dependency tooling, the server's connected-source description reaches `memory_search`, and rejected import items are logged with the server's reason. `0.9.0` added the one-time offer to import past conversations right after connecting, with direct uploads for Claude Code and Codex (`memory_import_ticket`) so history never passes through the model (on top of `0.8.1`). The repository ships four deterministic archives (see `scripts/build_release.py` for the exact archive set; if the builder still lists the old two-archive layout, it must be extended to the four packages below before release):
 
 - `substrate-hermes.zip`: the Hermes package (`plugins/substrate-hermes`) with durable write-ahead spool, session boundaries, subagent capture, and device login.
 - `substrate-claude.zip`: the Claude package (`plugins/substrate-claude`) with `memory_*` hook wiring and the sync command for Cowork and Claude Code.
@@ -22,7 +22,7 @@ An owner may prepare a GitHub draft targeting the review-branch commit and attac
 ## Deterministic local check
 
 ```sh
-uv sync --frozen --extra dev
+UV_PROJECT_ENVIRONMENT=$PWD/.venv uv sync --project tooling --frozen --extra dev
 .venv/bin/ruff check .
 .venv/bin/python -m pytest -q
 python3 scripts/check_public_hygiene.py --root .

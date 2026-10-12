@@ -13,9 +13,11 @@ Standard library only.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import random
+import re
 import sqlite3
 import stat
 import threading
@@ -27,6 +29,8 @@ from typing import Any
 
 from . import contract
 from .contract import import_ack_ok, to_import_item, validate_mcp_import_response
+
+logger = logging.getLogger("substrate.spool")
 
 # Priorities: lower number sends first and is evicted last.
 PRIORITY_EXPLICIT = 0  # memory_write, memory_forget, consent
@@ -85,6 +89,21 @@ _TRANSIENT_CATEGORIES = frozenset({
     "unauthorized", "forbidden", "rate_limited", "server_error",
     "http_401", "http_403", "http_429",
 })
+
+
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _rejection_reason(entry: dict[str, Any]) -> str:
+    """The server's per-item rejection (``error`` plus its ``hint``), for logs only.
+
+    Bounded and free of control characters; never the item's content.
+    """
+    error = _CONTROL_CHARS_RE.sub(" ", str(entry.get("error") or "invalid_request"))[:64]
+    hint = entry.get("hint")
+    if not isinstance(hint, str) or not hint.strip():
+        return error
+    return f"{error}: {_CONTROL_CHARS_RE.sub(' ', hint)[:200]}"
 
 
 def _transport_error(category: str) -> Exception:
@@ -957,6 +976,16 @@ class Spool:
         )
         return structured
 
+    def _log_rejection(self, claimed: dict[str, Any], entry: dict[str, Any]) -> None:
+        """Log why the server refused one item, not just that it did."""
+        try:
+            logger.warning(
+                "memory_import item rejected by Substrate: kind=%s event_id=%s reason=%s",
+                claimed.get("kind"), claimed.get("event_id"), _rejection_reason(entry),
+            )
+        except Exception:  # noqa: BLE001 - logging never affects delivery
+            pass
+
     def _salvage(self, claimed: dict[str, Any], category: str) -> str:
         """Handle a permanently refused item without losing its turn.
 
@@ -1052,6 +1081,7 @@ class Spool:
                 continue
             action = entry.get("action")
             if action == "rejected":
+                self._log_rejection(claimed, entry)
                 self._salvage(claimed, str(entry.get("error") or "invalid_request"))
                 continue
             try:
@@ -1117,6 +1147,7 @@ class Spool:
             )
             return "retry"
         if entry.get("action") == "rejected":
+            self._log_rejection(claimed, entry)
             outcome = self._salvage(claimed, str(entry.get("error") or "invalid_request"))
             self._streak = 0
             return "retired" if outcome != "quarantined" else "quarantined"

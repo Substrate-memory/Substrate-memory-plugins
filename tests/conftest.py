@@ -67,6 +67,15 @@ def fake_spool(monkeypatch):
     return fake
 
 
+@pytest.fixture(autouse=True)
+def no_background_search_description_fetch(monkeypatch):
+    """Keep the one background tools/list fetch of memory_search's description
+    out of the suite; tests that need it call the refresh function directly."""
+    from substrate import plugin as _plugin
+
+    monkeypatch.setitem(_plugin._SEARCH_DESCRIPTION_STATE, "done", True)
+
+
 @pytest.fixture
 def clean_session_state():
     from substrate import plugin as _plugin
@@ -295,9 +304,15 @@ class _MCPHandler(BaseHTTPRequestHandler):
             })
             return
         if method == "tools/list":
+            tools = []
+            for name in self.server.tool_names:
+                entry = {"name": name}
+                if name == "memory_search" and self.server.search_description is not None:
+                    entry["description"] = self.server.search_description
+                tools.append(entry)
             self._send_json(200, {
                 "jsonrpc": "2.0", "id": message_id,
-                "result": {"tools": [{"name": name} for name in self.server.tool_names]},
+                "result": {"tools": tools},
             })
             return
         if method != "tools/call":
@@ -389,6 +404,8 @@ class _MCPHandler(BaseHTTPRequestHandler):
                     entry["event_id"] = event_id
                 if action == "rejected":
                     entry["error"] = "invalid_request"
+                    if server.reject_hint:
+                        entry["hint"] = server.reject_hint
                 results.append(entry)
             accepted = sum(1 for entry in results if entry["action"] != "rejected")
             self._send_json(200, _tool_ok(message_id, {
@@ -431,6 +448,8 @@ def fake_mcp():
     server.http_status = 200
     server.long_markdown = False
     server.long_raw = False
+    server.search_description = None  # set to a str to publish memory_search's description
+    server.reject_hint = None  # set to a str to add a per-item "hint" to rejected import rows
     server.calls = []
     server.hits = 0
     thread = threading.Thread(target=server.serve_forever, daemon=True)

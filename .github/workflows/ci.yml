@@ -46,8 +46,8 @@ jobs:
         with:
           version: '0.11.32'
           enable-cache: true
-          cache-dependency-glob: uv.lock
-      - run: uv sync --frozen --extra dev
+          cache-dependency-glob: tooling/uv.lock
+      - run: UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --project tooling --frozen --extra dev
       - run: .venv/bin/ruff check .
       - run: .venv/bin/python -m compileall -q plugins scripts
       - run: .venv/bin/python -m pytest -q

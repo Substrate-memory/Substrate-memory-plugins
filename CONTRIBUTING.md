@@ -17,7 +17,7 @@ server or credential implementation here.
 4. Run:
 
    ```bash
-   uv sync --frozen --extra dev
+   UV_PROJECT_ENVIRONMENT=$PWD/.venv uv sync --project tooling --frozen --extra dev
    .venv/bin/ruff check .
    .venv/bin/python -m pytest -q
    python3 scripts/check_public_hygiene.py --root .

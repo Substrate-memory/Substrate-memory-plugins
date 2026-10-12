@@ -49,7 +49,7 @@ def test_archives_are_deterministic_and_clean(tmp_path: Path) -> None:
     assert "substrate-hermes/plugin.yaml" in zipfile.ZipFile(tmp_path / ARCHIVE_NAME).namelist()
 
 def test_release_metadata_and_mcp_manifest() -> None:
-    assert (REPOSITORY_ROOT / "VERSION").read_text().strip() == "0.9.0"
+    assert (REPOSITORY_ROOT / "VERSION").read_text().strip() == "0.9.1"
     plugin_manifest = json.loads((REPOSITORY_ROOT / "plugins/substrate-mcp/.claude-plugin/plugin.json").read_text())
     assert plugin_manifest["name"] == "substrate-mcp"
     manifest = json.loads((REPOSITORY_ROOT / "plugins/substrate-mcp/.mcp.json").read_text())
@@ -82,7 +82,7 @@ def test_hermes_archive_keeps_installed_identity() -> None:
         assert "substrate-hermes/plugin.yaml" in names
         manifest = archive.read("substrate-hermes/plugin.yaml").decode("utf-8")
         assert "name: substrate" in manifest.splitlines()
-        assert "version: 0.9.0" in manifest.splitlines()
+        assert "version: 0.9.1" in manifest.splitlines()
 
 
 def test_onboarding_has_one_shared_user_facing_contract() -> None:
@@ -106,7 +106,7 @@ def test_onboarding_has_one_shared_user_facing_contract() -> None:
 
 def test_repository_root_is_an_installable_hermes_plugin() -> None:
     """``hermes plugins install <repo URL>`` installs the root: it must be a
-    valid Hermes plugin that loads plugins/substrate-hermes (v0.9.0)."""
+    valid Hermes plugin that loads plugins/substrate-hermes (v0.9.1)."""
     import importlib.util
 
     root_manifest = (REPOSITORY_ROOT / "plugin.yaml").read_text(encoding="utf-8")
@@ -123,3 +123,19 @@ def test_repository_root_is_an_installable_hermes_plugin() -> None:
     spec.loader.exec_module(module)
     assert callable(module.register)
     assert module.register.__module__.endswith("src.substrate.plugin")
+
+
+def test_repository_root_is_not_a_python_project_for_hermes() -> None:
+    """Hermes treats a root pyproject.toml as a plugin dependency project and
+    installs it on `hermes plugins install <repo URL>` (the customer test saw
+    "Installing Python dependencies" take 2 min 47 s). The dev tooling project
+    lives in tooling/ and the plugin installs nothing."""
+    assert not (REPOSITORY_ROOT / "pyproject.toml").exists()
+    assert not (REPOSITORY_ROOT / "uv.lock").exists()
+    tooling = (REPOSITORY_ROOT / "tooling" / "pyproject.toml").read_text(encoding="utf-8")
+    assert "ruff==0.9.10" in tooling and "pytest==9.0.3" in tooling
+    assert "dependencies = []" in tooling
+    assert (REPOSITORY_ROOT / "tooling" / "uv.lock").exists()
+    assert (REPOSITORY_ROOT / "ruff.toml").exists() and (REPOSITORY_ROOT / "pytest.ini").exists()
+    root_manifest = (REPOSITORY_ROOT / "plugin.yaml").read_text(encoding="utf-8")
+    assert "python_runtime: external" in root_manifest

@@ -29,7 +29,7 @@ hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plug
 The repository root is a Hermes plugin that loads this directory.
 Installing only this directory also works:
 `hermes plugins install Substrate-memory/Substrate-memory-plugins/plugins/substrate-hermes --enable`.
-To pin a release, add `--ref <40-character commit SHA of the v0.9.0 tag>`.
+To pin a release, add `--ref <40-character commit SHA of the v0.9.1 tag>`.
 
 ## Connect (one browser approval)
 
@@ -80,10 +80,18 @@ for the cutover after the first successful memory call.
 ## Supported Hermes versions
 
 Tested on Hermes 0.21.0 or newer (0.21.4 verified end to end). The plugin
-installs and runs on any version. Newer versions get no note; on an older
-Hermes it tells you once: *Tested on Hermes 0.21.0 or newer; you are on X.
-It should work; if something does not, tell us.* It never upgrades Hermes. See
+installs and runs on any version. Newer versions get no note. An older Hermes
+gets one note, at the moment the connection is made: *Tested on Hermes 0.21.0
+or newer; you are on X. It should work; if something does not, tell us.* A git
+build that reports version 0.0.0 is treated as unknown and gets no note. The
+note is never added to ordinary answers. The plugin never upgrades Hermes. See
 [COMPATIBILITY.md](../../COMPATIBILITY.md#version-policy).
+
+**Tool search.** Hermes can defer plugin tools behind its tool-search step
+(`tools.tool_search`, default `auto`). Then each lookup first discovers the
+tool, which adds seconds per call. Setting `tools.tool_search.enabled: off` in
+the Hermes config makes the Substrate tools direct; the plugin does not change
+that setting itself.
 
 ## Import past conversations
 
@@ -138,8 +146,9 @@ reports `queued`: it is saved and syncs by itself, so the agent does not retry
 it and you will not get a duplicate. Long conversations are sent as new
 messages only, in parts within Substrate's per-event limits (128 messages).
 The plugin fails open: a slow or failed memory call never blocks your turn
-(the plugin stops waiting for turn context after 500 ms and injects nothing;
-the server's own turn-context deadline is 1500 ms).
+(the plugin stops waiting for turn context after 2.5 s and injects nothing;
+the server's own turn-context deadline is 1500 ms, so the plugin keeps
+listening after the server answers).
 
 ## Runtime
 
@@ -162,8 +171,18 @@ The plugin registers:
 - `substrate_import` (`preview`, `start`, `status`, `decline`) for the
   past-conversation import.
 
-Optional overrides are `SUBSTRATE_API_URL`, `SUBSTRATE_API_KEY`, and
-`SUBSTRATE_AGENT_NAME`. The agent name is what you and your agents see in
+Optional overrides are `SUBSTRATE_API_URL`, `SUBSTRATE_API_KEY`,
+`SUBSTRATE_AGENT_NAME`, and `SUBSTRATE_TOOL_TIMEOUT_SECONDS`.
+
+**Tool timeouts.** `memory_search`, `memory_expand`, and `memory_evidence` are
+user-invoked, so they get a 15 s budget (3-60 s, set with
+`SUBSTRATE_TOOL_TIMEOUT_SECONDS`): the first attempt waits up to 7 s, and one
+retry runs with what is left. The retry is only for a timeout, a connection
+reset, or a server-side failure (5xx); a 4xx answer is never retried. When the
+retry is spent too, the tool says *Substrate memory is busy or slow right now.
+Try again in a moment.* The agent should then say the memory is slow, not that
+it lacks access to a source. Memory writes (`memory_remember`,
+`memory_forget`) queue in the spool instead of waiting. The agent name is what you and your agents see in
 the Substrate agent pane; the approval page lets you edit it before
 approving, and it can be renamed there later.
 
