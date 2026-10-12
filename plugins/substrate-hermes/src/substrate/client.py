@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
-PLUGIN_VERSION = "0.9.0"
+PLUGIN_VERSION = "0.9.1"
 _MCP_PATH = "/mcp"
 # The /mcp request body limit (substrate-v5 mcp-api.mjs, contract section 1).
 _MAX_REQUEST_BYTES = 262144
@@ -165,7 +165,8 @@ def _tool_error_category(structured: Any) -> str:
     return "transport_error"
 
 
-_PERMANENT_TOOL_ERRORS = frozenset({"invalid_request", "not_found", "forbidden"})
+# payload_too_large: an oversized capture never shrinks on retry (the caller splits it).
+_PERMANENT_TOOL_ERRORS = frozenset({"invalid_request", "not_found", "forbidden", "payload_too_large"})
 
 
 def parse_mcp_body(raw: bytes) -> Any:
@@ -354,6 +355,27 @@ class SubstrateClient:
         self.ensure_initialized(timeout=timeout)
         result = self._rpc("tools/list", {}, timeout=timeout)
         return _contract.validate_mcp_tools(result)
+
+    def tool_descriptions(self, *, timeout: float = 5.0) -> dict[str, str]:
+        """Return ``{tool name: description}`` from ``tools/list``.
+
+        The server writes the connected sources into the ``memory_search``
+        description, so callers use it when present. Entries without a string
+        description are left out.
+        """
+        try:
+            from . import contract as _contract
+        except ImportError:  # standalone script layout
+            import contract as _contract  # type: ignore[no-redef]
+        self.ensure_initialized(timeout=timeout)
+        result = self._rpc("tools/list", {}, timeout=timeout)
+        _contract.validate_mcp_tools(result)
+        described: dict[str, str] = {}
+        for entry in result["tools"]:
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+                if isinstance(entry.get("description"), str):
+                    described[entry["name"]] = entry["description"]
+        return described
 
     def check_capabilities(self, *, timeout: float = 5.0) -> list[str]:
         """``initialize`` + ``tools/list`` containing all 12 contract tools."""

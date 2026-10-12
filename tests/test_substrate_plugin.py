@@ -86,7 +86,7 @@ def test_pre_llm_call_posts_exact_contract_request(monkeypatch):
             "turn_id": "turn-2",
             "parent_session_id": "parent-1",
         },
-        "timeout": 2.0,
+        "timeout": 2.5,
     }
 
 
@@ -873,7 +873,9 @@ def test_tool_404_carries_permanent_signal(
         plugin.memory_forget({"handle": "m:44a1b02e", "reason": "no longer true"})
     )
     assert result == {"error": "transport_error"}
-    assert fake_mcp.hits == 1
+    # No hit count here: the 404 answers the initialize POST, and the spool
+    # sender may post its own memory_import concurrently. Permanence is shown
+    # by the quarantine counter and transient=False below.
     # The write is spooled and the sender is started, so the permanent refusal
     # is settled by the sender (quarantined with a counter), not retried.
     assert _wait_for(lambda: real_spool.pending() == 0, timeout=15.0)
@@ -1134,3 +1136,244 @@ def test_client_refuses_an_oversized_request_as_payload_too_large(monkeypatch):
                                    "arguments": {"items": ["x" * 300_000]}}, timeout=1.0)
     assert refused.value.category == "payload_too_large"
     assert refused.value.transient is False
+
+
+# ---------------------------------------------------------------------------
+# 0.9.1 (customer test 2026-10-11): explicit retrieval budget, busy result,
+# server-supplied memory_search description, version note at connect only,
+# and the sender's per-item rejection reason.
+# ---------------------------------------------------------------------------
+
+
+def _scripted_call_tool(monkeypatch, outcomes):
+    """Each SubstrateClient.call_tool pops one outcome: an exception to raise,
+    or a structuredContent dict to return. Returns the list of timeouts seen."""
+    from substrate.client import SubstrateClient
+
+    seen = []
+
+    def call(self, name, arguments, **kwargs):
+        seen.append(kwargs.get("timeout"))
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome, ""
+
+    monkeypatch.setattr(SubstrateClient, "call_tool", call)
+    monkeypatch.setenv("SUBSTRATE_API_URL", "https://memory.example")
+    monkeypatch.setenv("SUBSTRATE_API_KEY", "secret")
+    monkeypatch.delenv(plugin.TOOL_TIMEOUT_ENV, raising=False)
+    return seen
+
+
+def _search_ok():
+    return {"contract_version": contract.MCP_CONTRACT_VERSION, "results": []}
+
+
+def test_turn_context_budget_keeps_headroom_over_server_deadline():
+    # The server answers at its own 1500 ms deadline; the plugin must still be
+    # waiting then, with about a second left for TLS, auth and transport.
+    assert plugin.TURN_CONTEXT_TIMEOUT == 2.5
+    assert plugin.TURN_CONTEXT_TIMEOUT - 1.5 >= 1.0
+
+
+def test_explicit_search_retries_once_after_a_timeout(monkeypatch):
+    from substrate.client import ClientError
+
+    seen = _scripted_call_tool(monkeypatch, [ClientError("timeout"), _search_ok()])
+    result = json.loads(plugin.memory_search({"query": "whatsapp"}))
+    assert result == {"contract_version": contract.MCP_CONTRACT_VERSION, "results": []}
+    assert len(seen) == 2
+    assert seen[0] == plugin.EXPLICIT_CALL_ATTEMPT_SECONDS
+    assert plugin.EXPLICIT_CALL_ATTEMPT_SECONDS < seen[1] <= plugin.EXPLICIT_CALL_BUDGET_SECONDS
+
+
+@pytest.mark.parametrize("category", ["timeout", "transport_error", "server_error"])
+def test_explicit_call_gives_up_after_one_retry_with_a_busy_message(monkeypatch, category):
+    from substrate.client import ClientError
+
+    seen = _scripted_call_tool(
+        monkeypatch, [ClientError(category), ClientError(category)]
+    )
+    result = json.loads(plugin.memory_search({"query": "whatsapp"}))
+    assert len(seen) == 2
+    assert result["error"] == "timeout"
+    assert "busy or slow right now" in result["message"]
+    assert "try again in a moment" in result["message"].lower()
+    assert "do not tell the user you lack access" in result["message"]
+
+
+@pytest.mark.parametrize(
+    "category, status",
+    [("invalid_request", 400), ("not_found", 404), ("rate_limited", 429),
+     ("payload_too_large", 413)],
+)
+def test_client_4xx_answers_are_not_retried(monkeypatch, category, status):
+    from substrate.client import ClientError
+
+    seen = _scripted_call_tool(
+        monkeypatch, [ClientError(category, status=status, transient=False)]
+    )
+    result = json.loads(plugin.memory_expand({"handle": "m:44a1b02e"}))
+    assert len(seen) == 1
+    # A refusal is an answer, not a busy server: no busy text, no second attempt.
+    assert "busy" not in json.dumps(result)
+    assert "message" not in result
+
+
+def test_evidence_uses_the_same_budget(monkeypatch):
+    from substrate.client import ClientError
+
+    seen = _scripted_call_tool(monkeypatch, [ClientError("timeout"), ClientError("timeout")])
+    json.loads(plugin.memory_evidence({"handle": "m:44a1b02e"}))
+    assert len(seen) == 2 and seen[0] == plugin.EXPLICIT_CALL_ATTEMPT_SECONDS
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [("", 15.0), ("30", 30.0), ("1", 3.0), ("999", 60.0), ("bogus", 15.0), ("nan", 15.0)],
+)
+def test_explicit_budget_is_configurable_and_clamped(monkeypatch, raw, expected):
+    monkeypatch.setenv(plugin.TOOL_TIMEOUT_ENV, raw)
+    assert plugin._explicit_budget() == expected
+
+
+def test_unknown_hermes_builds_get_no_version_note():
+    for version in ("0.0.0", "0.0", "vgit.5473cec", "dev", ""):
+        assert plugin.host_version_notice(version) == "", version
+    assert "0.20.3" in plugin.host_version_notice("0.20.3")
+
+
+def test_version_note_is_announced_once_at_connect_only(monkeypatch):
+    from substrate import onboarding
+
+    monkeypatch.setattr(plugin, "_version_notice_shown", False)
+    monkeypatch.setattr(plugin, "running_hermes_version", lambda: "0.20.3")
+    monkeypatch.setattr(
+        onboarding, "take_connected_announcement",
+        lambda: "Connected to Substrate as you@example.com.",
+    )
+    first = plugin._connected_announcement()
+    assert "Connected to Substrate as you@example.com." in first
+    assert "0.20.3" in first and "Then tell the user once" in first
+    monkeypatch.setattr(onboarding, "take_connected_announcement", lambda: "Connected again.")
+    assert "0.20.3" not in plugin._connected_announcement()
+
+
+def test_search_description_is_fetched_once_in_the_background(monkeypatch):
+    calls = []
+    monkeypatch.setitem(plugin._SEARCH_DESCRIPTION_STATE, "done", False)
+    monkeypatch.setitem(plugin._SEARCH_DESCRIPTION_STATE, "next_at", 0.0)
+    monkeypatch.setattr(
+        plugin, "_refresh_search_description", lambda client: calls.append(client) or True
+    )
+    client = object()
+    plugin._maybe_refresh_search_description(client)
+    assert _wait_for(lambda: plugin._SEARCH_DESCRIPTION_STATE["done"], timeout=5.0)
+    plugin._maybe_refresh_search_description(client)
+    assert calls == [client]
+
+
+def test_normal_turns_never_carry_the_version_note(monkeypatch):
+    calls = []
+    monkeypatch.setattr(plugin, "_host_version_notice_once", lambda: calls.append(1) or "x")
+    monkeypatch.setenv("SUBSTRATE_API_URL", "https://memory.example/")
+    monkeypatch.setenv("SUBSTRATE_API_KEY", "secret")
+
+    def handler(name, arguments, kwargs):
+        return (
+            {"contract_version": 2, "session_id": "s", "turn": 0, "block": "",
+             "handles": [], "missing_turns": 0, "brief_version": 0,
+             "latency_ms": 1.0, "empty_reason": "no_candidates"},
+            "",
+        )
+
+    _mcp_call_double(monkeypatch, handler)
+    plugin.pre_llm_call(session_id="s", user_message="hello")
+    assert calls == []
+
+
+def test_server_search_description_replaces_the_fallback(monkeypatch, fake_mcp):
+    _mcp_env(monkeypatch, fake_mcp)
+    from substrate.client import SubstrateClient
+
+    fallback = plugin.MEMORY_SEARCH_SCHEMA["description"]
+    monkeypatch.setitem(plugin.MEMORY_SEARCH_SCHEMA, "description", fallback)
+    fake_mcp.search_description = (
+        "Search Substrate memory. This memory includes the user's connected Gmail and Notion."
+    )
+    assert plugin._refresh_search_description(SubstrateClient.from_env()) is True
+    assert plugin.MEMORY_SEARCH_SCHEMA["description"] == fake_mcp.search_description
+
+
+def test_missing_or_oversized_server_description_keeps_the_fallback(monkeypatch, fake_mcp):
+    _mcp_env(monkeypatch, fake_mcp)
+    from substrate.client import SubstrateClient
+
+    fallback = plugin.MEMORY_SEARCH_SCHEMA["description"]
+    monkeypatch.setitem(plugin.MEMORY_SEARCH_SCHEMA, "description", fallback)
+    client = SubstrateClient.from_env()
+    fake_mcp.search_description = None
+    assert plugin._refresh_search_description(client) is False
+    fake_mcp.search_description = "x" * (plugin.MAX_SERVER_DESCRIPTION_CHARS + 1)
+    assert plugin._refresh_search_description(client) is False
+    assert plugin.MEMORY_SEARCH_SCHEMA["description"] == fallback
+
+
+def test_server_description_is_one_clean_line():
+    assert plugin._clean_server_description("Search\n  memory.\tNow\x00") == "Search memory. Now"
+    assert plugin._clean_server_description("") == ""
+    assert plugin._clean_server_description(3) == ""
+
+
+def test_fallback_search_description_is_direct():
+    text = plugin.MEMORY_SEARCH_SCHEMA["description"]
+    assert text.startswith("Search Substrate memory directly")
+    assert "Do not claim you lack access" in text
+
+
+def test_payload_too_large_tool_error_is_permanent(monkeypatch):
+    from substrate.client import ClientError, SubstrateClient
+
+    client = SubstrateClient("https://memory.example", "secret")
+    monkeypatch.setattr(client, "ensure_initialized", lambda **kwargs: {})
+    monkeypatch.setattr(client, "_rpc", lambda *args, **kwargs: {
+        "isError": True,
+        "structuredContent": {"contract_version": 2, "error": "payload_too_large"},
+    })
+    with pytest.raises(ClientError) as info:
+        client.call_tool("memory_capture_turn", {"session_id": "s"}, timeout=1.0)
+    assert info.value.category == "payload_too_large"
+    assert info.value.transient is False
+
+
+def test_rejected_import_item_logs_the_server_reason(real_spool, fake_mcp, caplog):
+    from substrate.spool import PRIORITY_LIVE
+
+    envelope = {
+        "schema_version": 3, "contract_version": 1, "event_id": "evt-reject-1",
+        "kind": "capture_turn", "session_id": "session-1", "offset": {"start": 0, "end": 1},
+        "capture_origin": "live", "batch_id": "",
+        "speaker": {"id": "user", "role": "owner", "display": ""},
+        "created_at": "2026-09-04T00:00:00Z",
+        "payload": {"turn_id": "turn-1", "messages": [
+            {"index": 0, "role": "user", "content": "hello"},
+        ]},
+    }
+    real_spool.enqueue(envelope, priority=PRIORITY_LIVE, kind="capture_turn", capture_origin="live")
+    batch = real_spool.claim_batch()
+    structured = {
+        "contract_version": 2, "batch_id": "b" * 16, "accepted": 0, "rejected": 1,
+        "results": [{
+            "index": 0, "action": "rejected", "error": "payload_too_large",
+            "hint": "max_messages: 128; split the turn into chunks of at most 128 messages",
+        }],
+    }
+    with caplog.at_level("WARNING", logger="substrate.spool"):
+        real_spool._settle_batch(batch, structured)
+    messages = [record.getMessage() for record in caplog.records if record.name == "substrate.spool"]
+    assert any(
+        "rejected by Substrate" in text and "reason=payload_too_large: max_messages: 128" in text
+        and "event_id=evt-reject-1" in text
+        for text in messages
+    ), messages

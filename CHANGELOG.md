@@ -1,5 +1,16 @@
 # Changelog
 
+## substrate-hermes 0.9.1
+
+Hermes: explicit memory searches survive a slow server, unknown Hermes builds get no version note, the install stops picking up dependency tooling, and the server's connected-source description reaches the model (customer test 2026-10-11).
+
+- **Search survives slow servers (CON-04):** `memory_search`, `memory_expand` and `memory_evidence` are user-invoked, so they get a 15 s budget instead of 3 s (`SUBSTRATE_TOOL_TIMEOUT_SECONDS`, 3-60 s). The first attempt waits up to 7 s; one retry runs with what is left, and only for a timeout, a connection reset or a 5xx. A 4xx answer is never retried. When the retry is spent, the tool says "Substrate memory is busy or slow right now. Try again in a moment." instead of a bare `{"error":"timeout"}`, so the agent does not say it has no access to a source. The per-turn recall budget is 2.5 s (was 2 s) so it stays above the server's 1500 ms deadline with about a second of headroom.
+- **No false version warning (HER-10):** a git build reporting `0.0.0` (or any unrecognised version) is unknown, not old, and gets no note. An older Hermes gets its one note when the connection is made, never on ordinary answers (it was repeated on answers before).
+- **Faster install (HER-09):** the repository root carried a `pyproject.toml` (repository dev tooling). Hermes treats a root `pyproject.toml` as a plugin dependency project, so `hermes plugins install <repo URL>` installed dependencies (2 min 47 s in the customer test) although the plugin is standard-library only. The tooling project, its `uv.lock`, and its CI commands moved to `tooling/` (`uv sync --project tooling --frozen --extra dev`); pytest and ruff settings moved to root `pytest.ini` and `ruff.toml`. The plugin installs nothing. Lookups still take the Hermes tool-search step (HER-12, see the Hermes note in the README).
+- **Server's search description (CON-03 follow-up):** the `memory_search` description now comes from the server's `tools/list` when present (it names the connected sources). It is fetched once per process in the background; the built-in text stays as the fallback. The built-in text is shorter and direct.
+- **Permanent refusals:** `payload_too_large` is a permanent tool error, so an oversized capture is split or quarantined instead of retried forever.
+- **Rejected items are logged with the reason:** when the server rejects an item in a capture or import batch, the sender logs its `error` and `hint` (bounded, no content) at WARNING on `substrate.spool`, not just a count.
+- **Versions:** `substrate-hermes` 0.9.1, matching the repository `VERSION`.
 ## substrate-hermes 0.9.0
 
 Hermes: past-conversation import is offered after connecting, direct import requests reach the import tool, offline writes report queued, and long sessions are captured within the server's limits.

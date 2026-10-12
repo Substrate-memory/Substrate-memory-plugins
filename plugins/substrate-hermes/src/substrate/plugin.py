@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import threading
 import time
@@ -147,10 +148,12 @@ def _turn_context_args(
     return args
 
 
-# Per-turn recall budget. 0.5 s was below one authenticated round trip to the
-# hosted server (TLS + auth + recall), so the block was almost always dropped;
-# a chat turn's own LLM call takes seconds, so 2 s still adds no felt delay.
-TURN_CONTEXT_TIMEOUT = 2.0
+# Per-turn recall budget (automatic injection, never user-invoked). The server
+# answers with its own deadline of 1500 ms (SUBSTRATE_TURN_CONTEXT_DEADLINE_MS,
+# docs/mcp-contract.md 4.3), so 2.5 s leaves about one second of headroom for
+# TLS, auth and transport. Below ~1.5 s the client would give up on answers
+# the server still sends on time.
+TURN_CONTEXT_TIMEOUT = 2.5
 
 
 def pre_llm_call(
@@ -171,7 +174,7 @@ def pre_llm_call(
     injects the approval link and code for the agent to show in chat. The
     first turn after approval carries a one-time "connected as" note.
     """
-    notes = [n for n in (_host_version_notice_once(),) if n]
+    notes: list[str] = []
     _note_live_session(session_id)
     client = None
     try:
@@ -183,6 +186,10 @@ def pre_llm_call(
             client = SubstrateClient.from_env()  # approved just now
             if not client.api_key:
                 return _with_notes([_login_notice(None)], notes)
+        try:
+            _maybe_refresh_search_description(client)
+        except Exception:  # noqa: BLE001 - a description refresh never costs a turn
+            pass
         announcement = _connected_announcement()
         if announcement:
             notes.append(announcement)
@@ -235,7 +242,9 @@ def host_version_notice(version: str | None = None) -> str:
     """
     version = running_hermes_version() if version is None else version
     parsed = _version_tuple(version)
-    if parsed is None or parsed >= TESTED_HERMES_FLOOR:
+    # A git build reports 0.0.0 (or a "vgit.<sha>" string): that is unknown,
+    # not old, so it gets no note.
+    if parsed is None or parsed == (0, 0, 0) or parsed >= TESTED_HERMES_FLOOR:
         return ""
     return (
         f"Substrate memory is tested on Hermes {TESTED_HERMES_RANGE}; "
@@ -245,12 +254,17 @@ def host_version_notice(version: str | None = None) -> str:
 
 
 def _host_version_notice_once() -> str:
+    """The version note, at most once per process, and only at connect time.
+
+    It is never attached to ordinary turns: a note repeated on answers reads as
+    a fault, and the process-level flag does not survive a host that reloads
+    the plugin per message.
+    """
     global _version_notice_shown
     if _version_notice_shown:
         return ""
     _version_notice_shown = True
-    notice = host_version_notice()
-    return f"<substrate-notice>\nTell the user once: {notice}\n</substrate-notice>" if notice else ""
+    return host_version_notice()
 
 
 def _start_login() -> dict[str, Any] | None:
@@ -271,9 +285,11 @@ def _connected_announcement() -> str:
         return ""
     if not message:
         return ""
+    notice = _host_version_notice_once()
+    extra = f" Then tell the user once: {notice}" if notice else ""
     return (
         "<substrate-connect>\n"
-        f"Substrate memory was just connected. Tell the user once, in these words: {message}\n"
+        f"Substrate memory was just connected. Tell the user once, in these words: {message}{extra}\n"
         "</substrate-connect>"
     )
 
@@ -1196,13 +1212,70 @@ def _fit_result(value: dict[str, Any]) -> str:
     return text
 
 
+# Explicit, user-invoked retrieval (memory_search, memory_expand,
+# memory_evidence) is not on the hot path: the user is waiting for an answer,
+# so a slow answer is still an answer. The server takes 2.5-3.6 s under
+# ingestion load (customer test 2026-10-11), which the old 3 s cap cut off.
+EXPLICIT_CALL_BUDGET_SECONDS = 15.0
+# The first attempt gets this much; the single retry gets what is left of the budget.
+EXPLICIT_CALL_ATTEMPT_SECONDS = 7.0
+TOOL_TIMEOUT_ENV = "SUBSTRATE_TOOL_TIMEOUT_SECONDS"
+_TOOL_BUDGET_MIN_SECONDS = 3.0
+_TOOL_BUDGET_MAX_SECONDS = 60.0
+# Retried once: the server did not answer, or answered with a server-side failure.
+# Never retried: 4xx-class answers (invalid_request, not_found, forbidden,
+# unauthorized, rate_limited, payload_too_large) and bad responses.
+_RETRY_CATEGORIES = frozenset({"timeout", "transport_error", "server_error", "internal"})
+# Shown to the model when the retry is spent too. It must not read as a lost
+# connection, or the model tells the user it cannot reach a source.
+BUSY_MESSAGE = (
+    "Substrate memory is busy or slow right now. Try again in a moment. This is a "
+    "temporary delay, not a missing source: do not tell the user you lack access."
+)
+
+
+def _explicit_budget() -> float:
+    """Total wall-clock budget for one user-invoked call, configurable by env."""
+    raw = os.environ.get(TOOL_TIMEOUT_ENV, "").strip()
+    try:
+        value = float(raw) if raw else EXPLICIT_CALL_BUDGET_SECONDS
+    except ValueError:
+        value = EXPLICIT_CALL_BUDGET_SECONDS
+    if not math.isfinite(value):
+        value = EXPLICIT_CALL_BUDGET_SECONDS
+    return min(max(value, _TOOL_BUDGET_MIN_SECONDS), _TOOL_BUDGET_MAX_SECONDS)
+
+
+def _call_with_retry(client: SubstrateClient, tool_name: str, request: dict[str, Any]) -> Any:
+    """One MCP call within the explicit budget, with one retry for transient failures."""
+    budget = _explicit_budget()
+    started = time.monotonic()
+    try:
+        return client.call_tool(
+            tool_name, request, timeout=min(EXPLICIT_CALL_ATTEMPT_SECONDS, budget)
+        )
+    except ClientError as exc:
+        if exc.category not in _RETRY_CATEGORIES:
+            raise
+        remaining = budget - (time.monotonic() - started)
+        if remaining < 1.0:
+            raise
+    return client.call_tool(tool_name, request, timeout=remaining)
+
+
+def _busy_result() -> str:
+    return json.dumps(
+        {"error": "timeout", "message": BUSY_MESSAGE}, separators=(",", ":")
+    )
+
+
 def _call_tool(tool_name: str, request: dict[str, Any], shape: Any) -> str:
     client = None
     try:
         client = SubstrateClient.from_env()
         if not client.api_key:
             return _login_grant_result()
-        structured, _text = client.call_tool(tool_name, request, timeout=3.0)
+        structured, _text = _call_with_retry(client, tool_name, request)
         return _fit_result(shape(structured))
     except contract.ContractError:
         return _error("invalid_response")
@@ -1211,6 +1284,8 @@ def _call_tool(tool_name: str, request: dict[str, Any], shape: Any) -> str:
     except ClientError as exc:
         if exc.category in ("unauthorized", "forbidden"):
             _note_auth_failure(client.api_key if client is not None else "")
+        if exc.category in _RETRY_CATEGORIES:
+            return _busy_result()
         return _error(exc.category)
     except Exception:
         return _error("transport_error")
@@ -1605,7 +1680,14 @@ def memory_forget(args: dict[str, Any], **kwargs: Any) -> str:
 
 MEMORY_SEARCH_SCHEMA = {
     "name": "memory_search",
-    "description": "Search Substrate memory. Use the intended action in the query before irreversible operations.",
+    # Fallback text. The server's own description (it names the connected
+    # sources) replaces it once fetched, see _maybe_refresh_search_description.
+    # Short and direct so the model calls it straight away.
+    "description": (
+        "Search Substrate memory directly for the user's saved facts, past conversations "
+        "and connected sources. Do not claim you lack access to a source before searching. "
+        "Use the intended action in the query before irreversible operations."
+    ),
     "parameters": {
         "type": "object",
         "properties": {
@@ -1699,6 +1781,62 @@ MEMORY_FORGET_SCHEMA = {
         "additionalProperties": False,
     },
 }
+
+
+# -- memory_search description from the server (tools/list) -----------------
+# The server appends the tenant's connected sources to this description. It
+# is fetched in the background at most once per process (retried after
+# SEARCH_DESCRIPTION_RETRY_SECONDS when it failed), and the fallback text stays
+# until then. No I/O happens at registration.
+SEARCH_DESCRIPTION_RETRY_SECONDS = 300.0
+MAX_SERVER_DESCRIPTION_CHARS = 1000
+_SEARCH_DESCRIPTION_STATE: dict[str, Any] = {"done": False, "next_at": 0.0, "running": False}
+_SEARCH_DESCRIPTION_LOCK = threading.Lock()
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _clean_server_description(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(_CONTROL_CHARS_RE.sub(" ", value).split())  # one line, no control characters
+    if not text or len(text) > MAX_SERVER_DESCRIPTION_CHARS:
+        return ""
+    return text
+
+
+def _refresh_search_description(client: SubstrateClient) -> bool:
+    """Replace the memory_search description with the server's. True on success."""
+    try:
+        described = client.tool_descriptions(timeout=5.0)
+    except Exception:
+        return False
+    text = _clean_server_description(described.get("memory_search"))
+    if not text:
+        return False
+    MEMORY_SEARCH_SCHEMA["description"] = text
+    return True
+
+
+def _maybe_refresh_search_description(client: SubstrateClient) -> None:
+    """Start the one background fetch of the server's memory_search description."""
+    with _SEARCH_DESCRIPTION_LOCK:
+        state = _SEARCH_DESCRIPTION_STATE
+        if state["done"] or state["running"] or time.monotonic() < state["next_at"]:
+            return
+        state["running"] = True
+        state["next_at"] = time.monotonic() + SEARCH_DESCRIPTION_RETRY_SECONDS
+
+    def worker() -> None:
+        ok = False
+        try:
+            ok = _refresh_search_description(client)
+        finally:
+            with _SEARCH_DESCRIPTION_LOCK:
+                _SEARCH_DESCRIPTION_STATE["running"] = False
+                if ok:
+                    _SEARCH_DESCRIPTION_STATE["done"] = True
+
+    threading.Thread(target=worker, name="substrate-search-description", daemon=True).start()
 
 
 def register(ctx: Any) -> None:

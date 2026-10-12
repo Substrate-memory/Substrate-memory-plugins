@@ -85,7 +85,7 @@ Claude Code and Codex upload straight from the package script with a short-lived
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.9.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
+| v0.9.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
 
 Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0 or newer; you are on X. It should work; tell us if not.* Newer Hermes versions get no note. See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
 
@@ -122,7 +122,7 @@ Yes. The immutable `v0.5.0` and `v0.6.0` tags remain available for rollback.
 ## Development and releases
 
 ```bash
-uv sync --frozen --extra dev
+UV_PROJECT_ENVIRONMENT=$PWD/.venv uv sync --project tooling --frozen --extra dev
 .venv/bin/ruff check .
 .venv/bin/python -m pytest -q
 python3 scripts/check_public_hygiene.py --root .

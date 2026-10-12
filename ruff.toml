@@ -1,0 +1,4 @@
+# Lint settings for the repository tooling (kept at the root so `ruff check .`
+# finds them; the Python project that pins ruff lives in tooling/).
+target-version = "py311"
+line-length = 100

@@ -51,8 +51,8 @@ jobs:
         with:
           version: '0.11.32'
           enable-cache: true
-          cache-dependency-glob: uv.lock
-      - run: uv sync --frozen --extra dev --no-install-project
+          cache-dependency-glob: tooling/uv.lock
+      - run: UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --project tooling --frozen --extra dev --no-install-project
       - name: Verify and build exact candidate
         id: metadata
         run: |
@@ -60,7 +60,7 @@ jobs:
           version="$(tr -d ' \t\r\n' < VERSION)"
           test -n "$version"; [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           hermes_version="$(python -c 'from pathlib import Path; print(next(line.split(":", 1)[1].strip() for line in Path("plugins/substrate-hermes/plugin.yaml").read_text().splitlines() if line.startswith("version: ")))')"
-          test "$hermes_version" = 0.9.0
+          test "$hermes_version" = 0.9.1
           .venv/bin/ruff check .
           .venv/bin/python -m compileall -q plugins scripts
           .venv/bin/python -m pytest -q
