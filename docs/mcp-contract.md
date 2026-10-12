@@ -232,8 +232,10 @@ Output (`structuredContent`; text is the same JSON):
 ```
 
 - The ticket is a bearer for `POST mcp_url` (same Streamable HTTP JSON-RPC) for a
-  local script the agent runs. Agents pass it through the environment
-  (`SUBSTRATE_IMPORT_TICKET`, `SUBSTRATE_MCP_URL`), never argv, never chat text.
+  local script the agent runs. Agents write it to a new temporary file and pass
+  the file with `--ticket-file` (the script reads it, makes it 0600 and deletes
+  it; background runs pass it on stdin). `SUBSTRATE_MCP_URL` carries the endpoint.
+  The ticket is never on argv or in the environment, and never in chat text.
 - Bound to the minting tenant, agent and credential; expires after 60 minutes;
   every use re-checks the parent credential, so disconnecting the agent or
   suspending the tenant ends it (`401` / `403`).
@@ -315,9 +317,9 @@ tool result through `PostToolUse`.
 - `--session <id> [--after-index N] --origin catchup|history_replay` — prints
   `memory_import` batches (≤ 64 items, ≤ 240 KiB) for catch-up; the agent passes
   each to `memory_import`.
-- `--upload --all|--session <id>… [--exclude-session <id>] [--background]` —
-  history import without the model: reads `SUBSTRATE_IMPORT_TICKET` and
-  `SUBSTRATE_MCP_URL` (4.9), runs `initialize` (sends `Mcp-Session-Id` back if
+- `--upload --all|--session <id>… --ticket-file <path> [--exclude-session <id>] [--background]` —
+  history import without the model: reads the ticket from `--ticket-file` (then
+  deletes the file) and `SUBSTRATE_MCP_URL` (4.9), runs `initialize` (sends `Mcp-Session-Id` back if
   the server sets one; accepts JSON or SSE bodies), then `tools/call
   memory_import` with redacted `history_replay` items and one fresh `batch_id`.
   After a session's last turn it sends one `capture_session` seal (`boundary:

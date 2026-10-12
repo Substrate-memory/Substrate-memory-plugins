@@ -1,5 +1,20 @@
 # Changelog
 
+## substrate-claude 0.9.2
+
+Claude Code and Cowork: an honest connect check, a quiet note when the connection is removed, the import ticket kept out of commands, and a clearer import offer (CC-03, CC-05, CC-07, CC-09, CC-10).
+
+- **Connected only means the plugin's server (CC-03).** The connect check and the setup prompt name the plugin's own tool, `mcp__plugin_substrate-claude_substrate-memory__memory_search`. Tools from a claude.ai connector (`mcp__claude_ai_*`) do not count. "Connected to Substrate." is said only after that call succeeds; otherwise the agent tells the user to finish Authenticate in `/mcp`.
+- **A removed connection is one quiet line (CC-05).** When this computer's credential store lists sign-ins but none for Substrate, the offer hook adds one short note per session: the connection was removed, answer normally, and reconnect with `/substrate-claude:substrate-connect`. It is silent on macOS (keychain) and never blocks a prompt. The red "MCP server not connected" and "Unauthorized" lines come from the capture hooks, which Claude Code calls itself; the plugin cannot hide them.
+- **The ticket never appears in a command (CC-07).** `substrate_sync.py --upload` reads the import ticket from `--ticket-file`: the agent writes it with the file-write tool to a new file in the data folder, the script makes it 0600 and deletes it at once. Background runs hand the ticket to the child on stdin. `SUBSTRATE_IMPORT_TICKET` is no longer read. `SUBSTRATE_MCP_URL` still carries the endpoint.
+- **The offer states what was found (CC-09).** The offer hook computes the count, the turns and the date range and gives the agent the exact sentence and the three choices: Import all / Let me pick / Not now. "Not now" is remembered as before.
+- **Imported conversations leave the list (CC-10).** `--preview`, `--list` and the offer count only sessions not yet imported. An upload records each session's digest and transcript fingerprint in `import-progress.json`; an unchanged session is recognised by its fingerprint, and a changed one by its upload items, so new turns still come back as pending. The preview reports `already_imported`.
+- **Versions:** `substrate-claude` 0.9.2 (manifest and marketplace). `substrate-codex` 0.9.3 ships the same `substrate_sync.py` (the two copies stay byte-identical), with the same ticket and preview fixes; its import skill now uses `--ticket-file`.
+
+## substrate-codex 0.9.3
+
+Codex: the shared sync script changes described under substrate-claude 0.9.2 (ticket file, import offer counts, imported conversations skipped). The import skill passes the ticket with `--ticket-file`, never in the environment.
+
 ## substrate-hermes 0.9.1
 
 Hermes: explicit memory searches survive a slow server, unknown Hermes builds get no version note, the install stops picking up dependency tooling, and the server's connected-source description reaches the model (customer test 2026-10-11).
@@ -11,6 +26,7 @@ Hermes: explicit memory searches survive a slow server, unknown Hermes builds ge
 - **Permanent refusals:** `payload_too_large` is a permanent tool error, so an oversized capture is split or quarantined instead of retried forever.
 - **Rejected items are logged with the reason:** when the server rejects an item in a capture or import batch, the sender logs its `error` and `hint` (bounded, no content) at WARNING on `substrate.spool`, not just a count.
 - **Versions:** `substrate-hermes` 0.9.1, matching the repository `VERSION`.
+
 ## substrate-hermes 0.9.0
 
 Hermes: past-conversation import is offered after connecting, direct import requests reach the import tool, offline writes report queued, and long sessions are captured within the server's limits.

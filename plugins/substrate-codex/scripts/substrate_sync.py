@@ -14,7 +14,8 @@ Usage:
     substrate_sync.py --host H --session ID [--after-index N] [--origin O]
     substrate_sync.py --host H --preview [--exclude-session ID]
     substrate_sync.py --host H --upload (--all | --session ID...)
-                      [--exclude-session ID] [--background] [--force]
+                      --ticket-file PATH [--exclude-session ID]
+                      [--background] [--force]
     substrate_sync.py --host H --status [--wait SECONDS]
     substrate_sync.py --host H --offer-check          (UserPromptSubmit hook)
     substrate_sync.py --host H --record-decision yes|no|picked|none
@@ -22,8 +23,12 @@ Usage:
     substrate_sync.py --host H --pause SECONDS        (wait <= 60 s, e.g. for sign-in)
     (every mode also takes --data-dir DIR)
 
-Upload reads the ticket from SUBSTRATE_IMPORT_TICKET and the endpoint from
-SUBSTRATE_MCP_URL (both from the ``memory_import_ticket`` tool), never argv.
+Upload reads the import ticket from --ticket-file: a file the agent wrote with
+its file-write tool (the ticket from ``memory_import_ticket``). The script
+reads it, makes it 0600 and deletes it at once; a ticket is never taken from
+argv or the environment, so it never shows up in a command line. Background
+runs hand the ticket to the child process over stdin. The endpoint comes from
+SUBSTRATE_MCP_URL (not a secret).
 
 Paths:
     Claude transcripts: $CLAUDE_CONFIG_DIR/projects/**/*.jsonl
@@ -758,17 +763,71 @@ def _catalogue(host: str, exclude: Optional[set] = None,
         seen.add(session_id)
         first, last = _turn_times(turns)
         try:
-            size = os.path.getsize(path)
+            info = os.stat(path)
+            size, fingerprint = info.st_size, "%d:%d" % (info.st_size, info.st_mtime_ns)
         except OSError:
-            size = 0
+            size, fingerprint = 0, "0:0"
         sessions.append({"session_id": session_id, "path": path, "turns": turns,
-                         "first_at": first, "last_at": last, "bytes": size})
+                         "first_at": first, "last_at": last, "bytes": size,
+                         "fingerprint": fingerprint})
     sessions.sort(key=lambda s: (s["first_at"] or "", s["session_id"]))
     return sessions
 
 
-def _cmd_list(host: str, exclude: set) -> int:
-    for entry in _catalogue(host, exclude):
+def _session_items(host: str, entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The exact items an upload sends for one session (also used to recognise repeats)."""
+    items = []  # type: List[Dict[str, Any]]
+    for item in _build_envelopes(entry["session_id"], entry["turns"], "history_replay", 0):
+        items.extend(_fit_item(item))
+    if items:
+        # Last, after every turn: seal the session so it is extracted.
+        items.append(_seal_item(entry["session_id"], items, host))
+    return items
+
+
+def _digest(items: List[Dict[str, Any]]) -> str:
+    return hashlib.sha256(_canonical_bytes(items)).hexdigest()
+
+
+def _uploaded_state(data_dir: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    progress = _read_json(os.path.join(data_dir, PROGRESS_FILE))
+    digests = progress.get("sessions") if isinstance(progress.get("sessions"), dict) else {}
+    prints = progress.get("fingerprints") if isinstance(progress.get("fingerprints"), dict) else {}
+    return digests, prints
+
+
+def _already_uploaded(host: str, entry: Dict[str, Any], digests: Dict[str, Any],
+                      prints: Dict[str, Any]) -> bool:
+    """True when this session was uploaded and its transcript has not changed since.
+
+    An unchanged file is recognised by its fingerprint (size and mtime). A file
+    that changed is still the same conversation when its upload items match.
+    """
+    stored = digests.get(entry["session_id"])
+    if not isinstance(stored, str) or not stored:
+        return False
+    if prints.get(entry["session_id"]) == entry["fingerprint"]:
+        return True
+    return stored == _digest(_session_items(host, entry))
+
+
+def _split_uploaded(host: str, data_dir: str,
+                    sessions: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+    """Sessions not imported yet, and how many were already imported."""
+    digests, prints = _uploaded_state(data_dir)
+    pending = []  # type: List[Dict[str, Any]]
+    done = 0
+    for entry in sessions:
+        if _already_uploaded(host, entry, digests, prints):
+            done += 1
+        else:
+            pending.append(entry)
+    return pending, done
+
+
+def _cmd_list(host: str, data_dir: str, exclude: set) -> int:
+    sessions, _done = _split_uploaded(host, data_dir, _catalogue(host, exclude))
+    for entry in sessions:
         turns = entry["turns"]
         messages = sum(
             len(t["texts"]) + (1 if t["tool_calls"] else 0) + len(t["tools"]) for t in turns
@@ -1010,28 +1069,35 @@ def _human_date(stamp: Optional[str]) -> str:
     return "%d %s %d" % (parsed.day, parsed.strftime("%b"), parsed.year)
 
 
-def _cmd_preview(host: str, data_dir: str, explicit: List[str]) -> int:
+def _preview(host: str, data_dir: str, explicit: List[str]) -> Dict[str, Any]:
+    """What the import offer shows: conversations not imported yet, and their range."""
     excluded = _exclusions(data_dir, explicit, host)
-    sessions = _catalogue(host, excluded)
+    sessions, already = _split_uploaded(host, data_dir, _catalogue(host, excluded))
     turns = sum(len(s["turns"]) for s in sessions)
     firsts = [s["first_at"] for s in sessions if s["first_at"]]
     lasts = [s["last_at"] for s in sessions if s["last_at"]]
-    summary = {
+    return {
         "sessions": len(sessions),
         "turns": turns,
         "first_at": min(firsts) if firsts else None,
         "last_at": max(lasts) if lasts else None,
         "bytes_estimate": sum(s["bytes"] for s in sessions),
+        "already_imported": already,
         "excluded": sorted(excluded),
         "decision": _decision(data_dir),
     }
+
+
+def _cmd_preview(host: str, data_dir: str, explicit: List[str]) -> int:
+    summary = _preview(host, data_dir, explicit)
     print(json.dumps(summary, ensure_ascii=False))
-    if sessions:
-        sys.stderr.write("Found %d past conversation%s (%d turns) from %s to %s.\n" % (
-            len(sessions), "" if len(sessions) == 1 else "s", turns,
+    count = summary["sessions"]
+    if count:
+        sys.stderr.write("Found %s (%s) from %s to %s.\n" % (
+            _plural(count, "past conversation"), _plural(summary["turns"], "turn"),
             _human_date(summary["first_at"]), _human_date(summary["last_at"])))
     else:
-        sys.stderr.write("No past conversations found on this computer.\n")
+        sys.stderr.write("No past conversations left to import on this computer.\n")
     return 0
 
 
@@ -1046,85 +1112,176 @@ def _quote(value: str) -> str:
     return '"%s"' % value.replace('"', '\\"')
 
 
-def _has_other_transcripts(host: str, current: str) -> bool:
-    root = _base_dir(host)
-    for dirpath, dirnames, filenames in os.walk(root):
-        if host == "claude":
-            dirnames[:] = [d for d in dirnames if d != "subagents"]
-        for name in filenames:
-            if not name.endswith(".jsonl"):
-                continue
-            if host == "claude" and name.startswith("agent-"):
-                continue
-            stem = name[:-6]
-            if current and (stem == current or stem.endswith(current)):
-                continue
-            try:
-                if os.path.getsize(os.path.join(dirpath, name)) > 0:
-                    return True
-            except OSError:
-                continue
-    return False
+# The plugin's own server, as Claude Code names its tools. Tools from a claude.ai
+# connector (mcp__claude_ai_*) are a different server and prove nothing here.
+CLAUDE_SEARCH_TOOL = "mcp__plugin_substrate-claude_substrate-memory__memory_search"
 
 
-def _offer_text(host: str, data_dir: str, session_id: str) -> str:
+def _search_tool(host: str) -> str:
+    return CLAUDE_SEARCH_TOOL if host == "claude" else "memory_search"
+
+
+def _sync_base(host: str, data_dir: str, session_id: str) -> str:
     script = os.path.abspath(__file__)
     base = "%s %s --host %s --data-dir %s" % (
         _quote(sys.executable or "python3"), _quote(script), host, _quote(data_dir))
     if session_id:
         base += " --exclude-session %s" % _quote(session_id)
+    return base
+
+
+def _offer_sentence(summary: Dict[str, Any]) -> str:
+    count = summary["sessions"]
+    turns = summary["turns"]
+    return ("I found %s on this computer (%s, %s to %s). Import them into Substrate? "
+            "Import all / Let me pick / Not now") % (
+        _plural(count, "past conversation"), _plural(turns, "turn", "{:,}".format(turns)),
+        _human_date(summary["first_at"]), _human_date(summary["last_at"]))
+
+
+def _plural(count: int, word: str, text: Optional[str] = None) -> str:
+    shown = str(count) if text is None else text
+    return "%s %s%s" % (shown, word, "" if count == 1 else "s")
+
+
+def _ticket_path(data_dir: str) -> str:
+    """A new, unpredictable file name for one ticket; the upload deletes it after reading."""
+    return os.path.join(os.path.abspath(data_dir),
+                        "import-ticket-%s.txt" % uuid.uuid4().hex[:8])
+
+
+def _offer_text(host: str, data_dir: str, session_id: str,
+                summary: Optional[Dict[str, Any]]) -> str:
+    base = _sync_base(host, data_dir, session_id)
+    if summary is not None:
+        offer = ('say, word for word: "%s"' % _offer_sentence(summary))
+    else:
+        offer = ("run `SYNC --preview` and say its conversation count and date range, then "
+                 "Import all / Let me pick / Not now")
     return (
         "[substrate] Import offer pending (asked once per computer). Ignore this note until "
-        "the Substrate memory tools work in this session. Once memory_search has succeeded "
-        "and you have said \"Connected to Substrate.\", in that same reply and without "
-        "waiting for the user: run `SYNC --preview` and offer, in plain words with its "
-        "conversation count and date range: Import all / Let me pick / Not now. "
-        "SYNC means: `%(base)s`.\n"
-        "Import all: call memory_import_ticket {\"platform\": \"%(host)s\"}, run "
-        "`SYNC --upload --all --background` with the environment variables "
-        "SUBSTRATE_IMPORT_TICKET and SUBSTRATE_MCP_URL set from its result (never show the "
-        "ticket in your reply), then keep running `SYNC --status --wait 60` and report each "
-        "message until it is done; end with its summary line. Do not stop and wait for the "
-        "user while it runs.\n"
-        "Let me pick: `SYNC --list`, show titles and dates, then upload the same way with "
+        "the Substrate memory tools work in this session. Once the plugin's own "
+        "`%(search)s` has succeeded and you have said \"Connected to Substrate.\", in that same "
+        "reply and without waiting for the user, %(offer)s. SYNC means: `%(base)s`.\n"
+        "Import all: call memory_import_ticket {\"platform\": \"%(host)s\"}. Use the Write tool "
+        "to create the file `%(ticket)s` containing only the ticket string. Then run "
+        "`SUBSTRATE_MCP_URL='<mcp_url>' SYNC --upload --all --background --ticket-file "
+        "\"%(ticket)s\"` with mcp_url from the same result. The ticket must never appear in a "
+        "Bash command, in your reply, or in a command's arguments; the script reads and deletes "
+        "the file. Then keep running `SYNC --status --wait 60` and report each message until it "
+        "is done; end with its summary line. Do not stop and wait for the user while it runs.\n"
+        "Let me pick: `SYNC --list`, show titles and dates, then upload the same way (a new "
+        "ticket file named import-ticket-<8 random letters>.txt in the same folder) with "
         "`--session <id>` per chosen conversation instead of `--all`.\n"
         "Not now: `SYNC --record-decision no`; say they can ask \"import my past "
         "conversations\" any time."
-    ) % {"base": base, "host": host}
+    ) % {"base": base, "host": host, "search": _search_tool(host), "offer": offer,
+         "ticket": _ticket_path(data_dir)}
 
 
-def _setup_text(host: str, data_dir: str, session_id: str, offer: bool) -> str:
-    script = os.path.abspath(__file__)
-    base = "%s %s --host %s --data-dir %s" % (
-        _quote(sys.executable or "python3"), _quote(script), host, _quote(data_dir))
-    if session_id:
-        base += " --exclude-session %s" % _quote(session_id)
+def _disconnect_text() -> str:
+    return (
+        "[substrate] The Substrate connection on this computer was removed. Answer the user's "
+        "request normally without Substrate memory. Do not search Notion, Drive, Gmail or other "
+        "apps on your own because of this, and do not mention hook errors. In one short line, "
+        "once in this session, tell the user: Substrate is disconnected on this computer; to "
+        "reconnect, run /substrate-claude:substrate-connect."
+    )
+
+
+def _setup_text(host: str, data_dir: str, session_id: str,
+                summary: Optional[Dict[str, Any]], offer: bool) -> str:
+    base = _sync_base(host, data_dir, session_id)
+    search = _search_tool(host)
+    connector = ""
+    if host == "claude":
+        connector = (" Only this plugin's own tool counts: a claude.ai connector's tools (named "
+                     "mcp__claude_ai_*) do not prove this plugin is connected.")
     text = (
         "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
         "reply, before anything else, in a few short lines. A bare \"continue\", \"done\", "
         "\"ok\" or \"approved\" from the user just means: carry on with Substrate setup. Do not "
         "comment on it or ask what to work on. SYNC means: `%(base)s`.\n"
-        "1. Call memory_search with a short, non-secret query. If it works (even empty): say "
-        "\"Connected to Substrate.\" and run `SYNC --record-connected`.\n"
-        "2. If it needs sign-in (only an `authenticate` tool for substrate-memory exists, or "
-        "memory_search is missing or not connected): call that authenticate tool and tell the "
-        "user exactly: \"Open this link, sign in and choose Approve connection. I'll continue "
-        "automatically.\" plus the link. Do not repeat the tool's notes about localhost "
-        "connection errors or pasting URLs; mention pasting the address-bar URL only if the "
-        "user says the page showed an error (remote or SSH machines). Then do NOT end your "
-        "turn: run `SYNC --pause 15`, then call memory_search again (load it with ToolSearch if "
-        "it is deferred); repeat up to 20 times (about 5 minutes). As soon as it works, do "
-        "step 1 and continue. Only if it never works, ask them to say \"done\" once they have "
-        "approved. Never ask for a token or key.\n"
+        "1. Check the connection with `%(search)s` (load it with ToolSearch if it is deferred), "
+        "a short, non-secret query.%(connector)s If that call works (even empty): say "
+        "\"Connected to Substrate.\" and run `SYNC --record-connected`. Say \"Connected\" only "
+        "after that call succeeds.\n"
+        "2. If the plugin's tool is missing or fails with \"not connected\", \"needs "
+        "authentication\" or \"unauthorized\" (or only an `authenticate` tool for substrate-memory "
+        "exists): call that authenticate tool and tell the user exactly: \"Open this link, sign "
+        "in and choose Approve connection. I'll continue automatically.\" plus the link. Do not "
+        "repeat the tool's notes about localhost connection errors or pasting URLs; mention "
+        "pasting the address-bar URL only if the user says the page showed an error (remote or "
+        "SSH machines). Then do NOT end your turn: run `SYNC --pause 15`, then call `%(search)s` "
+        "again (load it with ToolSearch if it is deferred); repeat up to 20 times (about 5 "
+        "minutes). As soon as it works, do step 1 and continue. If it never works, say: "
+        "\"Substrate is not connected yet. Open /mcp, choose plugin:substrate-claude:"
+        "substrate-memory, finish Authenticate, then say continue.\" Never ask for a token or "
+        "key, and never say Connected in that case.\n"
         "3. If no Substrate memory tools exist at all, tell the user to type /reload-plugins "
         "and then say \"continue\"."
-    ) % {"base": base}
+    ) % {"base": base, "search": search, "connector": connector}
     if offer:
-        text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: run "
-                 "`SYNC --preview` and, if it finds conversations, offer Import all / Let me "
-                 "pick / Not now with its count and date range (/substrate-claude:substrate-import "
-                 "or $substrate-import has the steps).")
+        if summary is not None:
+            offer_text = 'say, word for word: "%s"' % _offer_sentence(summary)
+        else:
+            offer_text = ("run `SYNC --preview` and say its conversation count and date range, "
+                          "then Import all / Let me pick / Not now")
+        text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
+                 "they choose, follow /substrate-claude:substrate-import (or $substrate-import); "
+                 "the ticket goes in a file, never in a command." % offer_text)
     return text
+
+
+def _signed_out_locally(host: str) -> bool:
+    """Claude Code only: this computer's MCP credential store lists sign-ins, but not Substrate's.
+
+    Only a readable ``.credentials.json`` with an ``mcpOAuth`` map counts. On the macOS
+    keychain there is no such file, so the check stays silent there. It cannot see a
+    sign-in revoked on the server; that shows up only as hook errors.
+    """
+    if host != "claude":
+        return False
+    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    entries = _read_json(os.path.join(base, ".credentials.json")).get("mcpOAuth")
+    return isinstance(entries, dict) and not _claude_mcp_signed_in()
+
+
+def _notice_once(data_dir: str, session_id: str) -> bool:
+    """True the first time this session needs the disconnect note (state is recorded first)."""
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    key = session_id or "-"
+    if state.get("disconnect_notice") == key:
+        return False
+    state["disconnect_notice"] = key
+    try:
+        _write_json(path, state)
+    except OSError:
+        return False
+    return True
+
+
+def _nag_open(data_dir: str, kind: str) -> bool:
+    counts = _read_json(os.path.join(data_dir, OFFER_FILE)).get("nags")
+    count = counts.get(kind) if isinstance(counts, dict) else None
+    return not (isinstance(count, int) and count >= NAG_LIMIT)
+
+
+def _offer_summary(host: str, data_dir: str, session_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        return _preview(host, data_dir, [session_id] if session_id else [])
+    except Exception:  # noqa: BLE001 - the hook still gives the offer, without counts
+        return None
+
+
+def _emit_context(context: str) -> None:
+    output = {"hookSpecificOutput": {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": context,
+    }}
+    sys.stdout.write(json.dumps(output, ensure_ascii=False))
+    sys.stdout.flush()
 
 
 def _cmd_offer_check(host: str, data_dir: str) -> int:
@@ -1157,30 +1314,34 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
             except OSError:
                 pass
             connected = True
+        if connected and _signed_out_locally(host):
+            # Removed on this computer after it worked: one quiet line per session.
+            if _notice_once(data_dir, session_id):
+                _emit_context(_disconnect_text())
+            return 0
         if connected and decided:
             return 0
-        if not decided and not _has_other_transcripts(host, session_id):
-            try:
-                _record_decision(data_dir, "none")
-            except OSError:
-                pass
-            decided = True
-        if connected and decided:
+        kind = "offer" if connected else "setup"
+        if not _nag_open(data_dir, kind):
+            return 0
+        summary = None  # type: Optional[Dict[str, Any]]
+        if not decided:
+            summary = _offer_summary(host, data_dir, session_id)
+            if summary is not None and summary["sessions"] == 0:
+                try:
+                    _record_decision(data_dir, "none")
+                except OSError:
+                    pass
+                decided = True
+                if connected:
+                    return 0
+        if not _take_nag(data_dir, kind):
             return 0
         if connected:
-            if not _take_nag(data_dir, "offer"):
-                return 0
-            context = _offer_text(host, data_dir, session_id)
+            context = _offer_text(host, data_dir, session_id, summary)
         else:
-            if not _take_nag(data_dir, "setup"):
-                return 0
-            context = _setup_text(host, data_dir, session_id, offer=not decided)
-        output = {"hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": context,
-        }}
-        sys.stdout.write(json.dumps(output, ensure_ascii=False))
-        sys.stdout.flush()
+            context = _setup_text(host, data_dir, session_id, summary, offer=not decided)
+        _emit_context(context)
     except BaseException:  # noqa: BLE001 - a hook never fails the prompt
         return 0
     return 0
@@ -1575,15 +1736,77 @@ class StatusWriter:
             pass
 
 
-def _ticket_env() -> Tuple[str, str]:
-    ticket = os.environ.get("SUBSTRATE_IMPORT_TICKET", "").strip()
-    url = os.environ.get("SUBSTRATE_MCP_URL", "").strip()
-    return ticket, url
+TICKET_MAX_BYTES = 4096
 
 
-def _spawn_background(argv: List[str], data_dir: str) -> int:
+def _without_flag(argv: List[str], flag: str, takes_value: bool) -> List[str]:
+    """argv minus ``flag``; with ``takes_value`` its separate value word goes too."""
+    out = []  # type: List[str]
+    skip = False
+    for word in argv:
+        if skip:
+            skip = False
+            continue
+        if word == flag:
+            skip = takes_value
+            continue
+        if word.startswith(flag + "="):
+            continue
+        out.append(word)
+    return out
+
+
+def _clean_ticket(raw: str) -> str:
+    value = raw.strip()
+    return value if value and len(value.split()) == 1 else ""
+
+
+def _take_ticket(path: str) -> str:
+    """Read the import ticket from the file the agent wrote, then delete that file.
+
+    The file is made 0600 first (best effort). It is deleted even when its
+    content is refused, so a ticket never lingers on disk. A symlink or a
+    non-file is ignored and left alone.
+    """
+    if not path or os.path.islink(path) or not os.path.isfile(path):
+        return ""
+    try:
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            raw = handle.read(TICKET_MAX_BYTES + 1)
+        if len(raw) > TICKET_MAX_BYTES:
+            raw = ""  # far too long to be a ticket: refuse rather than truncate
+    except OSError:
+        raw = ""
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    return _clean_ticket(raw)
+
+
+def _take_child_ticket() -> str:
+    """A background run receives its ticket on stdin from the parent, never on argv."""
+    try:
+        raw = sys.stdin.read(TICKET_MAX_BYTES)
+    except (OSError, ValueError):
+        raw = ""
+    return _clean_ticket(raw)
+
+
+def _mcp_url() -> str:
+    return os.environ.get("SUBSTRATE_MCP_URL", "").strip()
+
+
+def _spawn_background(argv: List[str], data_dir: str, ticket: str) -> int:
     os.makedirs(data_dir, exist_ok=True)
-    command = [sys.executable, os.path.abspath(__file__)] + [a for a in argv if a != "--background"]
+    child_argv = _without_flag(_without_flag(argv, "--background", False),
+                               "--ticket-file", True)
+    command = [sys.executable, os.path.abspath(__file__)] + child_argv + ["--_child"]
     StatusWriter(data_dir, {"state": "starting", "pid": None, "started_at": _utc_now()}).update()
     log = open(os.path.join(data_dir, LOG_FILE), "ab")
     kwargs = {}  # type: Dict[str, Any]
@@ -1592,10 +1815,16 @@ def _spawn_background(argv: List[str], data_dir: str) -> int:
     else:
         kwargs["start_new_session"] = True
     try:
-        child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+        child = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=log, stderr=log,
                                  cwd=data_dir, env=dict(os.environ), close_fds=True, **kwargs)
     finally:
         log.close()
+    if child.stdin is not None:
+        try:
+            child.stdin.write((ticket + "\n").encode("utf-8"))
+            child.stdin.close()
+        except OSError:
+            pass
     status_path = os.path.join(data_dir, STATUS_FILE)
     print(json.dumps({"started": True, "pid": child.pid, "status_file": status_path,
                       "message": "Import started in the background."}))
@@ -1603,11 +1832,14 @@ def _spawn_background(argv: List[str], data_dir: str) -> int:
 
 
 def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[str]) -> int:
-    ticket, url = _ticket_env()
+    # The ticket is read first, so its file is gone whatever happens next.
+    ticket = _take_child_ticket() if args._child else _take_ticket(args.ticket_file)
+    url = _mcp_url()
     if not ticket or not url:
         print(json.dumps({"error": "missing_ticket", "message":
-                          "Set SUBSTRATE_IMPORT_TICKET and SUBSTRATE_MCP_URL from "
-                          "memory_import_ticket before uploading."}))
+                          "Write the ticket from memory_import_ticket to the file given by "
+                          "--ticket-file (the script deletes it) and set SUBSTRATE_MCP_URL before "
+                          "uploading."}))
         return 2
     try:
         _check_url(url)
@@ -1628,7 +1860,7 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
     if _decision(data_dir) is None:
         _record_decision(data_dir, "yes" if args.all else "picked")
     if args.background:
-        return _spawn_background(argv + ["--_child"], data_dir)
+        return _spawn_background(argv, data_dir, ticket)
     excluded = _exclusions(data_dir, args.exclude_session or [], host)
     batch_id = uuid.uuid4().hex
     status = StatusWriter(data_dir, {
@@ -1640,8 +1872,7 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
     sessions = _catalogue(host, excluded, None if args.all else args.session)
     status.update(sessions_total=len(sessions))
     progress_path = os.path.join(data_dir, PROGRESS_FILE)
-    progress = _read_json(progress_path)
-    sent_digests = progress.get("sessions") if isinstance(progress.get("sessions"), dict) else {}
+    sent_digests, sent_prints = _uploaded_state(data_dir)
     tally = Tally()
     turns_total = 0
 
@@ -1663,19 +1894,14 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
     try:
         _with_retries(client.initialize, on_wait)
         for entry in sessions:
-            items = []  # type: List[Dict[str, Any]]
-            for item in _build_envelopes(entry["session_id"], entry["turns"],
-                                         "history_replay", 0):
-                items.extend(_fit_item(item))
-            if items:
-                # Last, after every turn: seal the session so it is extracted.
-                items.append(_seal_item(entry["session_id"], items, host))
-            digest = hashlib.sha256(_canonical_bytes(items)).hexdigest()
+            items = _session_items(host, entry)
+            digest = _digest(items)
             turns_total += len(entry["turns"])
             status.update(uploading_session=entry["session_id"], turns=turns_total)
             if not args.force and sent_digests.get(entry["session_id"]) == digest:
                 tally.duplicate += sum(1 for i in items if i["kind"] == "capture_turn")
                 tally.sealed += sum(1 for i in items if i["kind"] == "capture_session")
+                sent_prints[entry["session_id"]] = entry["fingerprint"]
                 status.update(sessions_done=status.state["sessions_done"] + 1,
                               skipped_sessions=status.state["skipped_sessions"] + 1,
                               duplicate=tally.duplicate)
@@ -1688,8 +1914,10 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
                               stored=tally.stored, duplicate=tally.duplicate,
                               rejected=tally.rejected)
             sent_digests[entry["session_id"]] = digest
+            sent_prints[entry["session_id"]] = entry["fingerprint"]
             try:
-                _write_json(progress_path, {"sessions": sent_digests})
+                _write_json(progress_path, {"sessions": sent_digests,
+                                            "fingerprints": sent_prints})
             except OSError:
                 pass
             status.update(sessions_done=status.state["sessions_done"] + 1)
@@ -1716,6 +1944,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--upload", action="store_true")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--exclude-session", action="append", default=[])
+    parser.add_argument("--ticket-file", default="")
     parser.add_argument("--background", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--status", action="store_true")
@@ -1754,7 +1983,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.upload:
         return _cmd_upload(args.host, data_dir, args, argv)
     if args.list:
-        return _cmd_list(args.host, _exclusions(data_dir, args.exclude_session))
+        return _cmd_list(args.host, data_dir, _exclusions(data_dir, args.exclude_session))
     if args.session:
         return _cmd_session(args.host, args.session[0], args.after_index, args.origin)
     parser.error("need --list, --session <id>, --preview, --upload, --status, "

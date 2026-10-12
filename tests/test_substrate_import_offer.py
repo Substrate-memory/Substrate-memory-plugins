@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -290,8 +291,17 @@ def server():
     fake.close()
 
 
+TICKET_DIR = Path(tempfile.mkdtemp(prefix="substrate-ticket-"))
+
+
+def ticket_args() -> list[str]:
+    """A fresh ticket file, as the agent writes it; each upload deletes its file."""
+    path = TICKET_DIR / ("ticket-%s.txt" % uuid.uuid4().hex)
+    path.write_text(TICKET + "\n", encoding="utf-8")
+    return ["--ticket-file", str(path)]
+
+
 def ticket_env(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
-    monkeypatch.setenv("SUBSTRATE_IMPORT_TICKET", TICKET)
     monkeypatch.setenv("SUBSTRATE_MCP_URL", url)
 
 
@@ -318,12 +328,16 @@ def test_offer_emitted_when_undecided(env) -> None:
     hook = out["hookSpecificOutput"]
     assert hook["hookEventName"] == "UserPromptSubmit"
     text = hook["additionalContext"]
-    for phrase in ("Import all", "Let me pick", "Not now", "Connected to Substrate.",
-                   "memory_import_ticket", "--preview", "--upload --all --background",
-                   "--status --wait 60", "SUBSTRATE_IMPORT_TICKET", "SUBSTRATE_MCP_URL",
-                   "--record-decision no", "never show the ticket",
-                   "Do not stop and wait for the user"):
+    # The offer carries the count, the date range and the exact three choices.
+    for phrase in ("I found 1 past conversation on this computer (2 turns, 1 Sep 2026 to "
+                   "1 Sep 2026). Import them into Substrate? Import all / Let me pick / Not now",
+                   "Connected to Substrate.", "memory_import_ticket", "--upload --all --background",
+                   "--ticket-file", "import-ticket-", "SUBSTRATE_MCP_URL", "--status --wait 60",
+                   "--record-decision no", "must never appear in a Bash command",
+                   "Do not stop and wait for the user",
+                   "mcp__plugin_substrate-claude_substrate-memory__memory_search"):
         assert phrase in text, phrase
+    assert "SUBSTRATE_IMPORT_TICKET" not in text
     assert '--exclude-session "current-1"' in text
     assert str(SCRIPT) in text and str(env["data"]) in text
     assert TICKET not in text
@@ -486,8 +500,11 @@ def test_setup_continues_until_connected(env) -> None:
                    "only if the user says the page showed an error",
                    "do NOT end your turn", "--pause 15", "up to 20 times", "ToolSearch",
                    'A bare "continue", "done"', "Do not comment on it",
-                   "--preview", "Import all / Let me pick / Not now",
-                   "Never ask for a token", "/reload-plugins"):
+                   "I found 1 past conversation on this computer",
+                   "Import all / Let me pick / Not now",
+                   "Never ask for a token", "/reload-plugins",
+                   "mcp__plugin_substrate-claude_substrate-memory__memory_search",
+                   "mcp__claude_ai_"):
         assert phrase in text, phrase
     assert str(SCRIPT) in text and '--exclude-session "current-1"' in text
     # Still not connected on the next prompt: still carried forward.
@@ -502,7 +519,7 @@ def test_setup_continues_until_connected(env) -> None:
 def test_setup_without_history_skips_offer_part(env) -> None:
     proc = _offer(env)  # no transcripts at all: decision none, but not connected
     text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
-    assert "setup is not finished" in text and "--preview" not in text
+    assert "setup is not finished" in text and "I found" not in text
     state = json.loads((env["data"] / "import-offer.json").read_text())
     assert state["decision"] == "none" and "connected_at" not in state
     connect()
@@ -527,7 +544,7 @@ def test_record_connected_is_idempotent(env, capsys) -> None:
 def test_upload_records_connected(env, capsys, server, monkeypatch) -> None:
     write_claude_session(env["claude"], "a")
     ticket_env(monkeypatch, server.url)
-    assert sync.main(["--host", "claude", "--upload", "--all"]) == 0
+    assert sync.main(["--host", "claude", "--upload", "--all", *ticket_args()]) == 0
     assert json.loads((env["data"] / "import-offer.json").read_text())["connected_at"]
 
 
@@ -637,7 +654,7 @@ def test_flat_agent_transcripts_skipped(env, capsys, server, monkeypatch) -> Non
     assert [(r["session_id"], r["turns"]) for r in rows] == [("parent", 2)]
     assert rows[0]["path"].endswith("parent.jsonl")
     ticket_env(monkeypatch, server.url)
-    assert sync.main(["--host", "claude", "--upload", "--all"]) == 0
+    assert sync.main(["--host", "claude", "--upload", "--all", *ticket_args()]) == 0
     sent = server.sent_items()
     assert [i["kind"] for i in sent] == ["capture_turn", "capture_turn", "capture_session"]
     assert "subagent task" not in json.dumps(sent)
@@ -673,7 +690,7 @@ def test_offer_hook_ignores_flat_agent_files(env) -> None:
 def test_status_names_uploading_session(env, capsys, server, monkeypatch) -> None:
     write_claude_session(env["claude"], "a")
     ticket_env(monkeypatch, server.url)
-    sync.main(["--host", "claude", "--upload", "--all"])
+    sync.main(["--host", "claude", "--upload", "--all", *ticket_args()])
     status = json.loads((env["data"] / "import-status.json").read_text())
     assert status["uploading_session"] == "a" and "current_session" not in status
 
@@ -767,14 +784,19 @@ def test_split_batches_respects_64_items_and_240k() -> None:
 # ---------------------------------------------------------------------------
 
 def upload(capsys, *args: str) -> tuple[int, str]:
-    code = sync.main(["--host", "claude", "--upload", *args])
+    code = sync.main(["--host", "claude", "--upload", *args, *ticket_args()])
     return code, capsys.readouterr().out.strip()
 
 
-def test_upload_requires_ticket_from_env(env, capsys) -> None:
+def test_upload_requires_ticket_file(env, capsys, monkeypatch) -> None:
     write_claude_session(env["claude"], "a")
-    code, out = upload(capsys, "--all")
+    monkeypatch.setenv("SUBSTRATE_MCP_URL", "https://app.trysubstrate.co/mcp")
+    # No --ticket-file: the environment is never a ticket source any more.
+    monkeypatch.setenv("SUBSTRATE_IMPORT_TICKET", TICKET)
+    code = sync.main(["--host", "claude", "--upload", "--all"])
+    out = capsys.readouterr().out
     assert code == 2 and json.loads(out)["error"] == "missing_ticket"
+    assert TICKET not in out
 
 
 def test_upload_refuses_plain_http_remote(env, capsys, monkeypatch) -> None:
@@ -1068,7 +1090,7 @@ def test_redaction_applied_on_upload(env, capsys, server, monkeypatch) -> None:
 def test_codex_upload(env, capsys, server, monkeypatch) -> None:
     write_codex_session(env["codex"], "cx-1", turns=3)
     ticket_env(monkeypatch, server.url)
-    code = sync.main(["--host", "codex", "--upload", "--all"])
+    code = sync.main(["--host", "codex", "--upload", "--all", *ticket_args()])
     out = capsys.readouterr().out.strip()
     assert code == 0 and out == "Imported 1 session (3 turns): 3 stored, 0 duplicate, 0 rejected."
     assert {i["session_id"] for i in server.sent_items()} == {"cx-1"}
@@ -1092,9 +1114,10 @@ def test_background_upload_and_status(env, server) -> None:
     for n in range(5):
         write_claude_session(env["claude"], f"bg-{n}", turns=20, day=n + 1)
     write_claude_session(env["claude"], "live")
+    ticket = ticket_args()
     proc = run("--host", "claude", "--upload", "--all", "--background",
-               "--exclude-session", "live",
-               extra_env={"SUBSTRATE_IMPORT_TICKET": TICKET, "SUBSTRATE_MCP_URL": server.url})
+               "--exclude-session", "live", *ticket,
+               extra_env={"SUBSTRATE_MCP_URL": server.url})
     assert proc.returncode == 0, proc.stderr
     started = json.loads(proc.stdout)
     assert started["started"] is True
@@ -1114,8 +1137,8 @@ def test_background_refuses_second_concurrent_run(env, server) -> None:
     env["data"].mkdir(parents=True)
     (env["data"] / "import-status.json").write_text(json.dumps(
         {"state": "running", "pid": os.getpid(), "updated_ts": time.time()}))
-    proc = run("--host", "claude", "--upload", "--all", "--background",
-               extra_env={"SUBSTRATE_IMPORT_TICKET": TICKET, "SUBSTRATE_MCP_URL": server.url})
+    proc = run("--host", "claude", "--upload", "--all", "--background", *ticket_args(),
+               extra_env={"SUBSTRATE_MCP_URL": server.url})
     assert proc.returncode == 4 and json.loads(proc.stdout)["error"] == "already_running"
 
 
@@ -1304,3 +1327,223 @@ def test_import_offer_nag_stops_after_limit(env) -> None:
     shown = [_offer(env).stdout for _ in range(sync.NAG_LIMIT + 5)]
     assert sum(1 for out in shown if "Import offer pending" in out) == sync.NAG_LIMIT
     assert shown[-1] == ""
+
+
+# ---------------------------------------------------------------------------
+# CC-07: the ticket comes from a file the script deletes, never from a command line
+# ---------------------------------------------------------------------------
+
+def test_take_ticket_reads_then_deletes_file(tmp_path: Path) -> None:
+    path = tmp_path / "import-ticket-abcdef12.txt"
+    path.write_text(TICKET + "\n", encoding="utf-8")
+    assert sync._take_ticket(str(path)) == TICKET
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("content", ["", "two words", "x" * 10000],
+                         ids=["empty", "two-words", "oversize"])
+def test_take_ticket_refuses_bad_content_and_still_deletes(tmp_path: Path, content: str) -> None:
+    path = tmp_path / "t.txt"
+    path.write_text(content, encoding="utf-8")
+    assert sync._take_ticket(str(path)) == ""
+    assert not path.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions")
+def test_take_ticket_makes_file_private_before_reading(tmp_path: Path) -> None:
+    path = tmp_path / "t.txt"
+    path.write_text(TICKET, encoding="utf-8")
+    os.chmod(path, 0o644)
+    seen = {}
+    real_open = open
+
+    def spy(file, *args, **kwargs):  # noqa: ANN001, ANN202
+        if str(file) == str(path):
+            seen["mode"] = os.stat(path).st_mode & 0o777
+        return real_open(file, *args, **kwargs)
+
+    import builtins
+    original = builtins.open
+    builtins.open = spy
+    try:
+        assert sync._take_ticket(str(path)) == TICKET
+    finally:
+        builtins.open = original
+    assert seen["mode"] == 0o600
+
+
+def test_take_ticket_ignores_symlink_and_missing(tmp_path: Path) -> None:
+    target = tmp_path / "real.txt"
+    target.write_text(TICKET, encoding="utf-8")
+    link = tmp_path / "link.txt"
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    assert sync._take_ticket(str(link)) == ""
+    assert target.exists() and link.is_symlink()  # nothing followed, nothing removed
+    assert sync._take_ticket(str(tmp_path / "missing.txt")) == ""
+    assert sync._take_ticket("") == ""
+
+
+def test_upload_reads_ticket_file_and_removes_it(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a")
+    ticket_env(monkeypatch, server.url)
+    args = ticket_args()
+    path = Path(args[1])
+    assert sync.main(["--host", "claude", "--upload", "--all", *args]) == 0
+    assert not path.exists()
+    assert server.sent_items()
+    assert TICKET not in capsys.readouterr().out
+
+
+def test_upload_error_paths_still_delete_ticket_file(env, capsys, monkeypatch) -> None:
+    ticket_env(monkeypatch, "http://example.com/mcp")  # refused: not https
+    args = ticket_args()
+    assert sync.main(["--host", "claude", "--upload", "--all", *args]) == 2
+    assert not Path(args[1]).exists()
+    assert json.loads(capsys.readouterr().out)["error"] == "invalid_url"
+
+
+def test_spawn_background_passes_ticket_on_stdin_never_argv(env, monkeypatch) -> None:
+    captured = {}
+
+    class FakeStdin:
+        def __init__(self) -> None:
+            self.data = b""
+
+        def write(self, data: bytes) -> None:
+            self.data += data
+
+        def close(self) -> None:
+            captured["stdin"] = self.data
+
+    class FakeChild:
+        pid = 4242
+        stdin = FakeStdin()
+
+    def fake_popen(command, **kwargs):  # noqa: ANN001, ANN202
+        captured["command"] = command
+        captured["stdin_mode"] = kwargs.get("stdin")
+        return FakeChild()
+
+    monkeypatch.setattr(sync.subprocess, "Popen", fake_popen)
+    argv = ["--host", "claude", "--upload", "--all", "--background", "--ticket-file",
+            "/tmp/ticket-x.txt"]
+    assert sync._spawn_background(argv, str(env["data"]), TICKET) == 0
+    assert TICKET not in " ".join(captured["command"])
+    assert "--ticket-file" not in captured["command"] and "--background" not in captured["command"]
+    assert captured["command"][-1] == "--_child"
+    assert captured["stdin_mode"] == sync.subprocess.PIPE
+    assert captured["stdin"] == (TICKET + "\n").encode("utf-8")
+
+
+def test_child_reads_ticket_from_stdin(env, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "bg-child", turns=1)
+    proc = run("--host", "claude", "--upload", "--all", "--_child",
+               extra_env={"SUBSTRATE_MCP_URL": server.url}, stdin=TICKET + "\n")
+    assert proc.returncode == 0, proc.stderr
+    assert server.sent_items()
+
+
+def test_upload_source_never_reads_env_ticket() -> None:
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "SUBSTRATE_IMPORT_TICKET" not in text
+    assert "_ticket_env" not in text
+
+
+# ---------------------------------------------------------------------------
+# CC-10: sessions already uploaded leave the preview and the "Let me pick" list
+# ---------------------------------------------------------------------------
+
+def test_preview_and_list_skip_imported_sessions(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a", day=1)
+    write_claude_session(env["claude"], "b", day=2)
+    write_claude_session(env["claude"], "c", day=3)
+    ticket_env(monkeypatch, server.url)
+    assert upload(capsys, "--session", "a", "--session", "b")[0] == 0
+    capsys.readouterr()
+    code, rows = main_json(capsys, "--host", "claude", "--preview")
+    assert code == 0 and rows[0]["sessions"] == 1 and rows[0]["already_imported"] == 2
+    assert rows[0]["turns"] == 2
+    code, listed = main_json(capsys, "--host", "claude", "--list")
+    assert [row["session_id"] for row in listed] == ["c"]
+
+
+def test_preview_zero_after_full_import(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a")
+    ticket_env(monkeypatch, server.url)
+    assert upload(capsys, "--all")[0] == 0
+    capsys.readouterr()
+    code, rows = main_json(capsys, "--host", "claude", "--preview")
+    assert rows[0]["sessions"] == 0 and rows[0]["already_imported"] == 1
+    assert rows[0]["first_at"] is None and rows[0]["decision"] == "yes"
+
+
+def test_touched_transcript_is_still_imported(env, capsys, server, monkeypatch) -> None:
+    path = write_claude_session(env["claude"], "a")
+    ticket_env(monkeypatch, server.url)
+    assert upload(capsys, "--all")[0] == 0
+    capsys.readouterr()
+    # Same content, new mtime: recognised by its items, not counted as new.
+    os.utime(path, (time.time() - 3600, time.time() - 3600))
+    code, rows = main_json(capsys, "--host", "claude", "--preview")
+    assert rows[0]["sessions"] == 0 and rows[0]["already_imported"] == 1
+
+
+def test_new_turns_after_import_come_back_as_pending(env, capsys, server, monkeypatch) -> None:
+    path = write_claude_session(env["claude"], "a", turns=2)
+    ticket_env(monkeypatch, server.url)
+    assert upload(capsys, "--all")[0] == 0
+    capsys.readouterr()
+    with path.open("a", encoding="utf-8") as handle:
+        for line in ({"type": "user", "sessionId": "a", "timestamp": _ts(1, 30),
+                      "message": {"role": "user", "content": "later question"}},
+                     {"type": "assistant", "sessionId": "a", "timestamp": _ts(1, 31),
+                      "message": {"role": "assistant",
+                                  "content": [{"type": "text", "text": "later answer"}]}}):
+            handle.write(json.dumps(line) + "\n")
+    _age(path)  # a file written just now is taken for the live session
+    code, rows = main_json(capsys, "--host", "claude", "--preview")
+    assert rows[0]["sessions"] == 1 and rows[0]["already_imported"] == 0
+
+
+# ---------------------------------------------------------------------------
+# CC-05: a removed connection is one quiet line per session, never an error
+# ---------------------------------------------------------------------------
+
+def _write_credentials(home: Path, entries: dict) -> None:
+    (home / ".credentials.json").write_text(json.dumps({"mcpOAuth": entries}), encoding="utf-8")
+
+
+def test_removed_connection_notice_once_per_session(env) -> None:
+    connect()
+    _write_credentials(env["claude"], {"other-server|1": {
+        "serverUrl": "https://example.com/mcp", "accessToken": "x"}})
+    proc = _offer(env, stdin='{"session_id": "s1"}')
+    assert proc.returncode == 0 and proc.stderr == ""
+    text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "connection on this computer was removed" in text
+    assert "/substrate-claude:substrate-connect" in text
+    assert "do not mention hook errors" in text
+    assert _offer(env, stdin='{"session_id": "s1"}').stdout == ""
+    assert "removed" in _offer(env, stdin='{"session_id": "s2"}').stdout
+
+
+def test_connected_with_substrate_entry_is_silent(env) -> None:
+    connect()
+    _write_credentials(env["claude"], {"plugin:substrate-claude:substrate-memory|1": {
+        "serverUrl": "https://app.trysubstrate.co/mcp", "accessToken": "t"}})
+    assert _offer(env, stdin='{"session_id": "s1"}').stdout == ""
+
+
+def test_no_credential_store_stays_silent(env) -> None:
+    # macOS keeps MCP sign-ins in the keychain: no file means no claim either way.
+    connect()
+    assert _offer(env, stdin='{"session_id": "s1"}').stdout == ""
+
+
+def test_removed_notice_never_for_codex(env, monkeypatch) -> None:
+    monkeypatch.setattr(sync, "_codex_mcp_signed_in", lambda: False)
+    connect("codex")
+    assert "removed" not in _offer(env, host="codex").stdout

@@ -16,14 +16,24 @@ Pinned pages follow.
 ## Connecting and importing
 
 - To connect or reconnect, follow `/substrate-claude:substrate-connect`: sign in,
-  verify with `memory_search`, say **Connected to Substrate.**, and in the same
-  reply offer to import past conversations (**Import all** / **Let me pick** /
-  **Not now**). It is offered once per computer; `/substrate-claude:substrate-import`
-  runs it, and the user can ask for it any time later.
+  verify with the plugin's `mcp__plugin_substrate-claude_substrate-memory__memory_search`,
+  say **Connected to Substrate.**, and in the same reply offer to import past
+  conversations (**Import all** / **Let me pick** / **Not now**). It is offered
+  once per computer; `/substrate-claude:substrate-import` runs it, and the user can
+  ask for it any time later.
+- Only the plugin's own tools prove the connection. Tools named `mcp__claude_ai_*`
+  come from a claude.ai connector and do not count. Say **Connected to Substrate.**
+  only after the plugin's `memory_search` succeeds; otherwise tell the user to
+  finish Authenticate in `/mcp` (plugin:substrate-claude:substrate-memory).
 - A `[substrate] Import offer pending` note from the plugin hook carries the
-  exact commands for this computer; follow it once the memory tools work.
-- "MCP server … not connected" hook errors mean the plugin is installed but not
-  signed in: sign in, do not install a second copy.
+  count, the date range and the exact choices; present them as written.
+- "MCP server … not connected" or "Unauthorized" hook errors mean the plugin is
+  installed but not signed in, or the connection was removed. Do not install a
+  second copy. Answer the user's request with your other tools as usual, do not
+  go searching other apps on Substrate's behalf, and mention the reconnect command
+  once (`/substrate-claude:substrate-connect`).
+- A `[substrate] The Substrate connection on this computer was removed` note means
+  the same thing: answer normally, and say once in one line how to reconnect.
 
 ## Catch-up rule
 
