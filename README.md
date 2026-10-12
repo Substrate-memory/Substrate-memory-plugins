@@ -44,7 +44,9 @@ The agent identifies its host and installs the right package. The flow is the sa
 | Claude Cowork, Claude Code | `plugins/substrate-claude` | [substrate-claude README](plugins/substrate-claude/README.md) |
 | ChatGPT Work, Codex app, Codex CLI | `plugins/substrate-codex` | [substrate-codex README](plugins/substrate-codex/README.md) |
 | Hermes | `plugins/substrate-hermes` | [substrate-hermes README](plugins/substrate-hermes/README.md) |
-| Any other MCP-capable agent (only when no package above fits) | `plugins/substrate-mcp` (thin fallback) | [substrate-mcp README](plugins/substrate-mcp/README.md) |
+| OpenClaw | no package: generic MCP server | [OpenClaw guide](docs/openclaw.md) |
+| Grok | no package: generic MCP server through the Grok CLI | [Grok guide](docs/grok.md) |
+| Any other MCP-capable agent | no package: generic MCP server (`plugins/substrate-mcp` is the thin fallback) | [substrate-mcp README](plugins/substrate-mcp/README.md) |
 
 **Hermes in one command** (the repository root is a Hermes plugin that loads `plugins/substrate-hermes`; it passes the Hermes install scan with no override):
 
@@ -103,7 +105,7 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix and history.
 No. Sign in in the browser and approve. There is nothing to copy or paste.
 
 **Which package does my agent install?**
-Claude Cowork and Claude Code use `plugins/substrate-claude`. ChatGPT Work, the Codex app and Codex CLI use `plugins/substrate-codex`. Hermes uses `plugins/substrate-hermes`. Any other MCP-capable agent uses the thin `plugins/substrate-mcp` fallback, only when no package fits.
+Claude Cowork and Claude Code use `plugins/substrate-claude`. ChatGPT Work, the Codex app and Codex CLI use `plugins/substrate-codex`. Hermes uses `plugins/substrate-hermes`. OpenClaw, Grok and any other MCP-capable agent connect over the generic MCP server, the default for any system without its own package. `plugins/substrate-mcp` is the thin fallback package.
 
 **How do I know it is connected?**
 The agent runs an authenticated memory smoke test. Only a passed `memory_search` means **Connected to Substrate.**
