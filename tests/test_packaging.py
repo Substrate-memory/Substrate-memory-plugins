@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -133,7 +134,8 @@ def test_repository_root_is_not_a_python_project_for_hermes() -> None:
     assert not (REPOSITORY_ROOT / "pyproject.toml").exists()
     assert not (REPOSITORY_ROOT / "uv.lock").exists()
     tooling = (REPOSITORY_ROOT / "tooling" / "pyproject.toml").read_text(encoding="utf-8")
-    assert "ruff==0.9.10" in tooling and "pytest==9.0.3" in tooling
+    # Pinned, but not to a given version: Dependabot bumps these pins.
+    assert re.search(r'"ruff==[0-9][^"]*"', tooling) and re.search(r'"pytest==[0-9][^"]*"', tooling)
     assert "dependencies = []" in tooling
     assert (REPOSITORY_ROOT / "tooling" / "uv.lock").exists()
     assert (REPOSITORY_ROOT / "ruff.toml").exists() and (REPOSITORY_ROOT / "pytest.ini").exists()
