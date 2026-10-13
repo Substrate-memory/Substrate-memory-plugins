@@ -123,7 +123,7 @@ I found 87 past conversations on this computer (1,204 turns, 3 Mar to 7 Oct 2026
 
 How each host does it:
 
-- **Claude Code and Codex.** `scripts/substrate_sync.py --preview` gives the counts. On a yes the agent calls `memory_import_ticket` and runs `substrate_sync.py --upload --all --background` with the ticket in `SUBSTRATE_IMPORT_TICKET` / `SUBSTRATE_MCP_URL` (environment only, never shown in chat), then polls `--status`. The script posts redacted `history_replay` batches (at most 64 items / 240 KiB) straight to Substrate, so conversation content never passes through the model. An offer hook (`--offer-check`) reminds the agent until the user has answered once.
+- **Claude Code and Codex.** `scripts/substrate_sync.py --preview` gives the counts. On a yes the agent calls `memory_import_ticket` and runs `substrate_sync.py --upload --all --background` with `--ticket-file` (the agent writes the ticket to a temporary file that the script deletes; `SUBSTRATE_MCP_URL` carries the endpoint; the ticket never appears in a command line or in chat), then polls `--status`. The script posts redacted `history_replay` batches (at most 64 items / 240 KiB) straight to Substrate, so conversation content never passes through the model. An offer hook (`--offer-check`) reminds the agent until the user has answered once.
 - **Hermes.** The plugin reads its own profile's history and sends it through its spool after live turns (see `plugins/substrate-hermes`).
 - **Cowork cloud** has no local history: the offer is skipped silently.
 - **Fallback MCP hosts** list what they can read and import confirmed turns with `memory_import` (or confirmed facts with `memory_remember`), per `plugins/substrate-mcp/INSTALL.md`.

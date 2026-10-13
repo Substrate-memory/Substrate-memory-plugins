@@ -24,7 +24,8 @@
   `substrate-import` (invoke as `$skill-name` in Codex).
 - `scripts/substrate_sync.py` — byte-identical copy of the Claude script;
   stdlib only. Reads local rollouts; `--upload` sends them straight to the
-  `mcp_url` from `memory_import_ticket` (ticket from the environment only).
+  `mcp_url` from `memory_import_ticket` (the ticket comes from a file the agent
+  writes and the script deletes, never from a command line).
 
 ## Contract mapping (docs/mcp-contract.md section 7)
 

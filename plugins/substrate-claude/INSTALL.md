@@ -16,7 +16,9 @@ only for the browser approval and the user's import choice.
    claude plugin install substrate-claude@substrate-marketplace
    ```
 2. If the Substrate tools (or their `authenticate` tool) are already in this
-   session, go straight to `/substrate-claude:substrate-connect` step 1.
+   session, go straight to `/substrate-claude:substrate-connect` step 1 (the check
+   is the plugin's own `mcp__plugin_substrate-claude_substrate-memory__memory_search`;
+   a claude.ai connector's tools do not count).
    Otherwise end the install reply with exactly this, in plain words:
    *Installed. Type `/reload-plugins`, then say "continue".* On the next
    message the plugin's hook tells you to finish setup: sign in (the user
@@ -46,5 +48,5 @@ only for the browser approval and the user's import choice.
 - Only the user approves, in the browser. **Connection approved** is not
   **Connected to Substrate.**; only a successful `memory_search` is.
 - Never request or accept API keys, tokens, or client secrets. Never show the
-  import ticket in a reply.
+  import ticket in a reply or a command. It goes to a file the script deletes.
 - Use the plugin or the claude.ai Substrate connector, not both.

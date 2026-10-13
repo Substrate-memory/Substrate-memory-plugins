@@ -12,11 +12,15 @@ If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
 **Let me pick** / **Not now** with its count and date range.
 
 **Import all**
-1. Call `memory_import_ticket` with `{"platform": "codex"}`.
-2. Run with the values from that result as environment variables (never write
-   the ticket in your reply). POSIX shells:
-   `SUBSTRATE_IMPORT_TICKET='<ticket>' SUBSTRATE_MCP_URL='<mcp_url>' SYNC --upload --all --background`
-   PowerShell: `$env:SUBSTRATE_IMPORT_TICKET='<ticket>'; $env:SUBSTRATE_MCP_URL='<mcp_url>'; SYNC --upload --all --background`
+1. Call `memory_import_ticket` with `{"platform": "codex"}`. Keep its `ticket`
+   and `mcp_url` values. The ticket is secret: never write it in a command or in
+   your reply.
+2. Use the file-write tool to create a new file, `<data-dir>/import-ticket-<8
+   random letters>.txt` (`<data-dir>` is the `--data-dir` value that `SYNC` uses),
+   whose content is only the ticket string. Then run, with `mcp_url` from that
+   result: `SUBSTRATE_MCP_URL='<mcp_url>' SYNC --upload --all --background --ticket-file "<data-dir>/import-ticket-<8 random letters>.txt"`
+   (PowerShell: `$env:SUBSTRATE_MCP_URL='<mcp_url>'; SYNC --upload --all --background --ticket-file "<path>"`).
+   The script reads the file and deletes it at once.
    The upload needs network access: if the sandbox blocks it, rerun the same
    command with escalated permissions (the user approves).
 3. Say "Importing N conversations in the background." Then repeat

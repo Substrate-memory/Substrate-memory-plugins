@@ -4,7 +4,8 @@ One package serves both hosts. It registers a remote Substrate MCP server, a
 usage skill, three slash commands, and the hooks that capture turns
 automatically. There is no local server and the plugin stores no credentials:
 sign-in runs through the host browser flow, and history import uses a
-short-lived, import-only ticket held in memory by the upload script.
+short-lived, import-only ticket that the agent writes to a temporary file and
+the upload script deletes after reading it.
 
 ## What you get
 
@@ -71,11 +72,13 @@ notices the approval by itself, checks it with `memory_search`, says
 > 2026). Import them into Substrate? **Import all** / **Let me pick** / **Not now**
 
 - **Import all**: everything on this computer except the current conversation
-  (already captured live). The upload runs in the background straight from
-  the local script to Substrate with a short-lived import-only ticket, so your
-  history never passes through the chat. The agent reports progress and ends
-  with `Imported N sessions (T turns): S stored, D duplicate, R rejected.`
-- **Let me pick**: the agent lists conversations by date and title.
+  (already captured live) and anything already imported. The upload runs in the
+  background straight from the local script to Substrate with a short-lived
+  import-only ticket, so your history never passes through the chat. The agent
+  reports progress and ends with `Imported N sessions (T turns): S stored, D
+  duplicate, R rejected.`
+- **Let me pick**: the agent lists conversations by date and title, not counting
+  the ones already imported.
 - **Not now**: never asked again. Say "import my past conversations" any time.
 
 Never paste an API key or token into chat.
@@ -90,13 +93,24 @@ boundaries (start, clear, compact, end) seal extraction windows.
 
 Secrets (API keys, tokens, passwords, `sk_…` values) are redacted on the client
 before anything leaves the host, and redacted again on the server. History
-import uploads only to the `mcp_url` returned by `memory_import_ticket`, with
-a ticket read from the environment (never the command line, never the chat).
+import uploads only to the `mcp_url` returned by `memory_import_ticket`. The
+ticket is written by the agent to a temporary file, passed to the script with
+`--ticket-file`, and deleted by the script as soon as it is read: it never
+appears in a command line or in the chat.
 Catch-up sync prints batches for the agent to pass to `memory_import`. Never
 send credentials to a memory tool yourself.
 
 ## Known limits
 
+- The capture and recall hooks are MCP tool hooks, which Claude Code calls
+  directly. When the connection is gone (signed out, or removed on the Agents
+  page), Claude Code shows their errors ("Unauthorized", "MCP server not
+  connected"). A plugin script cannot silence those; it can only add the one
+  quiet note described above when it sees the removal locally.
+- The import ticket reaches the model once, as the `memory_import_ticket` result
+  (and the agent's file write), so it is part of the session transcript. It is
+  60 minutes long, works only for import, and is redacted by Substrate as a
+  `sk_…` value. It never appears in a command line.
 - Claude Code does not allow MCP tool hooks on `SessionStart`, so there is
   none; the boundary is implied by the first turn instead.
 - Use the plugin or the claude.ai Substrate connector, not both. With both
@@ -118,7 +132,10 @@ send credentials to a memory tool yourself.
   `/substrate-claude:substrate-sync` to send the missing turns.
 - **Authorization required:** follow the browser link, approve, and rerun the
   smoke test. **Connection approved** is not **Connected to Substrate.**
-- **"MCP server … not connected" on every prompt:** installed but not signed
-  in. Run `/substrate-claude:substrate-connect`; do not install a second copy.
+- **"MCP server … not connected" or "Unauthorized" hook errors:** installed but
+  not signed in, or the connection was removed on the Agents page. Run
+  `/substrate-claude:substrate-connect` to reconnect; do not install a second
+  copy. Claude Code shows these hook errors itself, and the plugin cannot hide
+  them: the capture hooks are MCP tool hooks that Claude Code calls directly.
 - **Import stopped:** ask the agent to continue the import; finished
   conversations are skipped and the server ignores repeats.
