@@ -41,25 +41,20 @@ The package also provides the self-check slash command `/substrate-mcp:substrate
 
 Open the exact browser link returned by the client. Every host uses **Connect your agent to Substrate**. Sign in if needed, review the connection name, permissions and proof details, then choose **Approve connection** or deny. Only the user can approve. **Connection approved** means consent was accepted; the client must still finish its handoff and make an authenticated memory request. Only then report **Connected to Substrate.** Never request API keys, manual tokens, or client secrets.
 
-## Import past conversations (asked once)
+## What the agent already knows (asked once)
 
 After **Connected to Substrate.**, the agent asks exactly once:
 
 ```text
-Do you want to import past conversations into Substrate? I will show you the sessions I can read on this host, and import only what you confirm. Nothing is written before you confirm.
+I can save what I already know about you to Substrate. Want me to?
 ```
 
-If the user says no, do not ask again. If yes:
-
-1. List the sessions this agent can read on this host: its own local session transcripts, or an export file the user places where the agent can read it. Show the list first. The agent has no access to another app's chat history. If nothing is accessible, say so plainly and stop.
-2. After the user confirms the session list, import the confirmed sessions as raw, redacted turns via `memory_import` in batches (at most 64 items per call), then check `memory_import_status`. Where the host cannot replay turns, write confirmed durable facts with `memory_remember` instead (one item per call, one new `operation_id` per item, at most 4096 bytes of text). Nothing is written before confirmation.
-3. Never import secrets, API keys, tokens, passwords, or private credentials. They are redacted client- and server-side.
-4. Report what was imported and any failures.
+On yes, the agent searches its own memory and past chats (only what this host lets it read) for people, projects, decisions, preferences and open items, shows the list, and imports it only after the user confirms. The import is one `memory_import` document item (`kind: "document"`, a title, markdown text, and a source such as "Claude memory"). If the server rejects document items, the agent saves the confirmed facts with `memory_remember` instead. If the user says no, it does not ask again. Never import secrets, API keys, tokens, passwords, or private credentials.
 
 ## Legacy plugins
 
 The API-key based Claude Code, Codex, and Cowork plugins shipped in August 2026 are deprecated. This includes `substrate_capture`, paths such as `~/.substrate/*/spool` (including `~/.substrate/claude_code_memory/spool`), and setup using `SUBSTRATE_API_URL` or `SUBSTRATE_API_KEY`.
 
-Uninstall them. Do not set `SUBSTRATE_API_KEY` by hand; the current product does not issue API keys to users. Their local spools are not migrated; pending events do not become Substrate memory. Install the matching v0.8.1 package and use browser authorization instead.
+Uninstall them. Do not set `SUBSTRATE_API_KEY` by hand; the current product does not issue API keys to users. Their local spools are not migrated; pending events do not become Substrate memory. Install the matching v0.10.0 package and use browser authorization instead.
 
 This package has no hooks and provides no full-transcript capture guarantee. It is a thin remote MCP client with best-effort memory tools. Do not place API keys, OAuth tokens, client secrets, or other credentials in plugin files, prompts, config, or chat.
