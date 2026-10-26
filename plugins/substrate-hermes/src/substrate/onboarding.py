@@ -410,6 +410,46 @@ def _read_private_device_code(home: Path) -> str:
     return value if 0 < len(value) <= 4096 else ""
 
 
+def _reconnect_credential_path(home: Path) -> Path:
+    return home / "substrate" / "credentials" / "onboarding-reconnect"
+
+
+def _save_reconnect_token(home: Path, token: str) -> None:
+    """Keep the last revoked token, owner-private, so the next approval can name this agent.
+
+    The server matches it by hash to the revoked agent in the approving tenant
+    (reconnect = same agent). It is a dead credential, so it is never used for
+    anything else and is removed once a new connection succeeds.
+    """
+    if TOKEN_RE.fullmatch(token) is None:
+        return
+    try:
+        _atomic_private_write(_reconnect_credential_path(home), token)
+    except OnboardingError:
+        pass
+
+
+def _read_reconnect_token(home: Path) -> str:
+    path = _reconnect_credential_path(home)
+    try:
+        info = path.stat(follow_symlinks=False)
+        if path.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+            return ""
+        value = path.read_text(encoding="utf-8").strip()
+    except (FileNotFoundError, OSError, UnicodeError):
+        return ""
+    return value if TOKEN_RE.fullmatch(value) else ""
+
+
+def _clear_reconnect_token(home: Path) -> None:
+    try:
+        path = _reconnect_credential_path(home)
+        if not path.is_symlink():
+            path.unlink()
+    except OSError:
+        pass
+
+
 def _clear_device_credential(home: Path) -> None:
     try:
         path = _device_credential_path(home)
@@ -587,17 +627,32 @@ class OnboardingManager:
             return self._begin(previous=state)
 
     def _begin(self, previous: dict[str, Any] | None = None) -> dict[str, Any]:
+        form = {
+            "client_id": CLIENT_ID,
+            "scope": SCOPES,
+            "agent_name": resolve_agent_name(),
+        }
+        reconnect = _read_reconnect_token(self.home)
+        if reconnect:
+            # Lets the server reuse this agent (same name, avatar, history).
+            form["reconnect_token"] = reconnect
         try:
             status, value = request_json(
                 self.origin,
                 "/oauth/device_authorization",
-                form={
-                    "client_id": CLIENT_ID,
-                    "scope": SCOPES,
-                    "agent_name": resolve_agent_name(),
-                },
+                form=form,
                 timeout=BEGIN_TIMEOUT_SECONDS,
             )
+            if status == 400 and reconnect:
+                # A server without reconnect support rejects unknown fields.
+                # Ask again as a plain sign-in: a new agent, never a failure.
+                form.pop("reconnect_token")
+                status, value = request_json(
+                    self.origin,
+                    "/oauth/device_authorization",
+                    form=form,
+                    timeout=BEGIN_TIMEOUT_SECONDS,
+                )
         except OnboardingError as exc:
             return self._fail(exc.category)
         if status == 401 or status == 403:
@@ -866,6 +921,7 @@ class OnboardingManager:
             return False
         os.environ[credentials.ENV_KEY] = token
         _clear_device_credential(self.home)
+        _clear_reconnect_token(self.home)
         connected = {
             key: item for key, item in state.items()
             if key not in {"approved", "previous_user_code", "previous_error_class"}
@@ -962,6 +1018,12 @@ def note_auth_failure(rejected: str = "") -> None:
             # An explicit environment key belongs to an advanced setup;
             # never delete what this plugin did not store.
             return
+    try:
+        stored_token = credentials.stored_api_key(home)
+    except (OSError, ValueError):
+        stored_token = ""
+    if stored_token:
+        _save_reconnect_token(home, stored_token)
     try:
         credentials.clear_stored_token(home)
     except (OSError, ValueError):
