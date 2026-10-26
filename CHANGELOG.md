@@ -37,6 +37,7 @@ Fallback MCP package: after **Connected to Substrate.**, the agent offers once t
 
 ## Repository 0.10.0
 
+- Redaction catches more secrets before they are stored: names such as `OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`, `DB_PASSWORD` and `GITHUB_TOKEN`, key shapes (OpenAI/Anthropic `sk-`, AWS `AKIA`, GitHub, Slack, Stripe, Google, JWT, PEM private keys) and passwords in connection strings. The same rules run in every plugin and on the server (contract section 6).
 - `docs/install.md` is the agent-facing install guide (served at `trysubstrate.co/install.md`). README and `docs/installation.md` are plugin-first; stale version labels are fixed.
 - Known host limit: Claude Code shows red "MCP server not connected" or "Unauthorized" hook errors while signed out. The capture hooks are reported by Claude Code and the plugin cannot hide them.
 

@@ -69,13 +69,32 @@ MAX_ARGS_PREVIEW_BYTES = 1024
 
 RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$")
 
+# Contract section 6 (keep in step with agent-api/redaction.mjs; both must pass
+# contract/redaction-fixtures.json). Rule 1: NAME ends in a credential word.
 _TEXT_SECRET_RE = re.compile(
-    r"(?i)(\b(?:authorization|api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*)"
-    r"(?:bearer\s+)?[^\s,;]+"
+    r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*(?:authorization|api[_-]?key|secret(?:[_-]access[_-]key)?|access[_-]?token|token|password|passwd|pwd|private[_-]?key|client[_-]?secret|auth)(?![A-Za-z0-9_])\\?[\"']?\s*(?::|=(?!=))\s*)"
+    r"(?:(?:bearer|basic)\s+)?(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;]+)",
+    re.IGNORECASE,
 )
-_SK_RE = re.compile(r"\bsk_[A-Za-z0-9_-]{8,}\b")
+# Rule 2: PEM private key blocks, passwords in scheme://user:pw@host, and secret shapes.
+_PEM_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))"
+)
+_URL_PASSWORD_RE = re.compile(r"(?<![A-Za-z0-9+.-])([A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s:/@\"']+:)[^\s/\"',;]+(?=@)")
+_SECRET_TOKEN_RES = (
+    re.compile(r"(?<![A-Za-z0-9_])sk_[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_])"),
+    re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])"),
+    re.compile(r"(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{22,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])xox[abprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])(?:rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}"),
+    re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}"),
+)
+# Rule 3: sensitive keys (substring), plus keys ending in auth or pwd.
 _SENSITIVE_KEY_RE = re.compile(
-    r"(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)"
+    r"(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)|(?:auth|pwd)$"
 )
 SAFE_INT = 2 ** 53 - 1
 
@@ -94,8 +113,12 @@ def _clip_utf8(value: str, maximum: int) -> str:
 
 def _redact_text(value: str) -> str:
     value = _clean_unicode(value)
+    value = _PEM_PRIVATE_KEY_RE.sub("[REDACTED]", value)
     value = _TEXT_SECRET_RE.sub(r"\1[REDACTED]", value)
-    return _SK_RE.sub("[REDACTED]", value)
+    value = _URL_PASSWORD_RE.sub(r"\1[REDACTED]", value)
+    for pattern in _SECRET_TOKEN_RES:
+        value = pattern.sub("[REDACTED]", value)
+    return value
 
 
 def _as_text(value: Any) -> str:

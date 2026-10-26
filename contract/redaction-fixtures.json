@@ -32,6 +32,214 @@
     {
       "in": "SECRET: value\ntoken: other",
       "out": "SECRET: [REDACTED]\ntoken: [REDACTED]"
+    },
+    {
+      "in": "OPENAI_API_KEY=sk-test-FAKE1234567890abcdef",
+      "out": "OPENAI_API_KEY=[REDACTED]"
+    },
+    {
+      "in": "export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      "out": "export AWS_SECRET_ACCESS_KEY=[REDACTED]"
+    },
+    {
+      "in": "aws_secret_access_key: abcd1234efgh",
+      "out": "aws_secret_access_key: [REDACTED]"
+    },
+    {
+      "in": "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123",
+      "out": "GITHUB_TOKEN=[REDACTED]"
+    },
+    {
+      "in": "DB_PASSWORD=hunter2 next",
+      "out": "DB_PASSWORD=[REDACTED] next"
+    },
+    {
+      "in": "PGPWD=s3cret",
+      "out": "PGPWD=[REDACTED]"
+    },
+    {
+      "in": "PASSWD=abc123",
+      "out": "PASSWD=[REDACTED]"
+    },
+    {
+      "in": "MY_AUTH: abc123xyz",
+      "out": "MY_AUTH: [REDACTED]"
+    },
+    {
+      "in": "client_secret: \"x9Qq7LmN\"",
+      "out": "client_secret: [REDACTED]"
+    },
+    {
+      "in": "FOO_PRIVATE_KEY='abc def'",
+      "out": "FOO_PRIVATE_KEY=[REDACTED]"
+    },
+    {
+      "in": "x-auth-token: t0k3n",
+      "out": "x-auth-token: [REDACTED]"
+    },
+    {
+      "in": "\"api_key\": \"abc123def456\"",
+      "out": "\"api_key\": [REDACTED]"
+    },
+    {
+      "in": "Authorization: Basic dXNlcjpwYXNz",
+      "out": "Authorization: [REDACTED]"
+    },
+    {
+      "in": "settings.password = p4ss",
+      "out": "settings.password = [REDACTED]"
+    },
+    {
+      "in": "sk-proj-abcdefghijklmnop1234 in text",
+      "out": "[REDACTED] in text"
+    },
+    {
+      "in": "key sk-ant-api03-abcdefghijklmnopqrstuvwxyz here",
+      "out": "key [REDACTED] here"
+    },
+    {
+      "in": "sk-abcdefghijklmnop",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "AKIAIOSFODNN7EXAMPLE",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "creds ASIAABCDEFGHIJKLMNOP end",
+      "out": "creds [REDACTED] end"
+    },
+    {
+      "in": "github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz0123456789",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "gho_abcdefghijklmnopqrstuvwxyz0123456789",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "xoxb-1234567890-abcdefghij",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "pk_live_51HabcdefghijKLMN",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "rk_test_51HabcdefghijKLMN",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "AIzaSyA1234567890abcdefghijklmnopqrstuv",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\nafter",
+      "out": "[REDACTED]\nafter"
+    },
+    {
+      "in": "-----BEGIN PRIVATE KEY-----\nMIIEvQ",
+      "out": "[REDACTED]"
+    },
+    {
+      "in": "postgres://app:s3cr3tPw@db.internal:5432/main",
+      "out": "postgres://app:[REDACTED]@db.internal:5432/main"
+    },
+    {
+      "in": "mongodb+srv://admin:p%40ss@cluster0.example.net/db",
+      "out": "mongodb+srv://admin:[REDACTED]@cluster0.example.net/db"
+    },
+    {
+      "in": "Count the tokens in this prompt.",
+      "out": "Count the tokens in this prompt."
+    },
+    {
+      "in": "max_tokens: 4096",
+      "out": "max_tokens: 4096"
+    },
+    {
+      "in": "token_count = 5",
+      "out": "token_count = 5"
+    },
+    {
+      "in": "tokenizer = BertTokenizer()",
+      "out": "tokenizer = BertTokenizer()"
+    },
+    {
+      "in": "author: Jane Doe",
+      "out": "author: Jane Doe"
+    },
+    {
+      "in": "The auth flow works fine.",
+      "out": "The auth flow works fine."
+    },
+    {
+      "in": "password reset page is at /reset",
+      "out": "password reset page is at /reset"
+    },
+    {
+      "in": "if token == expected: return",
+      "out": "if token == expected: return"
+    },
+    {
+      "in": "run pwd to see the path",
+      "out": "run pwd to see the path"
+    },
+    {
+      "in": "see https://example.com/docs?id=7&page=2",
+      "out": "see https://example.com/docs?id=7&page=2"
+    },
+    {
+      "in": "https://example.com:8080/path",
+      "out": "https://example.com:8080/path"
+    },
+    {
+      "in": "https://user@example.com/x",
+      "out": "https://user@example.com/x"
+    },
+    {
+      "in": "risk-management-strategy-planning",
+      "out": "risk-management-strategy-planning"
+    },
+    {
+      "in": "kebab-sk-long-identifier-name-here",
+      "out": "kebab-sk-long-identifier-name-here"
+    },
+    {
+      "in": "sk-short-123",
+      "out": "sk-short-123"
+    },
+    {
+      "in": "AKIA123 is not a key",
+      "out": "AKIA123 is not a key"
+    },
+    {
+      "in": "ghp_short",
+      "out": "ghp_short"
+    },
+    {
+      "in": "AIzaShort",
+      "out": "AIzaShort"
+    },
+    {
+      "in": "eyJhbGciOiJIUzI1NiJ9 alone",
+      "out": "eyJhbGciOiJIUzI1NiJ9 alone"
+    },
+    {
+      "in": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----",
+      "out": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----"
+    },
+    {
+      "in": "AWS_REGION=us-east-1 PATH=/usr/bin",
+      "out": "AWS_REGION=us-east-1 PATH=/usr/bin"
+    },
+    {
+      "in": "Oauth flow",
+      "out": "Oauth flow"
     }
   ],
   "objects": [
@@ -95,6 +303,40 @@
       "out": {
         "X-Auth-Token": "[REDACTED]",
         "note": "fine"
+      }
+    },
+    {
+      "in": {
+        "FOO_API_KEY": "x",
+        "path": "/a"
+      },
+      "out": {
+        "FOO_API_KEY": "[REDACTED]",
+        "path": "/a"
+      }
+    },
+    {
+      "in": {
+        "author": "Jane",
+        "auth": "basic x",
+        "pwd": "p"
+      },
+      "out": {
+        "author": "Jane",
+        "auth": "[REDACTED]",
+        "pwd": "[REDACTED]"
+      }
+    },
+    {
+      "in": {
+        "note": "token: abc123xyz",
+        "url": "postgres://u:p@h",
+        "msg": "use sk-proj-abcdefghijklmnop1234"
+      },
+      "out": {
+        "note": "token: [REDACTED]",
+        "url": "postgres://u:[REDACTED]@h",
+        "msg": "use [REDACTED]"
       }
     }
   ]
