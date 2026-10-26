@@ -1,6 +1,6 @@
 ---
 description: Sync unsaved turns of this session into Substrate memory.
-allowed-tools: Bash(python3 *) Bash(python *)
+allowed-tools: Bash(python3 "*/scripts/substrate_sync.py" *) Bash(python "*/scripts/substrate_sync.py" *)
 ---
 
 Sync the current session's unsaved turns into Substrate. The sync script reads

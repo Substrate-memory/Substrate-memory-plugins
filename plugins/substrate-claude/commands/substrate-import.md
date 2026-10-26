@@ -1,6 +1,6 @@
 ---
 description: Import past local conversations into Substrate. The script uploads them directly; nothing passes through the chat.
-allowed-tools: Bash(python3 *) Bash(python *) Write
+allowed-tools: Bash(python3 "*/scripts/substrate_sync.py" *) Bash(python "*/scripts/substrate_sync.py" *)
 ---
 
 `SYNC` means `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude`

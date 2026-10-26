@@ -1,6 +1,6 @@
 ---
 description: Sign in to Substrate, verify, and offer to import past conversations, in one go.
-allowed-tools: Bash(python3 *) Bash(python *)
+allowed-tools: Bash(python3 "*/scripts/substrate_sync.py" *) Bash(python "*/scripts/substrate_sync.py" *)
 ---
 
 Run this end to end. Pause only for the user's browser approval and their import

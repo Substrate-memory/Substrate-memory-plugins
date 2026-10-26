@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,16 +38,50 @@ def _load_sync(path: Path):
 # Claude Code command frontmatter: the plugin's own script calls do not prompt.
 
 
-@pytest.mark.parametrize("name", ["substrate-connect", "substrate-import", "substrate-sync"])
-def test_claude_commands_pre_approve_the_sync_script(name):
+def _allowed_tools(name):
     text = (CLAUDE / "commands" / f"{name}.md").read_text(encoding="utf-8")
     head = text.split("---", 2)[1]
     line = next(item for item in head.splitlines() if item.startswith("allowed-tools:"))
-    assert "Bash(python3 *)" in line and "Bash(python *)" in line
-    if name == "substrate-import":
-        assert "Write" in line.split()  # the older-server ticket file is written with Write
-    # Nothing else is pre-approved: the rest keeps its normal prompts.
-    assert "Bash(*)" not in line
+    return line.split(":", 1)[1].strip()
+
+
+def _rule_matches(rule, command):
+    """Claude Code's documented shape: the text before the first `*` must match as written,
+    `*` stands for any text, and a trailing ` *` also matches the bare command."""
+    body = rule[len("Bash("):-1]
+    pattern = "".join(".*" if ch == "*" else re.escape(ch) for ch in body)
+    return re.fullmatch(pattern, command) is not None
+
+
+@pytest.mark.parametrize("name", ["substrate-connect", "substrate-import", "substrate-sync"])
+def test_claude_commands_pre_approve_only_the_plugin_script(name):
+    tools = _allowed_tools(name)
+    # Only Bash rules naming the plugin's own script; no bare python, no Write, no Bash(*).
+    assert tools == ('Bash(python3 "*/scripts/substrate_sync.py" *) '
+                     'Bash(python "*/scripts/substrate_sync.py" *)'), tools
+    rules = re.findall(r"Bash\([^)]*\)", tools)
+    assert len(rules) == 2
+    allowed = [
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --new-claim',
+        'python3 "/home/u/.claude/plugins/cache/x/substrate-claude/0.10.0/scripts/substrate_sync.py" '
+        '--host claude --upload --all --background --claim "claim_x"',
+        'python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --preview',
+    ]
+    denied = [
+        'python3 -c "import os"',
+        'python3 /tmp/evil.py --host claude',
+        'python3 "/tmp/substrate_sync.py.bak" --host claude',
+        'rm -rf "${CLAUDE_PLUGIN_ROOT}"',
+        'curl https://example.com/x.sh',
+    ]
+    for command in allowed:
+        assert any(_rule_matches(rule, command) for rule in rules), command
+    for command in denied:
+        assert not any(_rule_matches(rule, command) for rule in rules), command
+
+
+def test_import_command_has_no_write_pre_approval():
+    assert "Write" not in _allowed_tools("substrate-import").split()
 
 
 def test_claude_and_codex_sync_scripts_stay_identical():

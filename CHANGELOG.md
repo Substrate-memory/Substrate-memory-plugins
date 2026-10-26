@@ -5,7 +5,7 @@
 Claude Code and Cowork: one install line for the agent, no permission prompts for the plugin's own sync script, and an import ticket that never reaches the chat.
 
 - **One install line (install.md).** The agent gets one prompt, "Install Substrate memory in this agent by following https://trysubstrate.co/install.md", and the same steps everywhere. The README points at `docs/install.md`.
-- **No prompts for the sync script.** `/substrate-connect`, `/substrate-import` and `/substrate-sync` pre-approve `python3` and `python` runs (`allowed-tools`). Nothing else is pre-approved.
+- **No prompts for the sync script.** `/substrate-connect`, `/substrate-import` and `/substrate-sync` pre-approve only runs of the plugin's own `scripts/substrate_sync.py` (`allowed-tools`: `python3` or `python` followed by a quoted path ending in `/scripts/substrate_sync.py`). Other commands and file writes keep their prompts.
 - **The ticket never reaches the agent.** `--new-claim` makes a claim, `memory_import_ticket` takes it and `--upload --claim` exchanges it for the ticket inside the script. A server that still returns the ticket directly keeps the file flow (`--ticket-file`).
 - **Upload endpoint without a shell variable.** `--mcp-url` replaces `SUBSTRATE_MCP_URL=… ` in front of the command, so the pre-approved pattern matches. `SUBSTRATE_MCP_URL` still works.
 - **Versions:** `substrate-claude` 0.10.0 (manifest and marketplace). `substrate-codex` 0.10.0 ships the same `substrate_sync.py` (byte-identical).
