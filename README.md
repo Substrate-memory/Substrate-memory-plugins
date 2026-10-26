@@ -31,13 +31,17 @@ Each package is a thin client. The server owns storage, ranking, redaction check
 
 ## Install
 
-Paste this request into the agent you want to connect:
+Paste this into the agent you want to connect:
+
+```text
+Install Substrate memory in this agent by following https://trysubstrate.co/install.md
+```
+
+The agent follows [docs/install.md](docs/install.md) (the same file served at that link). It identifies its host and installs the right package. From this repository, the same request works too:
 
 ```text
 Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins
-```
-
-The agent identifies its host and installs the right package. The flow is the same everywhere: **Install → Sign in → Review → Approve connection → Connected to Substrate.** Only report **Connected to Substrate.** after an authenticated memory smoke test (`memory_search`) succeeds. The browser's **Connection approved** state is consent only; it is not proof that the agent finished connecting. Never paste or request API keys, manual tokens, or client secrets.
+``` The flow is the same everywhere: **Install → Sign in → Review → Approve connection → Connected to Substrate.** Only report **Connected to Substrate.** after an authenticated memory smoke test (`memory_search`) succeeds. The browser's **Connection approved** state is consent only; it is not proof that the agent finished connecting. Never paste or request API keys, manual tokens, or client secrets.
 
 | Your host | Package the agent installs | Guide |
 |---|---|---|
@@ -85,7 +89,7 @@ Claude Code and Codex upload straight from the package script with a short-lived
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.9.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
+| v0.10.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
 
 Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0 or newer; you are on X. It should work; tell us if not.* Newer Hermes versions get no note. See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
 
@@ -96,6 +100,7 @@ Known limits, stated honestly:
 - If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
 - Plugin hooks in Codex must be trusted once via `/hooks`.
 - Cowork needs a new session after install before tools appear.
+- Claude Code can show red "MCP server not connected" or "Unauthorized" hook errors while you are signed out or after a removed sign-in. Claude Code reports these from the plugin's capture hooks and the plugin cannot hide them. Reconnect with `/substrate-claude:substrate-connect`.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix and history.
 

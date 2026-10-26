@@ -1,5 +1,42 @@
 # Changelog
 
+## substrate-claude 0.10.0
+
+Claude Code and Cowork: one install line for the agent, no permission prompts for the plugin's own sync script, and an import ticket that never reaches the chat.
+
+- **One install line (install.md).** The agent gets one prompt, "Install Substrate memory in this agent by following https://trysubstrate.co/install.md", and the same steps everywhere. The README points at `docs/install.md`.
+- **No prompts for the sync script.** `/substrate-connect`, `/substrate-import` and `/substrate-sync` pre-approve `python3` and `python` runs (`allowed-tools`). Nothing else is pre-approved.
+- **The ticket never reaches the agent.** `--new-claim` makes a claim, `memory_import_ticket` takes it and `--upload --claim` exchanges it for the ticket inside the script. A server that still returns the ticket directly keeps the file flow (`--ticket-file`).
+- **Upload endpoint without a shell variable.** `--mcp-url` replaces `SUBSTRATE_MCP_URL=… ` in front of the command, so the pre-approved pattern matches. `SUBSTRATE_MCP_URL` still works.
+- **Versions:** `substrate-claude` 0.10.0 (manifest and marketplace). `substrate-codex` 0.10.0 ships the same `substrate_sync.py` (byte-identical).
+
+## substrate-codex 0.10.0
+
+Codex: the hooks are installed before you are asked to approve them, the import offer is part of the same reply, and the ticket flow matches Claude Code.
+
+- **Hook order.** After sign-in the agent runs the hook installer at once, offers the import, and only then asks you to approve the hooks in `/hooks`. In the new session, "continue" is enough.
+- **Import.** The same claim-based upload as substrate-claude 0.10.0, with the file fallback for older servers.
+- **Versions:** `substrate-codex` 0.10.0 (manifests and marketplace).
+
+## substrate-hermes 0.10.0
+
+Hermes: a reconnect keeps the same agent when the server supports it.
+
+- **Reconnect (same agent).** The device login sends the last revoked credential as `reconnect_token`, so an approval in the same tenant reuses the agent (name, avatar, import history). The token is kept owner-private and removed once a new connection succeeds. A server that rejects the extra field (400) gets the same request again without it, so sign-in always works.
+- **Versions:** `substrate-hermes` 0.10.0, matching the repository `VERSION`.
+
+## substrate-mcp 0.10.0
+
+Fallback MCP package: after **Connected to Substrate.**, the agent offers once to save what it already knows about you.
+
+- **What the agent already knows.** The offer is "I can save what I already know about you to Substrate. Want me to?" On yes the agent lists people, projects, decisions, preferences and open items, and imports them after you confirm, as one document (`memory_import`). On a server that rejects documents it saves the confirmed facts with `memory_remember`.
+- **Versions:** `substrate-mcp` 0.10.0 (manifest and marketplace).
+
+## Repository 0.10.0
+
+- `docs/install.md` is the agent-facing install guide (served at `trysubstrate.co/install.md`). README and `docs/installation.md` are plugin-first; stale version labels are fixed.
+- Known host limit: Claude Code shows red "MCP server not connected" or "Unauthorized" hook errors while signed out. The capture hooks are reported by Claude Code and the plugin cannot hide them.
+
 ## substrate-claude 0.9.2
 
 Claude Code and Cowork: an honest connect check, a quiet note when the connection is removed, the import ticket kept out of commands, and a clearer import offer (CC-03, CC-05, CC-07, CC-09, CC-10).
