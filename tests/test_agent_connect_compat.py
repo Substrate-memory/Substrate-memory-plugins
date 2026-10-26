@@ -107,7 +107,10 @@ class _ClaimServer(BaseHTTPRequestHandler):
             self._send(404, {"error": "not_found"})
             return
         self.seen.append(json.loads(body.decode("utf-8")))
-        if self.mode == "new" and self.seen[-1].get("claim") == CLAIM:
+        if self.mode == "limited_once" and len(self.seen) == 1:
+            self._send(429, {"error": "rate_limited"})
+            return
+        if self.mode in ("new", "limited_once") and self.seen[-1].get("claim") == CLAIM:
             self._send(200, {"ticket": TICKET, "mcp_url": "http://127.0.0.1/mcp",
                              "expires_at": "2099-01-01T00:00:00Z"})
         else:
@@ -154,6 +157,20 @@ def test_claim_is_exchanged_for_the_ticket_on_new_server(claim_server):
     origin = "http://127.0.0.1:%d" % server.server_port
     assert sync._claim_ticket(origin + "/mcp", CLAIM) == TICKET
     assert handler.seen == [{"claim": CLAIM}]
+
+
+def test_rate_limited_claim_is_retried(claim_server, monkeypatch):
+    server, handler = claim_server
+    handler.mode = "limited_once"
+    sync = _load_sync(CLAUDE / "scripts" / "substrate_sync.py")
+    monkeypatch.setattr(sync, "_sleep", lambda seconds: None)
+    origin = "http://127.0.0.1:%d/mcp" % server.server_port
+    assert _with(sync, origin) == TICKET
+    assert len(handler.seen) == 2
+
+
+def _with(sync, origin):
+    return sync._with_retries(lambda: sync._claim_ticket(origin, CLAIM))
 
 
 def test_wrong_or_spent_claim_is_refused(claim_server):

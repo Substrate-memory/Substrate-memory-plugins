@@ -1889,8 +1889,8 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
         except Fatal:
             print(json.dumps({"error": "claim_failed", "message":
                               "The import claim was not accepted (it expires after 10 minutes and "
-                              "works once). Ask for a new ticket with memory_import_ticket and run "
-                              "the upload again."}))
+                              "works once; a server restart drops pending claims). Run --new-claim again, call "
+                              "memory_import_ticket with the new claim, and run the upload once more."}))
             return 2
     else:
         # The ticket file is read first, so it is gone whatever happens next.

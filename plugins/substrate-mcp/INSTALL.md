@@ -49,7 +49,7 @@ After **Connected to Substrate.**, the agent asks exactly once:
 I can save what I already know about you to Substrate. Want me to?
 ```
 
-On yes, the agent searches its own memory and past chats (only what this host lets it read) for people, projects, decisions, preferences and open items, shows the list, and imports it only after the user confirms. The import is one `memory_import` document item (`kind: "document"`, a title, markdown text, and a source such as "Claude memory"). If the server rejects document items, the agent saves the confirmed facts with `memory_remember` instead. If the user says no, it does not ask again. Never import secrets, API keys, tokens, passwords, or private credentials.
+On yes, the agent searches its own memory and past chats (only what this host lets it read) for people, projects, decisions, preferences and open items, shows the list, and imports it only after the user confirms. The import is one `memory_import` document item (`kind: "document"`, a title, markdown text of at most 160 KiB, and a source such as "Claude memory"). If a `[substrate]` note in the agent's context already makes this offer, that note is the offer: it is not repeated. If the server rejects document items, the agent saves the confirmed facts with `memory_remember` instead. If the user says no, it does not ask again. Never import secrets, API keys, tokens, passwords, or private credentials.
 
 ## Legacy plugins
 

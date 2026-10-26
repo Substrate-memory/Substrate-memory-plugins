@@ -21,7 +21,9 @@ Do not report **Connection approved** as **Connected to Substrate.** without a s
    people, projects, decisions, preferences and open items. Show the list and
    change nothing until the user confirms it. Then call `memory_import` with one
    document item: `{"kind": "document", "title": "<short title>", "text": "<the
-   confirmed list, markdown>", "source": "<your app name> memory"}`. If the server
+   confirmed list, markdown, at most 160 KiB>", "source": "<your app name> memory"}`.
+   If a `[substrate]` note in your context already makes this offer, that is
+   this offer: follow it, and do not offer twice. If the server
    rejects the document item (an older server), save the confirmed facts with
    `memory_remember`, one call each. If the user says no, do not ask again. Never
    import secrets.

@@ -210,6 +210,29 @@ Output:
 
 Text content: a one-line summary, e.g. `Imported 12 items (10 stored, 2 duplicate).`
 
+**Document items (MCP agents, not import tickets).** An item may also be
+`{kind: "document", title, text, source, created_at?}`:
+
+- `title`: 1–200 code points, not blank. `source`: 1–80 code points, not blank
+  (for example `"claude.ai memory"`). `created_at`: optional ISO 8601.
+- `text`: markdown, at most 160 KiB (163840 bytes) of UTF-8. The limit is 160 KiB,
+  not 200, so the JSON-escaped body still fits the 256 KiB `/mcp` request limit.
+- The document goes through the same pipeline as an uploaded document:
+  extraction, citations, Wiki, the Sources list, delete as one unit, and
+  redaction (section 6). Its source label shows as, for example, "From claude.ai
+  memory · 26 Oct".
+- Dedupe: the same agent, title and text (sha256) returns `action: "duplicate"`.
+- Non-ticket imports, documents included, appear in the agent's import history.
+- Through an import ticket (4.9) a document item is rejected on its own with
+  `error: "forbidden"`.
+
+**One-time import offer (MCP agents only).** An agent whose `integration` is
+`mcp` (the agent's `integration` value, with no hooks) gets one `[substrate]` note appended to the
+result of its first successful `memory_search` after connecting. The note asks the
+agent to offer once to save what it already knows about the user, and to mention
+the plugin when the user also uses Claude Code, Codex or Hermes. It is never
+repeated and never shown to plugin agents.
+
 ### 4.8 `memory_import_status` (scope `retrieve`)
 
 Input: `{session_id?: ≤512, batch_id?: hex}` (at least one).
@@ -248,6 +271,21 @@ Output (`structuredContent`; text is the same JSON):
 - Limits are `memory_import`'s (64 items, 262144-byte body). Calling the tool
   again mints a fresh ticket. On `401` the script stops and asks the agent for a
   new one; re-sending is safe (4.7 dedupe).
+
+**Ticket claim (keeps the ticket out of the chat).** `memory_import_ticket` takes
+an optional `claim` matching `^[A-Za-z0-9_-]{32,128}$`.
+
+- With `claim`: the server binds a fresh ticket to sha256(claim) for 10 minutes,
+  single use. The result is `{contract_version: 2, claim_pending: true, claim_url,
+  mcp_url, expires_at}` and carries **no** `ticket`.
+- `POST <origin>/mcp/import-ticket/claim` with JSON `{"claim": "…"}` (no auth,
+  rate-limited, body at most 1 KiB) returns `200 {ticket, mcp_url, expires_at}`
+  once. Unknown, used or expired claims return `404`; a non-POST returns `405`;
+  too many requests return `429`.
+- Claims live in server memory. A server restart drops pending claims; the client
+  mints a new claim and retries once.
+- Without `claim`, the result is unchanged (it returns `ticket`). Older clients
+  keep working.
 
 ## 5. Ledger envelope (shared with CONTRACT.md §5, unchanged)
 

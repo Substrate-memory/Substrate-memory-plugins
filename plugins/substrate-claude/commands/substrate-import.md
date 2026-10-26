@@ -44,7 +44,9 @@ time and `--session <id>` (repeat it) instead of `--all`.
 **Not now**: run `SYNC --record-decision no` and say: "OK. Ask me to import your
 past conversations any time."
 
-If the status says the ticket expired, or the upload reports `claim_failed`, get
-a new ticket and run the same upload again with a new claim; conversations
-already imported are skipped. A Cowork cloud session has no local history: say
-there is nothing to import here.
+If the status says the ticket expired, get a new ticket and run the same upload
+again. If the upload reports `claim_failed` (the claim was used, expired, or the
+server restarted), retry once: run `SYNC --new-claim` again, call
+`memory_import_ticket` with the new claim, and run the upload once more.
+Conversations already imported are skipped. A Cowork cloud session has no local
+history: say there is nothing to import here.

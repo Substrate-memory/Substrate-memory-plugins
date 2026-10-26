@@ -83,7 +83,9 @@ record it and never ask again. Skip on Cowork and when nothing is readable.
 search your own memory and past chats for people, projects, decisions,
 preferences and open items. Show the list. After the user confirms, call
 `memory_import` with one document item: `kind` "document", a short `title`,
-the list as markdown `text`, and `source` set to your app name + " memory".
+the list as markdown `text` (at most 160 KiB), and `source` set to your app name
++ " memory". If a `[substrate]` note in your context already makes this offer,
+that is this offer: follow it, and do not offer twice.
 If the server rejects the document, save the confirmed facts with
 `memory_remember`, one call each. Never import secrets.
 
