@@ -536,7 +536,7 @@ def test_decided_but_not_connected_still_sets_up(env) -> None:
 
 def test_record_connected_is_idempotent(env, capsys) -> None:
     code, rows = main_json(capsys, "--host", "claude", "--record-connected")
-    assert rows == [{"connected": True}]
+    assert rows == [{"connected": True, "reconnected": False}]
     first = json.loads((env["data"] / "import-offer.json").read_text())["connected_at"]
     main_json(capsys, "--host", "claude", "--record-connected")
     assert json.loads((env["data"] / "import-offer.json").read_text())["connected_at"] == first
@@ -1525,7 +1525,7 @@ def test_removed_connection_notice_once_per_session(env) -> None:
     assert proc.returncode == 0 and proc.stderr == ""
     text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
     assert "connection on this computer was removed" in text
-    assert "/substrate-claude:substrate-connect" in text
+    assert "open /mcp, select plugin:substrate-claude:substrate-memory" in text
     assert "do not mention hook errors" in text
     assert _offer(env, stdin='{"session_id": "s1"}').stdout == ""
     assert "removed" in _offer(env, stdin='{"session_id": "s2"}').stdout

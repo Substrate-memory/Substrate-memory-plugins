@@ -283,3 +283,37 @@ def test_install_prompt_session_is_never_imported(tmp_path) -> None:
     plain.write_text(other_line + "\n" + assistant_line + "\n", encoding="utf-8")
     assert sync._has_install_prompt(str(setup)) is True
     assert sync._has_install_prompt(str(plain)) is False
+
+
+# ---------------------------------------------------------------------------
+# Hook-driven setup runs the connect and import skills (the model can call the Skill
+# tool; it cannot run a slash command). Skills and commands carry the same steps.
+
+
+def _body(path: Path) -> str:
+    return path.read_text(encoding="utf-8").split("---\n", 2)[2]
+
+
+@pytest.mark.parametrize("name", ["substrate-connect", "substrate-import"])
+def test_claude_skill_and_command_share_the_same_steps(name: str) -> None:
+    skill = CLAUDE / "skills" / name / "SKILL.md"
+    command = CLAUDE / "commands" / f"{name}.md"
+    assert _body(skill) == _body(command)
+    head = skill.read_text(encoding="utf-8").split("---\n", 2)[1]
+    assert head.startswith(f"name: {name}\n")
+
+
+def test_hook_text_invokes_the_skills_first() -> None:
+    setup = _text_of_setup()
+    assert "Skill tool with skill `substrate-claude:substrate-connect`" in setup
+    import_offer = sync._offer_text("claude", "/tmp/x", "s1", None)
+    assert "Skill tool with skill `substrate-claude:substrate-import`" in import_offer
+
+
+def test_record_connected_reports_a_reconnect_once(tmp_path, capsys) -> None:
+    data = str(tmp_path / "d")
+    sync._mark_disconnected(data)
+    assert sync.main(["--host", "claude", "--data-dir", data, "--record-connected"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"connected": True, "reconnected": True}
+    assert sync.main(["--host", "claude", "--data-dir", data, "--record-connected"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"connected": True, "reconnected": False}

@@ -38,11 +38,20 @@ def _load_sync(path: Path):
 # Claude Code command frontmatter: the plugin's own script calls do not prompt.
 
 
-def _allowed_tools(name):
-    text = (CLAUDE / "commands" / f"{name}.md").read_text(encoding="utf-8")
-    head = text.split("---", 2)[1]
-    line = next(item for item in head.splitlines() if item.startswith("allowed-tools:"))
-    return line.split(":", 1)[1].strip()
+def _allowed_tools(name, folder="commands"):
+    """The allowed-tools entries as one space-joined string (a YAML list, or a plain string)."""
+    text = (CLAUDE / folder / (f"{name}.md" if folder == "commands" else f"{name}/SKILL.md")).read_text(encoding="utf-8")
+    lines = text.split("---", 2)[1].splitlines()
+    start = next(i for i, item in enumerate(lines) if item.startswith("allowed-tools:"))
+    value = lines[start].split(":", 1)[1].strip()
+    if value:
+        return value
+    items = []
+    for item in lines[start + 1:]:
+        if not item.startswith("  - "):
+            break
+        items.append(item[4:].strip().strip("'\""))
+    return " ".join(items)
 
 
 def _rule_matches(rule, command):
@@ -65,9 +74,13 @@ MCP_TOOLS = {
 }
 
 
-@pytest.mark.parametrize("name", ["substrate-connect", "substrate-import", "substrate-sync"])
-def test_claude_commands_pre_approve_only_the_plugin_script(name):
-    tools = _allowed_tools(name)
+@pytest.mark.parametrize("folder,name", [
+    ("commands", "substrate-connect"), ("commands", "substrate-import"),
+    ("skills", "substrate-connect"), ("skills", "substrate-import"),
+    ("commands", "substrate-sync"),
+])
+def test_claude_commands_pre_approve_only_the_plugin_script(folder, name):
+    tools = _allowed_tools(name, folder)
     rules = re.findall(r"Bash\([^)]*\)", tools)
     # Only Bash rules naming the plugin's own script, for the listed interpreters; no Write, no Bash(*).
     assert set(rules) == EXPECTED_BASH, sorted(set(rules) ^ EXPECTED_BASH)

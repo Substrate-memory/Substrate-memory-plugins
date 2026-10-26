@@ -16,10 +16,11 @@ from a claude.ai connector and do not count: install the plugin anyway.
 
 Work out which agent you are. Install one copy only.
 
-**Claude Code.** Skip if `claude plugin list --json` shows `substrate-claude@…`.
+**Claude Code.** Run exactly these two commands in one Bash call. Do not inspect
+the marketplace, the plugin files or the manifests first. If `claude plugin list
+--json` already shows `substrate-claude@…`, skip the call.
 ```
-claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
-claude plugin install substrate-claude@substrate-marketplace
+claude plugin marketplace add Substrate-memory/Substrate-memory-plugins && claude plugin install substrate-claude@substrate-marketplace
 ```
 Then say exactly: "Installed. Type /reload-plugins, then say continue." The
 plugin carries on from the next message: sign-in, check, import offer.

@@ -1,6 +1,22 @@
 ---
 description: Sign in to Substrate, verify, and offer to import past conversations, in one go.
-allowed-tools: Bash(python3 "*/scripts/substrate_sync.py" *) Bash(python3 */scripts/substrate_sync.py *) Bash(python "*/scripts/substrate_sync.py" *) Bash(python */scripts/substrate_sync.py *) Bash(/usr/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/usr/bin/python3 */scripts/substrate_sync.py *) Bash(/usr/bin/python "*/scripts/substrate_sync.py" *) Bash(/usr/bin/python */scripts/substrate_sync.py *) Bash(/usr/local/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/usr/local/bin/python3 */scripts/substrate_sync.py *) Bash(/opt/homebrew/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/opt/homebrew/bin/python3 */scripts/substrate_sync.py *) ToolSearch mcp__plugin_substrate-claude_substrate-memory__authenticate mcp__plugin_substrate-claude_substrate-memory__memory_search mcp__plugin_substrate-claude_substrate-memory__memory_import_status
+allowed-tools:
+  - 'Bash(python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(python3 */scripts/substrate_sync.py *)'
+  - 'Bash(python "*/scripts/substrate_sync.py" *)'
+  - 'Bash(python */scripts/substrate_sync.py *)'
+  - 'Bash(/usr/bin/python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/usr/bin/python3 */scripts/substrate_sync.py *)'
+  - 'Bash(/usr/bin/python "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/usr/bin/python */scripts/substrate_sync.py *)'
+  - 'Bash(/usr/local/bin/python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/usr/local/bin/python3 */scripts/substrate_sync.py *)'
+  - 'Bash(/opt/homebrew/bin/python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/opt/homebrew/bin/python3 */scripts/substrate_sync.py *)'
+  - ToolSearch
+  - mcp__plugin_substrate-claude_substrate-memory__authenticate
+  - mcp__plugin_substrate-claude_substrate-memory__memory_search
+  - mcp__plugin_substrate-claude_substrate-memory__memory_import_status
 ---
 
 Run this end to end. Pause only for the user's browser approval and their import
@@ -20,13 +36,19 @@ the plugin handles the import.
 
 1. **Connected already?** Call the plugin's `memory_search` with a short, non-secret
    query. Any successful result, even empty, counts: say
-   **Connected to Substrate.**, run `SYNC --record-connected`, and go to step 4.
+   run `SYNC --record-connected`. Then say **Connected to Substrate.**, or
+   **Reconnected to Substrate.** when its output has `"reconnected": true` (this
+   computer was disconnected before). Go to step 4.
 2. **Installed but not signed in.** "MCP server … not connected" hook errors, or the
    plugin's tool reporting "needs authentication", mean the plugin is installed but
    not signed in. Do not install another copy, and do not say Connected.
 3. **Sign in now.** Call the Substrate `authenticate` tool (named like
    `mcp__plugin_substrate-claude_substrate-memory__authenticate`). If it is not
-   loaded, load it first with ToolSearch (`select:` that name). If it still does not
+   loaded, load it first with ToolSearch (`select:` that name). If the server is listed
+   as disabled, say exactly: "Open /mcp, select plugin:substrate-claude:substrate-memory,
+   choose Enable if shown, then Authenticate." If Authenticate is not offered after that,
+   say: "Open /mcp, select plugin:substrate-claude:substrate-memory, then choose
+   Re-authenticate or Clear authentication, then Authenticate." If it still does not
    exist, say so in one line and ask the user to run `/mcp`, choose
    plugin:substrate-claude:substrate-memory, Authenticate, and say continue; do not
    keep searching. In your reply,
@@ -55,7 +77,9 @@ the plugin handles the import.
    in plain words, with the count and range from its output:
    *I found N past conversations on this computer (T turns, FIRST to LAST).
    Import them into Substrate? **Import all** / **Let me pick** / **Not now***
-5. Act on the answer with `/substrate-claude:substrate-import`.
+5. Act on the answer by invoking the Skill tool with skill `substrate-claude:substrate-import`
+   (its permissions apply to that turn). If the Skill tool is not available, run
+   `/substrate-claude:substrate-import`.
 
 **Account note.** This computer already imported these conversations, but the
 connected account may be a different one. Call `memory_import_status` with no

@@ -988,6 +988,25 @@ def _record_connected(data_dir: str) -> None:
         _write_json(path, state)
 
 
+def _mark_disconnected(data_dir: str) -> None:
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    if not state.get("disconnected_at"):
+        state["disconnected_at"] = _utc_now()
+        _write_json(path, state)
+
+
+def _take_disconnected(data_dir: str) -> bool:
+    """True once when this computer had been disconnected (a reconnect); clears the marker."""
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    if not state.get("disconnected_at"):
+        return False
+    state.pop("disconnected_at", None)
+    _write_json(path, state)
+    return True
+
+
 def _claude_mcp_signed_in() -> bool:
     """True when Claude Code holds an MCP OAuth credential for the Substrate server.
 
@@ -1227,7 +1246,9 @@ def _offer_text(host: str, data_dir: str, session_id: str,
         offer = ("run `SYNC --preview` and say its conversation count and date range, then "
                  "Import all / Let me pick / Not now")
     return (
-        "[substrate] Import offer pending (asked once per computer). Ignore this note until "
+        "[substrate] Import offer pending (asked once per computer). When the user chooses, invoke "
+        "the Skill tool with skill `substrate-claude:substrate-import` and follow it; its permissions "
+        "apply to that turn. Ignore this note until "
         "the Substrate memory tools work in this session. Once the plugin's own "
         "`%(search)s` has succeeded and you have said \"Connected to Substrate.\", in that same "
         "reply and without waiting for the user, %(offer)s. SYNC means: `%(base)s`.\n"
@@ -1254,8 +1275,9 @@ def _disconnect_text() -> str:
         "[substrate] The Substrate connection on this computer was removed. Answer the user's "
         "request normally without Substrate memory. Do not search Notion, Drive, Gmail or other "
         "apps on your own because of this, and do not mention hook errors. In one short line, "
-        "once in this session, tell the user: Substrate is disconnected on this computer; to "
-        "reconnect, run /substrate-claude:substrate-connect."
+        "once in this session, tell the user: Substrate is disconnected on this computer. To "
+        "reconnect: open /mcp, select plugin:substrate-claude:substrate-memory, choose Enable if "
+        "shown, then Authenticate."
     )
 
 
@@ -1269,17 +1291,23 @@ def _setup_text(host: str, data_dir: str, session_id: str,
                      "mcp__claude_ai_*) do not prove this plugin is connected.")
     text = (
         "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
-        "reply, before anything else, in a few short lines. A bare \"continue\", \"done\", "
+        "reply, before anything else, in a few short lines. First invoke the Skill tool with skill "
+        "`substrate-claude:substrate-connect` and follow it: its permissions apply to this turn. If "
+        "the Skill tool is not available, follow the steps below. A bare \"continue\", \"done\", "
         "\"ok\" or \"approved\" from the user just means: carry on with Substrate setup. Do not "
         "comment on it or ask what to work on. SYNC means: `%(base)s`.\n"
         "1. Check the connection with `%(search)s` (load it with ToolSearch if it is deferred), "
         "a short, non-secret query.%(connector)s If that call works (even empty): say "
-        "\"Connected to Substrate.\" and run `SYNC --record-connected`. Say \"Connected\" only "
+        "run `SYNC --record-connected`, then say \"Connected to Substrate.\" (or \"Reconnected to "
+        "Substrate.\" when it prints \"reconnected\": true). Say \"Connected\" only "
         "after that call succeeds. If a \"[substrate] Offer this once\" note appears, ignore it: "
         "this is the plugin, and the plugin handles the import.\n"
         "2. If the plugin's tool is missing or fails with \"not connected\", \"needs "
         "authentication\" or \"unauthorized\" (or only an `authenticate` tool for substrate-memory "
-        "exists): if that tool is not loaded, load it with ToolSearch first. Call it. In your reply, paste the full sign-in URL it returns "
+        "exists): if that tool is not loaded, load it with ToolSearch first. If the server is listed "
+        "as disabled, or Claude Code says it is not connected, say exactly: \"Open /mcp, select "
+        "plugin:substrate-claude:substrate-memory, choose Enable if shown, then Authenticate.\" "
+        "Then call the tool. In your reply, paste the full sign-in URL it returns "
         "as plain text (the user cannot see tool output), then say: \"Open this link, sign in and "
         "choose Approve connection. I'll continue automatically.\" Paste the link again whenever "
         "the user says they cannot see it. If the result has no link, say so and ask the user to "
@@ -1303,7 +1331,9 @@ def _setup_text(host: str, data_dir: str, session_id: str,
                           "then Import all / Let me pick / Not now")
         text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
                  "they choose, follow /substrate-claude:substrate-import (or $substrate-import); "
-                 "the import ticket never goes in a command or in your reply." % offer_text)
+                 "the import ticket never goes in a command or in your reply. For the user's choice, invoke "
+                 "the Skill tool with skill `substrate-claude:substrate-import` (its permissions apply to "
+                 "that turn)." % offer_text)
     return text
 
 
@@ -1391,6 +1421,7 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
         if connected and _signed_out_locally(host):
             # Removed on this computer after it worked: one quiet line per session.
             if _notice_once(data_dir, session_id):
+                _mark_disconnected(data_dir)
                 _emit_context(_disconnect_text())
             return 0
         if connected and decided:
@@ -2146,8 +2177,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(json.dumps({"paused": max(0.0, min(args.pause, 60.0))}))
         return 0
     if args.record_connected:
+        # "reconnected": the disconnect notice ran on this computer before this successful check.
+        reconnected = _take_disconnected(data_dir)
         _record_connected(data_dir)
-        print(json.dumps({"connected": True}))
+        print(json.dumps({"connected": True, "reconnected": reconnected}))
         return 0
     if args.record_decision:
         _record_decision(data_dir, args.record_decision)

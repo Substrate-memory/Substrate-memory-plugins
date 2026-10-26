@@ -1,6 +1,22 @@
 ---
 description: Import past local conversations into Substrate. The script uploads them directly; nothing passes through the chat.
-allowed-tools: Bash(python3 "*/scripts/substrate_sync.py" *) Bash(python3 */scripts/substrate_sync.py *) Bash(python "*/scripts/substrate_sync.py" *) Bash(python */scripts/substrate_sync.py *) Bash(/usr/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/usr/bin/python3 */scripts/substrate_sync.py *) Bash(/usr/bin/python "*/scripts/substrate_sync.py" *) Bash(/usr/bin/python */scripts/substrate_sync.py *) Bash(/usr/local/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/usr/local/bin/python3 */scripts/substrate_sync.py *) Bash(/opt/homebrew/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/opt/homebrew/bin/python3 */scripts/substrate_sync.py *) ToolSearch mcp__plugin_substrate-claude_substrate-memory__memory_import_ticket mcp__plugin_substrate-claude_substrate-memory__memory_import_status mcp__plugin_substrate-claude_substrate-memory__memory_search
+allowed-tools:
+  - 'Bash(python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(python3 */scripts/substrate_sync.py *)'
+  - 'Bash(python "*/scripts/substrate_sync.py" *)'
+  - 'Bash(python */scripts/substrate_sync.py *)'
+  - 'Bash(/usr/bin/python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/usr/bin/python3 */scripts/substrate_sync.py *)'
+  - 'Bash(/usr/bin/python "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/usr/bin/python */scripts/substrate_sync.py *)'
+  - 'Bash(/usr/local/bin/python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/usr/local/bin/python3 */scripts/substrate_sync.py *)'
+  - 'Bash(/opt/homebrew/bin/python3 "*/scripts/substrate_sync.py" *)'
+  - 'Bash(/opt/homebrew/bin/python3 */scripts/substrate_sync.py *)'
+  - ToolSearch
+  - mcp__plugin_substrate-claude_substrate-memory__memory_import_ticket
+  - mcp__plugin_substrate-claude_substrate-memory__memory_import_status
+  - mcp__plugin_substrate-claude_substrate-memory__memory_search
 ---
 
 `SYNC` means `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude`
