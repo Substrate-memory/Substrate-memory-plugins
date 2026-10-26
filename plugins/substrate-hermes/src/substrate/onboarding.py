@@ -69,6 +69,7 @@ POLL_LOCK_WAIT_SECONDS = 10.0
 DEVICE_PATH = "/oauth/device"
 TOKEN_RE = re.compile(r"^sk_sub_[A-Za-z0-9_\-]{8,256}$")
 USER_CODE_RE = re.compile(r"^[BCDFGHJKLMNPQRSTVWXZ23456789]{4}-[BCDFGHJKLMNPQRSTVWXZ23456789]{4}$")
+AGENT_ID_RE = re.compile(r"^agent_[A-Za-z0-9_-]{4,64}$")
 DEVICE_CODE_RE = re.compile(r"^[0-9a-f]{64}$")
 FORBIDDEN_STATE_KEYS = ("access_token", "api_key", "token", "device_code")
 
@@ -449,6 +450,25 @@ def _read_reconnect_token(home: Path) -> str:
     return value if TOKEN_RE.fullmatch(value) else ""
 
 
+def _last_agent_path(home: Path) -> Path:
+    return home / "substrate" / "credentials" / "onboarding-agent"
+
+
+def _read_last_agent(home: Path) -> str:
+    try:
+        value = _last_agent_path(home).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return ""
+    return value if AGENT_ID_RE.fullmatch(value) else ""
+
+
+def _save_last_agent(home: Path, agent_id: str) -> None:
+    try:
+        _atomic_private_write(_last_agent_path(home), agent_id)
+    except OnboardingError:
+        pass
+
+
 def _clear_reconnect_token(home: Path) -> None:
     try:
         path = _reconnect_credential_path(home)
@@ -586,7 +606,8 @@ class OnboardingManager:
         if phase == "connected":
             account = _clip(str(state.get("account", "")), 256)
             agent = _clip(str(state.get("agent_name", "")), MAX_AGENT_NAME_BYTES)
-            message = f"Connected to Substrate as {account}." if account else "Connected to Substrate."
+            verb = "Reconnected" if state.get("reconnected") else "Connected"
+            message = f"{verb} to Substrate as {account}." if account else f"{verb} to Substrate."
             if agent:
                 message += f" This agent appears as \"{agent}\" in Substrate."
             if state.get("billing_required"):
@@ -907,6 +928,9 @@ class OnboardingManager:
             _save_state(self.home, state)
         except OnboardingError:
             pass
+        agent_id = value.get("agent_id") if isinstance(value.get("agent_id"), str) else ""
+        agent_id = agent_id if AGENT_ID_RE.fullmatch(agent_id) else ""
+        reconnected = bool(agent_id) and agent_id == _read_last_agent(self.home)
         verdict = check_token(self.origin, token)
         if verdict == "unavailable":
             # The key is issued and the server hands the same key back on the
@@ -937,6 +961,8 @@ class OnboardingManager:
         os.environ[credentials.ENV_KEY] = token
         _clear_device_credential(self.home)
         _clear_reconnect_token(self.home)
+        if agent_id:
+            _save_last_agent(self.home, agent_id)
         connected = {
             key: item for key, item in state.items()
             if key not in {"approved", "previous_user_code", "previous_error_class"}
@@ -950,6 +976,7 @@ class OnboardingManager:
                      value.get("agent_name") or state.get("agent_name") or "").split()),
                      MAX_AGENT_NAME_BYTES),
                  "announced": False,
+                 "reconnected": reconnected,
                  "billing_required": verdict == "payment_required"},
             )
         except OnboardingError:
@@ -976,6 +1003,30 @@ def ensure_started(*, force: bool = False) -> dict[str, Any] | None:
         return _manager.ensure(force=force)
     except Exception:
         return _failed("internal_error")
+
+
+def mark_announced(home: Path | None = None) -> None:
+    """The connection was shown to the user by a CLI command: no chat turn repeats it."""
+    try:
+        home = home or active_home()
+        state = _load_state(home)
+        if state.get("phase") == "connected" and state.get("announced") is False:
+            _save_state(home, {**state, "announced": True})
+    except (OSError, ValueError, OnboardingError):
+        pass
+
+
+def claim_full_notice(user_code: str) -> bool:
+    """True the first time this approval code is shown in chat; later turns get a one-line reminder."""
+    try:
+        home = active_home()
+        state = _load_state(home)
+        if state.get("notice_code") == user_code:
+            return False
+        _save_state(home, {**state, "notice_code": _clip(str(user_code), 16)})
+    except (OSError, ValueError, OnboardingError):
+        return True
+    return True
 
 
 def take_connected_announcement() -> str:
@@ -1075,7 +1126,8 @@ def _ready(credential: str, state: dict[str, Any] | None = None,
         "status": "ready",
         "credential": credential,
         "account": account,
-        "message": f"Connected to Substrate as {account}." if account else "Connected to Substrate.",
+        "message": (("Reconnected" if (state or {}).get("reconnected") else "Connected")
+                    + (f" to Substrate as {account}." if account else " to Substrate.")),
     }
     if (state or {}).get("billing_required"):
         payload["message"] += " " + billing_message()
@@ -1213,11 +1265,13 @@ def _cli_start(home: Path, origin: str, as_json: bool) -> int:
         except credentials.CredentialError:
             pass
         _print_payload(_ready("existing", _load_state(home), home), as_json)
+        mark_announced(home)
         return 0
     manager = OnboardingManager(home, origin)
     status = manager.ensure(force=True)
     if status is None:
         _print_payload(_ready("existing", _load_state(home), home), as_json)
+        mark_announced(home)
         return 0
     _print_payload(status, as_json)
     return 0 if status.get("status") in {"authorization_pending", "finishing"} else 1
@@ -1241,6 +1295,7 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
         phase = state.get("phase")
         if phase == "connected":
             _print_payload(_ready("device_authorization", state, home), as_json)
+            mark_announced(home)
             return 0
         if phase in {"failed", "declined", "invalid"}:
             _print_payload(manager.describe(state), as_json)

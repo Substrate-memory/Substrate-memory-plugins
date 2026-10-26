@@ -530,6 +530,18 @@ def _login_notice(status: dict[str, Any] | None = None) -> str:
         )
     if isinstance(status, dict) and status.get("status") == "authorization_pending":
         minutes = max(1, (int(status.get("expires_in") or 0) + 59) // 60)
+        from . import onboarding as _onboarding
+
+        if not _onboarding.claim_full_notice(str(status.get("user_code", ""))):
+            # Shown in full on an earlier turn: one reminder line, same link and code.
+            return (
+                "<substrate-connect>\n"
+                f"Substrate memory is still waiting for approval. Link: {status.get('verification_uri_complete', '')} "
+                f"Code: {status.get('user_code', '')} (valid for {minutes} minutes). If the user asks "
+                "about connecting, repeat this link and code in one short line. Do not start a new "
+                "sign-in or run onboard.py start while this code is valid.\n"
+                "</substrate-connect>"
+            )
         lines = [
             "<substrate-connect>",
             "Substrate memory is installed but not connected yet. In your reply, show the "

@@ -77,8 +77,9 @@ Then follow the plugin's import: `/substrate-claude:substrate-import` in Claude
 Code, `$substrate-import` in Codex, `onboard.py import --yes`, `--session <id>`
 or `--no` in Hermes. If the plugin finds nothing to offer, but this computer
 already imported conversations, the account may be a different one: the plugin's
-connect command checks, and offers to import them again into this account. Report progress until the summary line
-`Imported N sessions (T turns): S stored, D duplicate, R rejected.` Not now:
+connect command checks, and offers to import them again into this account. Report progress until the plugin's final summary line. It says how many
+conversations were imported and how many items were stored, were already there,
+or were rejected (the exact words differ by host). Not now:
 record it and never ask again. Skip on Cowork and when nothing is readable.
 
 **MCP hosts (claude.ai, ChatGPT, Cursor, other connectors).** Offer once:

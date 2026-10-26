@@ -39,6 +39,7 @@ class _Grants:
         self.last_poll = {}
         self.counter = 0
         self.poll_window = 0.0
+        self.agent_id = "agent_fakefresh1"
 
     def issue(self, form):
         self.counter += 1
@@ -116,7 +117,7 @@ def _handler(grants: _Grants, reject_unknown_fields: bool = False):
                     return self._json(200, {
                         "access_token": grant["token"], "token_type": "Bearer",
                         "scope": "capture retrieve", "account": "fake@example.com",
-                        "agent_name": "Hermes",
+                        "agent_name": "Hermes", "agent_id": grants.agent_id,
                     })
                 return self._json(400, {"error": "invalid_grant"})
 
@@ -224,3 +225,54 @@ def test_model_facing_text_has_no_instruction_to_hide_anything():
     model_text += (REPO / "plugins" / "substrate-hermes" / "src" / "substrate" / "onboarding.py").read_text(encoding="utf-8")
     for phrase in ("do not tell the user", "do not claim", "lack access", "do not mention", "hide"):
         assert not re.search(re.escape(phrase), model_text, re.IGNORECASE), phrase
+
+
+# ---------------------------------------------------------------------------
+# Follow-ups from round-2 QA: announce once, name a reconnect, one reminder line.
+
+
+def test_connection_printed_by_cli_is_not_announced_again(manager_home, monkeypatch):
+    ob._save_state(manager_home, {"phase": "connected", "announced": False, "account": "a@example.com"})
+    monkeypatch.setattr(ob, "active_home", lambda: manager_home)
+    monkeypatch.setattr(ob.credentials, "stored_api_key", lambda home, *a, **k: "sk_sub_" + "e" * 40)
+    ob.mark_announced(manager_home)
+    assert ob.take_connected_announcement() == ""
+
+
+def test_reconnect_to_the_same_agent_is_named_as_a_reconnect(fake, manager_home, monkeypatch):
+    grants, origin = fake
+    monkeypatch.setattr(ob, "check_token", lambda origin_, token, **kw: "ok")
+    grants.agent_id = "agent_samehermes"
+    ob._save_last_agent(manager_home, "agent_samehermes")
+    manager = ob.OnboardingManager(manager_home, origin)
+    shown = manager._begin()
+    state = _approve_and_poll(manager, grants, shown["user_code"])
+    assert state["phase"] == "connected" and state.get("reconnected") is True
+    assert ob.OnboardingManager(manager_home, origin).describe(state)["message"].startswith("Reconnected to Substrate as")
+
+
+def test_a_different_agent_is_a_plain_connect(fake, manager_home, monkeypatch):
+    grants, origin = fake
+    monkeypatch.setattr(ob, "check_token", lambda origin_, token, **kw: "ok")
+    ob._save_last_agent(manager_home, "agent_oldhermes")
+    manager = ob.OnboardingManager(manager_home, origin)
+    shown = manager._begin()
+    state = _approve_and_poll(manager, grants, shown["user_code"])
+    assert state["phase"] == "connected" and state.get("reconnected") is False
+    assert ob.OnboardingManager(manager_home, origin).describe(state)["message"].startswith("Connected to Substrate as")
+
+
+def test_sign_in_block_once_then_one_line_reminder(manager_home, monkeypatch):
+    import substrate.plugin as plugin
+
+    monkeypatch.setattr(ob, "active_home", lambda: manager_home)
+    status = {"status": "authorization_pending", "user_code": "BCDF-GHJK", "expires_in": 600,
+              "verification_uri_complete": "https://x/oauth/device?user_code=BCDF-GHJK"}
+    first = plugin._login_notice(status)
+    again = plugin._login_notice(status)
+    assert "show the user this approval link and code exactly as written" in first
+    assert "show the user this approval link" not in again
+    assert "https://x/oauth/device?user_code=BCDF-GHJK" in again and "BCDF-GHJK" in again
+    assert len(again) < len(first) / 2
+    fresh = dict(status, user_code="ZZZZ-JJJJ")
+    assert "show the user this approval link" in plugin._login_notice(fresh)
