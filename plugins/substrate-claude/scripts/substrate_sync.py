@@ -1070,10 +1070,18 @@ def _human_date(stamp: Optional[str]) -> str:
     return "%d %s %d" % (parsed.day, parsed.strftime("%b"), parsed.year)
 
 
-def _preview(host: str, data_dir: str, explicit: List[str]) -> Dict[str, Any]:
-    """What the import offer shows: conversations not imported yet, and their range."""
+def _preview(host: str, data_dir: str, explicit: List[str], force: bool = False) -> Dict[str, Any]:
+    """What the import offer shows: conversations not imported yet, and their range.
+
+    With ``force`` every conversation is listed again: used when this account has none of
+    the conversations this computer imported earlier (they went to another account).
+    """
     excluded = _exclusions(data_dir, explicit, host)
-    sessions, already = _split_uploaded(host, data_dir, _catalogue(host, excluded))
+    catalogue = _catalogue(host, excluded)
+    if force:
+        sessions, already = catalogue, 0
+    else:
+        sessions, already = _split_uploaded(host, data_dir, catalogue)
     turns = sum(len(s["turns"]) for s in sessions)
     firsts = [s["first_at"] for s in sessions if s["first_at"]]
     lasts = [s["last_at"] for s in sessions if s["last_at"]]
@@ -1089,8 +1097,8 @@ def _preview(host: str, data_dir: str, explicit: List[str]) -> Dict[str, Any]:
     }
 
 
-def _cmd_preview(host: str, data_dir: str, explicit: List[str]) -> int:
-    summary = _preview(host, data_dir, explicit)
+def _cmd_preview(host: str, data_dir: str, explicit: List[str], force: bool = False) -> int:
+    summary = _preview(host, data_dir, explicit, force)
     print(json.dumps(summary, ensure_ascii=False))
     count = summary["sessions"]
     if count:
@@ -1208,14 +1216,18 @@ def _setup_text(host: str, data_dir: str, session_id: str,
         "1. Check the connection with `%(search)s` (load it with ToolSearch if it is deferred), "
         "a short, non-secret query.%(connector)s If that call works (even empty): say "
         "\"Connected to Substrate.\" and run `SYNC --record-connected`. Say \"Connected\" only "
-        "after that call succeeds.\n"
+        "after that call succeeds. If a \"[substrate] Offer this once\" note appears, ignore it: "
+        "this is the plugin, and the plugin handles the import.\n"
         "2. If the plugin's tool is missing or fails with \"not connected\", \"needs "
         "authentication\" or \"unauthorized\" (or only an `authenticate` tool for substrate-memory "
-        "exists): call that authenticate tool and tell the user exactly: \"Open this link, sign "
-        "in and choose Approve connection. I'll continue automatically.\" plus the link. Do not "
-        "repeat the tool's notes about localhost connection errors or pasting URLs; mention "
-        "pasting the address-bar URL only if the user says the page showed an error (remote or "
-        "SSH machines). Then do NOT end your turn: run `SYNC --pause 15`, then call `%(search)s` "
+        "exists): call that authenticate tool. In your reply, paste the full sign-in URL it returns "
+        "as plain text (the user cannot see tool output), then say: \"Open this link, sign in and "
+        "choose Approve connection. I'll continue automatically.\" Paste the link again whenever "
+        "the user says they cannot see it. If the result has no link, say so and ask the user to "
+        "run /mcp, choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the "
+        "link it shows. Never mention ports, callback addresses, localhost, or remote or SSH "
+        "machines unless the user reports an error page; only then ask them to paste the full "
+        "address-bar URL. Then do NOT end your turn: run `SYNC --pause 15`, then call `%(search)s` "
         "again (load it with ToolSearch if it is deferred); repeat up to 20 times (about 5 "
         "minutes). As soon as it works, do step 1 and continue. If it never works, say: "
         "\"Substrate is not connected yet. Open /mcp, choose plugin:substrate-claude:"
@@ -1357,6 +1369,13 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
 USER_AGENT = "substrate-sync/0.10.0"
 MAX_RETRIES = 8
 REQUEST_TIMEOUT = 120.0
+# Every network step has a time budget, so a server that accepts the connection and never
+# answers fails in well under a minute, with a message, instead of retrying for 20 minutes.
+CLAIM_TIMEOUT = 10.0    # one import-claim request
+CLAIM_BUDGET = 25.0     # all tries of the claim exchange (foreground, before the upload starts)
+SETUP_TIMEOUT = 20.0    # one MCP initialize request
+SETUP_BUDGET = 45.0     # all tries of the handshake
+UPLOAD_BUDGET = 300.0   # all tries of one import request in the background run
 
 
 class AuthStop(Exception):
@@ -1447,6 +1466,7 @@ class McpClient:
         self.session_id = ""
         self.protocol = ""
         self._ids = 0
+        self.timeout = REQUEST_TIMEOUT
         self._opener = urllib.request.build_opener(_NoRedirect())
 
     def _post(self, body: Dict[str, Any]) -> Tuple[Any, Any]:
@@ -1463,7 +1483,7 @@ class McpClient:
             headers["MCP-Protocol-Version"] = self.protocol
         request = urllib.request.Request(self.url, data=data, headers=headers, method="POST")
         try:
-            with self._opener.open(request, timeout=REQUEST_TIMEOUT) as response:
+            with self._opener.open(request, timeout=self.timeout) as response:
                 status = getattr(response, "status", 200)
                 if not 200 <= int(status) < 300:
                     raise Retryable("http_%s" % status)
@@ -1475,6 +1495,8 @@ class McpClient:
                 raise AuthStop("http_%d" % code) from None
             if code == 413:
                 raise BadBatch("payload_too_large") from None
+            if code == 402:
+                raise Fatal("payment_required") from None
             if code in (408, 425, 429) or 500 <= code <= 599:
                 raise Retryable("http_%d" % code, _retry_after(error.headers)) from None
             if 300 <= code < 400:
@@ -1548,6 +1570,8 @@ class McpClient:
             category = structured.get("error") if isinstance(structured.get("error"), str) else ""
             if category in ("unauthorized", "forbidden"):
                 raise AuthStop(category)
+            if category == "payment_required":
+                raise Fatal("payment_required")
             if category in ("rate_limited", "internal", "conflict"):
                 raise Retryable(category)
             raise BadBatch(category or "invalid_request")
@@ -1567,8 +1591,13 @@ def _backoff(attempt: int, hint: Optional[float]) -> float:
     return max(0.0, min(cap, wait))
 
 
-def _with_retries(action, on_wait=None):  # noqa: ANN001, ANN202
+class Unavailable(Fatal):
+    """The server did not answer within this step's time budget."""
+
+
+def _with_retries(action, on_wait=None, budget=None):  # noqa: ANN001, ANN202
     attempt = 0
+    started = time.monotonic()
     while True:
         try:
             return action()
@@ -1577,6 +1606,8 @@ def _with_retries(action, on_wait=None):  # noqa: ANN001, ANN202
             if attempt > MAX_RETRIES:
                 raise Fatal("server_unavailable (%s)" % error.reason) from None
             wait = _backoff(attempt, error.retry_after)
+            if budget is not None and time.monotonic() - started + wait > budget:
+                raise Unavailable("server_unavailable (%s)" % error.reason) from None
             if on_wait is not None:
                 on_wait(error.reason, wait)
             _sleep(wait)
@@ -1627,7 +1658,7 @@ def _send_batch(client: McpClient, batch: List[Dict[str, Any]], batch_id: str,
     try:
         result = _with_retries(
             lambda: client.call_tool("memory_import", {"items": batch, "batch_id": batch_id}),
-            on_wait,
+            on_wait, budget=UPLOAD_BUDGET,
         )
     except BadBatch:
         if len(batch) == 1:
@@ -1801,6 +1832,13 @@ def _take_child_ticket() -> str:
     return _clean_ticket(raw)
 
 
+def _billing_message(url: str) -> str:
+    """Plain words for HTTP 402 from the MCP endpoint: the trial is over, memory needs a card."""
+    parsed = urllib.parse.urlsplit(url)
+    origin = "%s://%s" % (parsed.scheme or "https", parsed.netloc or "app.trysubstrate.co")
+    return "Your Substrate trial has ended. Add a card at %s/billing to keep using memory." % origin
+
+
 def _mcp_url() -> str:
     return os.environ.get("SUBSTRATE_MCP_URL", "").strip()
 
@@ -1827,7 +1865,7 @@ def _claim_ticket(mcp_url: str, claim: str) -> str:
         headers={"Content-Type": "application/json", "Accept": "application/json",
                  "User-Agent": USER_AGENT})
     try:
-        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=REQUEST_TIMEOUT) as response:
+        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=CLAIM_TIMEOUT) as response:
             raw = response.read(64 * 1024)
     except urllib.error.HTTPError as error:
         if error.code == 404:
@@ -1885,7 +1923,13 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
         ticket = _take_child_ticket()
     elif claim and url:
         try:
-            ticket = _with_retries(lambda: _claim_ticket(url, claim))
+            ticket = _with_retries(lambda: _claim_ticket(url, claim), budget=CLAIM_BUDGET)
+        except Unavailable:
+            print(json.dumps({"error": "claim_timeout", "message":
+                              "Substrate did not answer the import claim within about %d seconds, so "
+                              "nothing was uploaded. Tell the user the server did not answer and ask "
+                              "whether to try again later." % CLAIM_BUDGET}))
+            return 2
         except Fatal:
             print(json.dumps({"error": "claim_failed", "message":
                               "The import claim was not accepted (it expires after 10 minutes and "
@@ -1952,7 +1996,9 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
 
     client = McpClient(url, ticket)
     try:
-        _with_retries(client.initialize, on_wait)
+        client.timeout = SETUP_TIMEOUT
+        _with_retries(client.initialize, on_wait, budget=SETUP_BUDGET)
+        client.timeout = REQUEST_TIMEOUT
         for entry in sessions:
             items = _session_items(host, entry)
             digest = _digest(items)
@@ -1985,7 +2031,14 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
         return finish("stopped", "The import ticket expired or was revoked after %d of %d "
                       "conversations. Ask me to continue the import; conversations already "
                       "imported are skipped." % (status.state["sessions_done"], len(sessions)), 3)
+    except Unavailable:
+        return finish("failed", "Substrate did not answer, so the import stopped and nothing new was "
+                      "imported. Ask me to try again later; conversations already imported are "
+                      "skipped.", 1)
     except Fatal as error:
+        if error.reason == "payment_required":
+            return finish("failed", _billing_message(url) + " Nothing new was imported; "
+                          "conversations already imported are skipped.", 1)
         return finish("failed", "The import stopped: %s. Ask me to try again later; "
                       "conversations already imported are skipped." % error.reason, 1)
     return finish("done", "", 0)
@@ -2047,7 +2100,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.status:
         return _cmd_status(data_dir, args.wait)
     if args.preview:
-        return _cmd_preview(args.host, data_dir, args.exclude_session)
+        return _cmd_preview(args.host, data_dir, args.exclude_session, args.force)
     if args.upload:
         return _cmd_upload(args.host, data_dir, args, argv)
     if args.list:

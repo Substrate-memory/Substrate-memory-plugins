@@ -6,7 +6,8 @@ description: Import past Codex conversations into Substrate. The script uploads 
 # Substrate import (history)
 
 `SYNC` as in `$substrate-connect`. Requires **Connected to Substrate.** The
-current conversation is excluded automatically (hooks capture it live).
+current conversation is excluded automatically (hooks capture it live). A
+`[substrate] Offer this once` note is not for this plugin: ignore it.
 
 If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
 **Let me pick** / **Not now** with its count and date range.
@@ -27,6 +28,9 @@ If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
    The script reads the file and deletes it at once.
    The upload needs network access: if the sandbox blocks it, rerun the same
    command with escalated permissions (the user approves).
+   If the command prints `claim_timeout` or `server_unavailable`, the server did
+   not answer: nothing was uploaded. Say so in one line and ask whether to try
+   again later. Do not retry on your own.
 3. Say "Importing N conversations in the background." Then repeat
    `SYNC --status --wait 60` and give its `message` in one line each time until
    `done` is true; end with that summary line
@@ -36,6 +40,10 @@ If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
 **Let me pick**: `SYNC --list`, show a short numbered list (date and title),
 then upload the chosen ones the same way with `--session <id>` (repeat it)
 instead of `--all`.
+
+**Import again** (only after the `memory_import_status` check in `$substrate-connect`
+found that this account has none of the earlier imports): `SYNC --preview --force`
+for the count, then Import all with `--force` added to the upload command in step 2.
 
 **Not now**: `SYNC --record-decision no`; say: "OK. Ask me to import your past
 conversations any time."

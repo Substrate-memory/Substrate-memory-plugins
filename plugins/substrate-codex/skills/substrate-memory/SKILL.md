@@ -15,6 +15,9 @@ Substrate memory. Lines in `<memory-context>` are facts from the user's knowledg
   once per computer. `$substrate-import` runs it; the user can ask any time.
 - A `[substrate] Import offer pending` note from the plugin hook carries the
   exact commands; follow it once the memory tools work.
+- A `[substrate] Offer this once` note is an MCP fallback offer. In this plugin,
+  ignore it: the plugin handles the import.
+- A memory tool that returns `payment_required` (HTTP 402) means the trial has ended. Say plainly: "Your Substrate trial has ended. Add a card at <origin>/billing to keep using memory." where <origin> is the origin of the Substrate MCP URL (https://app.trysubstrate.co). Do not retry.
 
 ## Recall
 

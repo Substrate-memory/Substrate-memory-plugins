@@ -31,11 +31,19 @@ after 10 minutes.
    the ticket string. Then run `SYNC --upload --all --background --ticket-file
    "<that file>" --mcp-url "<mcp_url>"`. The script reads the file and deletes it
    straight away.
+   If the command prints `claim_timeout` or `server_unavailable`, the server did
+   not answer: nothing was uploaded. Say so in one line and ask whether to try
+   again. Do not retry on your own, and do not wait on the server.
 3. Say "Importing N conversations in the background." Then repeat
    `SYNC --status --wait 60` and give its `message` in one line each time until
    `done` is true. End with that summary line
    (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`).
    Keep polling in the same turn; do not wait for the user.
+
+**Import again** (only after the account note in `/substrate-claude:substrate-connect`
+found that this account has none of the earlier imports): run `SYNC --preview --force`
+for the count, then do **Import all** with `--force` added to the upload command in
+step 2 (`SYNC --upload --all --force --background ...`).
 
 **Let me pick**: run `SYNC --list`, show a short numbered list (date and title),
 then upload the chosen ones the same way, with a new claim (or ticket file) each

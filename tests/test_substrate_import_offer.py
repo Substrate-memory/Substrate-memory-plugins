@@ -496,8 +496,8 @@ def test_setup_continues_until_connected(env) -> None:
     text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
     for phrase in ("Substrate setup is not finished", "memory_search", "Connected to Substrate.",
                    "--record-connected", "authenticate", "Approve connection",
-                   "I'll continue automatically", "Do not repeat the tool's notes",
-                   "only if the user says the page showed an error",
+                   "I'll continue automatically", "paste the full sign-in URL",
+                   "Never mention ports, callback addresses, localhost",
                    "do NOT end your turn", "--pause 15", "up to 20 times", "ToolSearch",
                    'A bare "continue", "done"', "Do not comment on it",
                    "I found 1 past conversation on this computer",
@@ -1547,3 +1547,20 @@ def test_removed_notice_never_for_codex(env, monkeypatch) -> None:
     monkeypatch.setattr(sync, "_codex_mcp_signed_in", lambda: False)
     connect("codex")
     assert "removed" not in _offer(env, host="codex").stdout
+
+
+# ---------------------------------------------------------------------------
+# F21: this computer's import state is not this account's. --preview --force lists
+# every conversation again, for the account that has none of them.
+# ---------------------------------------------------------------------------
+
+def test_preview_force_lists_imported_conversations_again(env, capsys, server, monkeypatch) -> None:
+    write_claude_session(env["claude"], "a")
+    ticket_env(monkeypatch, server.url)
+    assert upload(capsys, "--all")[0] == 0
+    capsys.readouterr()
+    code, rows = main_json(capsys, "--host", "claude", "--preview")
+    assert rows[0]["sessions"] == 0 and rows[0]["already_imported"] == 1
+    code, rows = main_json(capsys, "--host", "claude", "--preview", "--force")
+    assert code == 0 and rows[0]["sessions"] == 1 and rows[0]["already_imported"] == 0
+    assert rows[0]["turns"] == 2 and rows[0]["decision"] == "yes"
