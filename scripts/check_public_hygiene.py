@@ -28,6 +28,10 @@ SECRET_PATTERNS = (
     ),
 )
 
+# Shared redaction test vectors (docs/mcp-contract.md section 6). The file is
+# credential-shaped on purpose; its URL checks still apply.
+SECRET_FIXTURE_PATHS = frozenset({"contract/redaction-fixtures.json"})
+
 URL_PATTERN = re.compile(r"https?://[^\s'\"<> ()]+", re.IGNORECASE)
 
 # Hosts the repository may legitimately reference: the configured Substrate
@@ -88,7 +92,8 @@ def scan(root: Path) -> list[str]:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             continue
-        for _class, pattern in SECRET_PATTERNS:
+        patterns = () if relative in SECRET_FIXTURE_PATHS else SECRET_PATTERNS
+        for _class, pattern in patterns:
             if pattern.search(text):
                 findings.append(f"{relative}: {_class}")
                 break
