@@ -8,6 +8,9 @@ Claude Code and Cowork: one install line for the agent, no permission prompts fo
 - **No prompts for the sync script.** `/substrate-connect`, `/substrate-import` and `/substrate-sync` pre-approve only runs of the plugin's own `scripts/substrate_sync.py` (`allowed-tools`: `python3` or `python` followed by a quoted path ending in `/scripts/substrate_sync.py`). Other commands and file writes keep their prompts.
 - **The ticket never reaches the agent.** `--new-claim` makes a claim, `memory_import_ticket` takes it and `--upload --claim` exchanges it for the ticket inside the script. A server that still returns the ticket directly keeps the file flow (`--ticket-file`).
 - **Upload endpoint without a shell variable.** `--mcp-url` replaces `SUBSTRATE_MCP_URL=… ` in front of the command, so the pre-approved pattern matches. `SUBSTRATE_MCP_URL` still works.
+- **Sign-in link.** The agent pastes the full sign-in link in its reply every time, and does not invent ports, callback addresses or remote-machine advice unless the user reports an error page.
+- **No 20-minute hangs.** Every import step has a time budget. A server that accepts the connection and never answers ends the claim in about 25 seconds, and the handshake in about 45, with a clear message (`claim_timeout`, `server_unavailable`). Nothing is uploaded in that case.
+- **Another account.** The import state is kept per computer, not per account. When this account has none of the conversations this computer imported earlier, the agent says so and can import them again (`--preview --force`).
 - **Versions:** `substrate-claude` 0.10.0 (manifest and marketplace). `substrate-codex` 0.10.0 ships the same `substrate_sync.py` (byte-identical).
 
 ## substrate-codex 0.10.0

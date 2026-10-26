@@ -98,10 +98,13 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
 
 ## Connect and import
 
-Follow `$substrate-connect`: sign in, `memory_search`, **Connected to
-Substrate.**, and in the same reply `SYNC --preview` plus the offer **Import
-all** / **Let me pick** / **Not now**; then `$substrate-import`. The skill path
-works even where the offer hook does not run (hooks untrusted, web).
+Follow `$substrate-connect`, in this order: approve the connection
+(`codex mcp login` prints the link; the user chooses Approve connection), then
+`memory_search`, **Connected to Substrate.**, install the hooks, and in the same
+reply `SYNC --preview` plus the offer **Import all** / **Let me pick** / **Not
+now**; then `$substrate-import`. Last, the user approves the hooks in `/hooks`,
+starts a new session and says continue. The skill path works even where the
+offer hook does not run (hooks untrusted, web).
 
 ## Notes for the operator
 

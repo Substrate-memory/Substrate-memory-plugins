@@ -24,19 +24,20 @@ claude plugin install substrate-claude@substrate-marketplace
 Then say exactly: "Installed. Type /reload-plugins, then say continue." The
 plugin carries on from the next message: sign-in, check, import offer.
 
-**Codex (CLI or app).**
+**Codex (CLI or app).** Run these in this order: approve first, then hooks.
 ```
 codex plugin marketplace add Substrate-memory/Substrate-memory-plugins
 codex plugin add substrate-codex@substrate-marketplace
 codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp
 codex mcp login substrate-memory
 ```
-`login` prints the approval link: give it to the user, say they should choose
-Approve connection, and wait for the command to return. Then run
+`login` prints the approval link: paste the full link in your reply, say the user
+should choose Approve connection, and wait for the command to return. Then rerun
+`memory_search`. Once it works, run
 `python3 <plugin>/scripts/codex_user_hooks.py install` (the plugin is under
-`$CODEX_HOME/plugins/cache/*/substrate-codex/*/`, default `~/.codex`). Then say:
-"Approve the Substrate hooks once in /hooks, then start a new session and say
-continue."
+`$CODEX_HOME/plugins/cache/*/substrate-codex/*/`, default `~/.codex`). Section 4
+comes next, in the same reply. Then say, last: "Approve the Substrate hooks once
+in /hooks, then start a new session and say continue."
 
 **Hermes.**
 ```
@@ -74,7 +75,9 @@ and date range the plugin reports. Say:
 them into Substrate? Import all / Let me pick / Not now"
 Then follow the plugin's import: `/substrate-claude:substrate-import` in Claude
 Code, `$substrate-import` in Codex, `onboard.py import --yes`, `--session <id>`
-or `--no` in Hermes. Report progress until the summary line
+or `--no` in Hermes. If the plugin finds nothing to offer, but this computer
+already imported conversations, the account may be a different one: the plugin's
+connect command checks, and offers to import them again into this account. Report progress until the summary line
 `Imported N sessions (T turns): S stored, D duplicate, R rejected.` Not now:
 record it and never ask again. Skip on Cowork and when nothing is readable.
 

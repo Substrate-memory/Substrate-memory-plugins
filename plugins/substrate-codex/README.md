@@ -33,14 +33,13 @@ Use the `/plugins` browser, or run:
 ```text
 codex plugin marketplace add Substrate-memory/Substrate-memory-plugins
 codex plugin add substrate-codex@substrate-marketplace
-```
-
-Then start a new session. Direct MCP fallback (no plugin):
-
-```text
 codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp
 codex mcp login substrate-memory
 ```
+
+`login` prints the approval link. Choose **Approve connection**; the command
+returns. The agent then installs the hooks and offers the import. Last, approve
+the hooks once in `/hooks`, start a new session, and say continue.
 
 ## Sign-in flow
 

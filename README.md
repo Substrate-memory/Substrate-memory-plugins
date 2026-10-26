@@ -82,6 +82,7 @@ Right after **Connected to Substrate.**, in the same reply, the agent offers onc
 - **Import all** imports every local conversation except the current one (already captured live). It runs in the background; the agent reports progress and the final line (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`) without waiting for you.
 - **Let me pick** lists conversations by date and title; only those are imported.
 - **Not now** is remembered and never asked again. Ask "import my past conversations" any time.
+- The import state is kept per computer, not per account. If you later connect a different Substrate account on the same computer, the agent checks it and offers to import the earlier conversations into that account.
 
 Claude Code and Codex upload straight from the package script with a short-lived, import-only ticket (`memory_import_ticket`), so your history never passes through the chat. Hermes reads its own profile history and sends it through its spool. Cowork cloud sessions have no local history, so the offer is skipped. Imports are redacted client- and server-side, and repeats are ignored.
 

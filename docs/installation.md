@@ -88,16 +88,11 @@ ChatGPT / Codex app: open Plugins, add the marketplace from the GitHub repo `Sub
 ```text
 codex plugin marketplace add Substrate-memory/Substrate-memory-plugins
 codex plugin add substrate-codex@substrate-marketplace
-```
-
-Then start a new session. Direct MCP fallback (no plugin):
-
-```text
 codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp
 codex mcp login substrate-memory
 ```
 
-Then complete the common browser flow and run the self-check. Do not use the deprecated API-key plugin described below. Plugin hooks must be trusted once via `/hooks` (until trusted, Codex skips automatic capture). Codex has no session-end hook, so the server seals idle sessions after 30 minutes. On the web, plugins do not deploy scripts, so the sync and import skills need the desktop app or the CLI.
+`login` prints the approval link: approve the connection first. The agent then installs the hooks and offers the import. Last, approve the Substrate hooks once in `/hooks`, start a new session, and say continue. Do not use the deprecated API-key plugin described below. Until the hooks are trusted, Codex skips automatic capture. Codex has no session-end hook, so the server seals idle sessions after 30 minutes. On the web, plugins do not deploy scripts, so the sync and import skills need the desktop app or the CLI.
 
 ### Hermes (`plugins/substrate-hermes`)
 
