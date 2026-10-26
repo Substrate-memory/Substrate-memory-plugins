@@ -1,5 +1,6 @@
 ---
 description: Import past local conversations into Substrate. The script uploads them directly; nothing passes through the chat.
+allowed-tools: Bash(python3 *) Bash(python *) Write
 ---
 
 `SYNC` means `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude`
@@ -11,31 +12,39 @@ listed or counted again.
 If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
 **Let me pick** / **Not now** with its count and date range.
 
-The import ticket is secret. It goes into a file, never into a Bash command, a
-command's arguments, or your reply.
+The import ticket is secret: it never goes into a Bash command, a command's
+arguments, or your reply. The claim (from `--new-claim`) is single-use and expires
+after 10 minutes.
 
 **Import all**
-1. Call `memory_import_ticket` with `{"platform": "claude"}`. Keep its `ticket`
-   and `mcp_url` values.
-2. Use the Write tool to create a new file, `<data-dir>/import-ticket-<8 random
-   letters>.txt`, where `<data-dir>` is the `--data-dir` value that `SYNC` uses.
-   Its content is only the ticket string. Never reuse a file name.
-3. Run, with `mcp_url` from that result:
-   `SUBSTRATE_MCP_URL='<mcp_url>' SYNC --upload --all --background --ticket-file "<data-dir>/import-ticket-<8 random letters>.txt"`
-   The script reads the file and deletes it straight away.
-4. Say "Importing N conversations in the background." Then repeat
+1. Run `SYNC --new-claim` and keep the `claim` it prints. Call
+   `memory_import_ticket` with `{"platform": "claude", "claim": "<claim>"}`. If
+   that call is refused because of the `claim` field, call it again with only
+   `{"platform": "claude"}`: the result then has a `ticket`.
+2. If the result has `claim_pending`, run, with its `mcp_url`:
+   `SYNC --upload --all --background --claim "<claim>" --mcp-url "<mcp_url>"`.
+   The script exchanges the claim for the ticket itself; the ticket never
+   reaches you. A claim works once and expires after 10 minutes.
+   If the result has a `ticket` instead (an older server), use the Write tool to
+   create a new file, `<data-dir>/import-ticket-<8 random letters>.txt`, where
+   `<data-dir>` is the `--data-dir` value that `SYNC` uses. Its content is only
+   the ticket string. Then run `SYNC --upload --all --background --ticket-file
+   "<that file>" --mcp-url "<mcp_url>"`. The script reads the file and deletes it
+   straight away.
+3. Say "Importing N conversations in the background." Then repeat
    `SYNC --status --wait 60` and give its `message` in one line each time until
    `done` is true. End with that summary line
    (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`).
    Keep polling in the same turn; do not wait for the user.
 
 **Let me pick**: run `SYNC --list`, show a short numbered list (date and title),
-then upload the chosen ones the same way, with a new ticket file each time and
-`--session <id>` (repeat it) instead of `--all`.
+then upload the chosen ones the same way, with a new claim (or ticket file) each
+time and `--session <id>` (repeat it) instead of `--all`.
 
 **Not now**: run `SYNC --record-decision no` and say: "OK. Ask me to import your
 past conversations any time."
 
-If the status says the ticket expired, get a new ticket and run the same upload
-again with a new ticket file; conversations already imported are skipped. A Cowork
-cloud session has no local history: say there is nothing to import here.
+If the status says the ticket expired, or the upload reports `claim_failed`, get
+a new ticket and run the same upload again with a new claim; conversations
+already imported are skipped. A Cowork cloud session has no local history: say
+there is nothing to import here.

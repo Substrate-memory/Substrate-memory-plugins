@@ -94,9 +94,12 @@ boundaries (start, clear, compact, end) seal extraction windows.
 Secrets (API keys, tokens, passwords, `sk_…` values) are redacted on the client
 before anything leaves the host, and redacted again on the server. History
 import uploads only to the `mcp_url` returned by `memory_import_ticket`. The
-ticket is written by the agent to a temporary file, passed to the script with
-`--ticket-file`, and deleted by the script as soon as it is read: it never
-appears in a command line or in the chat.
+agent sends a claim (made by `--new-claim`) with that call; the script exchanges
+the claim for the ticket itself, so the ticket never reaches the agent. A server
+that still returns the ticket directly gets it through a temporary file, passed
+with `--ticket-file` and deleted by the script as soon as it is read. The ticket
+never appears in a command line or in the chat; a claim works once and expires
+after 10 minutes.
 Catch-up sync prints batches for the agent to pass to `memory_import`. Never
 send credentials to a memory tool yourself.
 

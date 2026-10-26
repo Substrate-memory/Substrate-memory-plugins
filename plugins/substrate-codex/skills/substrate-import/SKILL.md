@@ -12,14 +12,18 @@ If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
 **Let me pick** / **Not now** with its count and date range.
 
 **Import all**
-1. Call `memory_import_ticket` with `{"platform": "codex"}`. Keep its `ticket`
-   and `mcp_url` values. The ticket is secret: never write it in a command or in
-   your reply.
-2. Use the file-write tool to create a new file, `<data-dir>/import-ticket-<8
-   random letters>.txt` (`<data-dir>` is the `--data-dir` value that `SYNC` uses),
-   whose content is only the ticket string. Then run, with `mcp_url` from that
-   result: `SUBSTRATE_MCP_URL='<mcp_url>' SYNC --upload --all --background --ticket-file "<data-dir>/import-ticket-<8 random letters>.txt"`
-   (PowerShell: `$env:SUBSTRATE_MCP_URL='<mcp_url>'; SYNC --upload --all --background --ticket-file "<path>"`).
+1. Run `SYNC --new-claim` and keep the `claim` it prints. Call
+   `memory_import_ticket` with `{"platform": "codex", "claim": "<claim>"}`. If
+   that call is refused because of the `claim` field, call it again with only
+   `{"platform": "codex"}`. The ticket is secret: never write it in a command or
+   in your reply.
+2. If the result has `claim_pending`, run, with its `mcp_url`:
+   `SYNC --upload --all --background --claim "<claim>" --mcp-url "<mcp_url>"`.
+   The script exchanges the claim for the ticket itself.
+   If the result has a `ticket` instead (an older server), use the file-write
+   tool to create `<data-dir>/import-ticket-<8 random letters>.txt` (`<data-dir>`
+   is the `--data-dir` value that `SYNC` uses) containing only the ticket string,
+   then run `SYNC --upload --all --background --ticket-file "<that file>" --mcp-url "<mcp_url>"`.
    The script reads the file and deletes it at once.
    The upload needs network access: if the sandbox blocks it, rerun the same
    command with escalated permissions (the user approves).
@@ -36,6 +40,7 @@ instead of `--all`.
 **Not now**: `SYNC --record-decision no`; say: "OK. Ask me to import your past
 conversations any time."
 
-If the status says the ticket expired, get a new ticket and run the same upload
-again; finished conversations are skipped. Plugins installed on the web have no
-local scripts or history: say there is nothing to import there.
+If the status says the ticket expired, or the upload reports `claim_failed`, get
+a new ticket and run the same upload again; finished conversations are skipped.
+Plugins installed on the web have no local scripts or history: say there is
+nothing to import there.

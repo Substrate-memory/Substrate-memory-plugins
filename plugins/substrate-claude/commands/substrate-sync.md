@@ -1,5 +1,6 @@
 ---
 description: Sync unsaved turns of this session into Substrate memory.
+allowed-tools: Bash(python3 *) Bash(python *)
 ---
 
 Sync the current session's unsaved turns into Substrate. The sync script reads

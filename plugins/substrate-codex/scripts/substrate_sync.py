@@ -49,6 +49,7 @@ import json
 import math
 import os
 import re
+import secrets
 import socket
 import subprocess
 import sys
@@ -1163,13 +1164,15 @@ def _offer_text(host: str, data_dir: str, session_id: str,
         "the Substrate memory tools work in this session. Once the plugin's own "
         "`%(search)s` has succeeded and you have said \"Connected to Substrate.\", in that same "
         "reply and without waiting for the user, %(offer)s. SYNC means: `%(base)s`.\n"
-        "Import all: call memory_import_ticket {\"platform\": \"%(host)s\"}. Use the Write tool "
-        "to create the file `%(ticket)s` containing only the ticket string. Then run "
-        "`SUBSTRATE_MCP_URL='<mcp_url>' SYNC --upload --all --background --ticket-file "
-        "\"%(ticket)s\"` with mcp_url from the same result. The ticket must never appear in a "
-        "Bash command, in your reply, or in a command's arguments; the script reads and deletes "
-        "the file. Then keep running `SYNC --status --wait 60` and report each message until it "
-        "is done; end with its summary line. Do not stop and wait for the user while it runs.\n"
+        "Import all: run `SYNC --new-claim` and keep the claim it prints. Call memory_import_ticket "
+        "{\"platform\": \"%(host)s\", \"claim\": \"<claim>\"} (if refused because of the claim, send only the platform). If the result has claim_pending, run "
+        "`SYNC --upload --all --background --claim \"<claim>\" --mcp-url \"<mcp_url>\"` with mcp_url "
+        "from that result. If the result has a ticket instead (an older server), use the Write tool to "
+        "create the file `%(ticket)s` containing only the ticket string, then run "
+        "`SYNC --upload --all --background --ticket-file \"%(ticket)s\" --mcp-url \"<mcp_url>\"`. The "
+        "claim and the ticket must never appear in your reply. Then keep running `SYNC --status --wait 60` "
+        "and report each message until it is done; end with its summary line. Do not stop and wait for "
+        "the user while it runs.\n"
         "Let me pick: `SYNC --list`, show titles and dates, then upload the same way (a new "
         "ticket file named import-ticket-<8 random letters>.txt in the same folder) with "
         "`--session <id>` per chosen conversation instead of `--all`.\n"
@@ -1229,7 +1232,7 @@ def _setup_text(host: str, data_dir: str, session_id: str,
                           "then Import all / Let me pick / Not now")
         text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
                  "they choose, follow /substrate-claude:substrate-import (or $substrate-import); "
-                 "the ticket goes in a file, never in a command." % offer_text)
+                 "the import ticket never goes in a command or in your reply." % offer_text)
     return text
 
 
@@ -1351,7 +1354,7 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
 # Direct upload over MCP Streamable HTTP with an import ticket.
 # ---------------------------------------------------------------------------
 
-USER_AGENT = "substrate-sync/0.9.0"
+USER_AGENT = "substrate-sync/0.10.0"
 MAX_RETRIES = 8
 REQUEST_TIMEOUT = 120.0
 
@@ -1802,10 +1805,53 @@ def _mcp_url() -> str:
     return os.environ.get("SUBSTRATE_MCP_URL", "").strip()
 
 
+CLAIM_RE = re.compile(r"[A-Za-z0-9_-]{32,128}")
+
+
+def _new_claim() -> str:
+    """A fresh claim for memory_import_ticket. It is not a credential: it unlocks one ticket, once, for 10 minutes."""
+    return secrets.token_urlsafe(32)
+
+
+def _clean_claim(raw: str) -> str:
+    value = raw.strip()
+    return value if CLAIM_RE.fullmatch(value) else ""
+
+
+def _claim_ticket(mcp_url: str, claim: str) -> str:
+    """Exchange a claim for the import ticket, so the ticket never reaches the chat."""
+    parsed = urllib.parse.urlsplit(_check_url(mcp_url))
+    url = _check_url("%s://%s/mcp/import-ticket/claim" % (parsed.scheme, parsed.netloc))
+    request = urllib.request.Request(
+        url, data=json.dumps({"claim": claim}).encode("utf-8"), method="POST",
+        headers={"Content-Type": "application/json", "Accept": "application/json",
+                 "User-Agent": USER_AGENT})
+    try:
+        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=REQUEST_TIMEOUT) as response:
+            raw = response.read(64 * 1024)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise Fatal("claim_not_found") from None
+        if error.code == 429 or 500 <= error.code <= 599:
+            raise Retryable("http_%d" % error.code, _retry_after(error.headers)) from None
+        raise Fatal("http_%d" % error.code) from None
+    except (urllib.error.URLError, OSError, socket.timeout) as error:
+        raise Retryable("network: %s" % type(error).__name__) from None
+    try:
+        value = json.loads(raw.decode("utf-8", "replace"))
+    except ValueError:
+        raise Retryable("invalid_response") from None
+    ticket = value.get("ticket") if isinstance(value, dict) else None
+    ticket = _clean_ticket(ticket) if isinstance(ticket, str) else ""
+    if not ticket:
+        raise Fatal("claim_not_found")
+    return ticket
+
+
 def _spawn_background(argv: List[str], data_dir: str, ticket: str) -> int:
     os.makedirs(data_dir, exist_ok=True)
-    child_argv = _without_flag(_without_flag(argv, "--background", False),
-                               "--ticket-file", True)
+    child_argv = _without_flag(_without_flag(_without_flag(argv, "--background", False),
+                                             "--ticket-file", True), "--claim", True)
     command = [sys.executable, os.path.abspath(__file__)] + child_argv + ["--_child"]
     StatusWriter(data_dir, {"state": "starting", "pid": None, "started_at": _utc_now()}).update()
     log = open(os.path.join(data_dir, LOG_FILE), "ab")
@@ -1832,9 +1878,23 @@ def _spawn_background(argv: List[str], data_dir: str, ticket: str) -> int:
 
 
 def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[str]) -> int:
-    # The ticket is read first, so its file is gone whatever happens next.
-    ticket = _take_child_ticket() if args._child else _take_ticket(args.ticket_file)
     url = _mcp_url()
+    claim = _clean_claim(args.claim) if args.claim else ""
+    ticket = ""
+    if args._child:
+        ticket = _take_child_ticket()
+    elif claim and url:
+        try:
+            ticket = _with_retries(lambda: _claim_ticket(url, claim))
+        except Fatal:
+            print(json.dumps({"error": "claim_failed", "message":
+                              "The import claim was not accepted (it expires after 10 minutes and "
+                              "works once). Ask for a new ticket with memory_import_ticket and run "
+                              "the upload again."}))
+            return 2
+    else:
+        # The ticket file is read first, so it is gone whatever happens next.
+        ticket = _take_ticket(args.ticket_file)
     if not ticket or not url:
         print(json.dumps({"error": "missing_ticket", "message":
                           "Write the ticket from memory_import_ticket to the file given by "
@@ -1953,6 +2013,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--record-decision", choices=DECISIONS)
     parser.add_argument("--record-connected", action="store_true")
     parser.add_argument("--data-dir", default="")
+    parser.add_argument("--claim", default="")
+    parser.add_argument("--new-claim", action="store_true")
+    parser.add_argument("--mcp-url", default="")
     parser.add_argument("--pause", type=float, default=0.0)
     parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)
     if "--offer-check" in argv:
@@ -1962,6 +2025,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         except BaseException:  # noqa: BLE001 - a hook never fails the prompt
             return 0
     args = parser.parse_args(argv)
+    if args.new_claim:
+        print(json.dumps({"claim": _new_claim()}))
+        return 0
+    if args.mcp_url:
+        os.environ["SUBSTRATE_MCP_URL"] = args.mcp_url.strip()
     data_dir = _data_dir(args.host, args.data_dir)
     if args.pause:
         # Lets the agent wait for a browser sign-in without ending its turn.

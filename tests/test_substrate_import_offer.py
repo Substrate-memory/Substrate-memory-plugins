@@ -332,8 +332,8 @@ def test_offer_emitted_when_undecided(env) -> None:
     for phrase in ("I found 1 past conversation on this computer (2 turns, 1 Sep 2026 to "
                    "1 Sep 2026). Import them into Substrate? Import all / Let me pick / Not now",
                    "Connected to Substrate.", "memory_import_ticket", "--upload --all --background",
-                   "--ticket-file", "import-ticket-", "SUBSTRATE_MCP_URL", "--status --wait 60",
-                   "--record-decision no", "must never appear in a Bash command",
+                   "--ticket-file", "import-ticket-", "--mcp-url", "--new-claim", "claim_pending", "--status --wait 60",
+                   "--record-decision no", "never appear in your reply",
                    "Do not stop and wait for the user",
                    "mcp__plugin_substrate-claude_substrate-memory__memory_search"):
         assert phrase in text, phrase

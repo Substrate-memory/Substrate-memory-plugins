@@ -1,5 +1,6 @@
 ---
 description: Sign in to Substrate, verify, and offer to import past conversations, in one go.
+allowed-tools: Bash(python3 *) Bash(python *)
 ---
 
 Run this end to end. Pause only for the user's browser approval and their import
