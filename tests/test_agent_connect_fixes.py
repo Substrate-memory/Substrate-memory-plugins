@@ -142,7 +142,7 @@ def _text(path: Path) -> str:
 def test_setup_text_pastes_the_link_and_invents_no_network_advice(tmp_path) -> None:
     text = " ".join(sync._setup_text("claude", str(tmp_path), "s1", None, False).split())
     assert "paste the full sign-in URL" in text and "Paste the link again" in text
-    assert "Never mention ports, callback addresses, localhost" in text
+    assert "never mention ports, callback addresses or localhost" in text.lower()
     assert "pasting the address-bar URL only if" not in text
     assert "Offer this once" in text
 
@@ -154,7 +154,7 @@ def test_setup_text_pastes_the_link_and_invents_no_network_advice(tmp_path) -> N
 def test_connect_texts_paste_the_link_and_ignore_the_mcp_offer(path: Path) -> None:
     text = _text(path)
     assert "paste the full" in text.lower() or "paste that full link" in text.lower()
-    assert "Never mention ports" in text
+    assert "never mention ports" in text.lower()
     assert "Offer this once" in text
 
 
@@ -249,3 +249,37 @@ def test_upload_on_a_trial_ended_account_says_so_plainly(home, monkeypatch, caps
 def test_every_skill_says_the_trial_ended_plainly(path: Path) -> None:
     text = _text(path)
     assert "payment_required" in text and "/billing to keep using memory" in text
+
+
+# ---------------------------------------------------------------------------
+# N4 / N7 / N9 / F3 (round 2, Claude Code): exact SYNC form, install-prompt session, wording.
+
+
+def test_commands_name_the_exact_sync_form_and_the_tool_load() -> None:
+    connect = _text(CLAUDE / "commands" / "substrate-connect.md")
+    assert "Run it exactly in that form" in connect and "full interpreter path" in connect
+    assert "load it first with ToolSearch" in connect
+    assert "Never describe this session or computer as remote" in connect
+    assert "never say" in connect and "already in Substrate" in connect
+    setup = _text_of_setup()
+    assert "load it with ToolSearch first" in setup and "Never describe this session" in setup
+    assert "never mention ports" in setup.lower()
+
+
+def _text_of_setup() -> str:
+    return " ".join(sync._setup_text("claude", "/tmp/x", "s1", None, False).split())
+
+
+def test_install_prompt_session_is_never_imported(tmp_path) -> None:
+    prompt = ("Install Substrate memory in this agent by following "
+              "https://trysubstrate.co/install.md?via=app")
+    setup_line = json.dumps({"type": "user", "message": {"role": "user", "content": prompt}})
+    other_line = json.dumps({"type": "user", "message": {"role": "user", "content": "hello"}})
+    assistant_line = json.dumps({"type": "assistant", "message": {"role": "assistant",
+                                                                    "content": "I can install it: " + prompt}})
+    setup = tmp_path / "setup.jsonl"
+    setup.write_text(other_line + "\n" + setup_line + "\n", encoding="utf-8")
+    plain = tmp_path / "plain.jsonl"
+    plain.write_text(other_line + "\n" + assistant_line + "\n", encoding="utf-8")
+    assert sync._has_install_prompt(str(setup)) is True
+    assert sync._has_install_prompt(str(plain)) is False

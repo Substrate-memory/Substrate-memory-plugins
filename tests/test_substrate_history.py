@@ -324,8 +324,8 @@ def test_import_job_delivers_everything_eligible(home, real_spool, connected):
     assert sum(item["kind"] == "capture_session" for item in items) == 2
     assert result["result"] == {"sessions": 2, "turns": 5, "messages": 10, "stored": 5, "duplicate": 0,
                                 "rejected": 0, "dropped": 0}
-    assert result["message"] == ("Imported 2 past Hermes conversations (10 messages): "
-                                 "5 new, 0 already in memory.")
+    assert result["message"] == ("Imported 2 past Hermes conversations. Substrate is reading them now; "
+                                 "ask about them in a few minutes.")
     assert history.take_finished_announcement(home) == result["message"]
     assert history.take_finished_announcement(home) == ""
 
@@ -350,7 +350,7 @@ def test_rerun_only_produces_duplicates(home, real_spool, connected):
     assert first["result"]["stored"] == 5
     assert second["result"] == {"sessions": 2, "turns": 5, "messages": 10, "stored": 0, "duplicate": 5,
                                 "rejected": 0, "dropped": 0}
-    assert "0 new, 5 already in memory" in second["message"]
+    assert "already in Substrate, so nothing new was added" in second["message"]
 
 
 def test_turns_substrate_already_holds_are_skipped(home, real_spool, connected):
@@ -437,7 +437,7 @@ def test_rejected_items_are_reported(home, real_spool, connected):
         "rejected" if item["kind"] == "capture_turn" and item["offset"]["start"] == 2 else "stored")
     result = run_job(home, real_spool)
     assert result["result"]["rejected"] == 2
-    assert "2 parts of conversations could not be saved" in result["message"]
+    assert "2 items could not be saved" in result["message"]
 
 
 def test_picked_sessions_only(home, real_spool, connected):
@@ -586,7 +586,7 @@ def test_tool_preview_start_status_and_finished_announcement(home, monkeypatch, 
             break
         time.sleep(0.05)
     assert state["state"] == "done", state
-    assert state["message"].startswith("Imported 2 past Hermes conversations (10 messages)")
+    assert state["message"].startswith("Imported 2 past Hermes conversations.")
     _turn_context(monkeypatch)
     context = plugin.pre_llm_call("live-1", "hi", [])["context"]
     assert "<substrate-import>" in context and "Imported 2 past Hermes conversations" in context

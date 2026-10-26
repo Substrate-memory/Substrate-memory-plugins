@@ -742,6 +742,25 @@ def _title(turns: List[Dict[str, Any]]) -> str:
     return ""
 
 
+INSTALL_PROMPT_RE = re.compile(r"Install Substrate memory in this agent by following https?://\S*install\.md")
+
+
+def _has_install_prompt(path: str) -> bool:
+    """True when a user message of this transcript holds the install prompt.
+
+    The session where the user pasted the install prompt is the setup session itself:
+    it is never imported, whatever its id (ids can change across /reload-plugins).
+    """
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if INSTALL_PROMPT_RE.search(line) and ('"user' in line or "user_message" in line):
+                    return True
+    except OSError:
+        return False
+    return False
+
+
 def _catalogue(host: str, exclude: Optional[set] = None,
                only: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Parse local transcripts once; one entry per session id (first file wins)."""
@@ -752,6 +771,8 @@ def _catalogue(host: str, exclude: Optional[set] = None,
     for path in _iter_transcript_files(host):
         stem = os.path.splitext(os.path.basename(path))[0]
         if stem in exclude or stem.replace("rollout-", "") in exclude:
+            continue
+        if _has_install_prompt(path):
             continue
         try:
             session_id, turns = PARSERS[host](path)
@@ -1148,6 +1169,21 @@ def _offer_sentence(summary: Dict[str, Any]) -> str:
         _human_date(summary["first_at"]), _human_date(summary["last_at"]))
 
 
+def _import_summary(sessions: int, tally: "Tally") -> str:
+    """The one line the user sees when an import ends. Counts only when something was refused."""
+    if sessions <= 0:
+        text = "No conversations were left to import."
+    elif tally.stored == 0 and tally.duplicate > 0 and tally.rejected == 0:
+        text = ("That conversation was already in Substrate, so nothing new was added." if sessions == 1
+                else "Those %s were already in Substrate, so nothing new was added." % _plural(sessions, "conversation"))
+    else:
+        text = ("Imported %s. Substrate is reading them now; ask about them in a few minutes."
+                % _plural(sessions, "conversation"))
+    if tally.rejected:
+        text += " %s could not be saved." % _plural(tally.rejected, "item")
+    return text
+
+
 def _plural(count: int, word: str, text: Optional[str] = None) -> str:
     shown = str(count) if text is None else text
     return "%s %s%s" % (shown, word, "" if count == 1 else "s")
@@ -1220,14 +1256,14 @@ def _setup_text(host: str, data_dir: str, session_id: str,
         "this is the plugin, and the plugin handles the import.\n"
         "2. If the plugin's tool is missing or fails with \"not connected\", \"needs "
         "authentication\" or \"unauthorized\" (or only an `authenticate` tool for substrate-memory "
-        "exists): call that authenticate tool. In your reply, paste the full sign-in URL it returns "
+        "exists): if that tool is not loaded, load it with ToolSearch first. Call it. In your reply, paste the full sign-in URL it returns "
         "as plain text (the user cannot see tool output), then say: \"Open this link, sign in and "
         "choose Approve connection. I'll continue automatically.\" Paste the link again whenever "
         "the user says they cannot see it. If the result has no link, say so and ask the user to "
         "run /mcp, choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the "
-        "link it shows. Never mention ports, callback addresses, localhost, or remote or SSH "
-        "machines unless the user reports an error page; only then ask them to paste the full "
-        "address-bar URL. Then do NOT end your turn: run `SYNC --pause 15`, then call `%(search)s` "
+        "link it shows. Never describe this session or computer as remote, local or SSH, and never "
+        "mention ports, callback addresses or localhost, even if the tool's result says so. Only if "
+        "the user reports an error page, ask them to paste the full address-bar URL. Then do NOT end your turn: run `SYNC --pause 15`, then call `%(search)s` "
         "again (load it with ToolSearch if it is deferred); repeat up to 20 times (about 5 "
         "minutes). As soon as it works, do step 1 and continue. If it never works, say: "
         "\"Substrate is not connected yet. Open /mcp, choose plugin:substrate-claude:"
@@ -1984,10 +2020,7 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
         status.update(note="Server busy (%s); retrying in %ds." % (reason, int(seconds)))
 
     def finish(state: str, message: str, code: int) -> int:
-        summary = "Imported %d session%s (%d turns): %d stored, %d duplicate, %d rejected." % (
-            status.state.get("sessions_done", 0),
-            "" if status.state.get("sessions_done", 0) == 1 else "s",
-            turns_total, tally.stored, tally.duplicate, tally.rejected)
+        summary = _import_summary(status.state.get("sessions_done", 0), tally)
         status.update(state=state, message=message, summary=summary, stored=tally.stored,
                       duplicate=tally.duplicate, rejected=tally.rejected,
                       sessions_sealed=tally.sealed, seal_failed=tally.seal_failed, note="")

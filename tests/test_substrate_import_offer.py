@@ -497,7 +497,7 @@ def test_setup_continues_until_connected(env) -> None:
     for phrase in ("Substrate setup is not finished", "memory_search", "Connected to Substrate.",
                    "--record-connected", "authenticate", "Approve connection",
                    "I'll continue automatically", "paste the full sign-in URL",
-                   "Never mention ports, callback addresses, localhost",
+                   "never mention ports, callback addresses or localhost",
                    "do NOT end your turn", "--pause 15", "up to 20 times", "ToolSearch",
                    'A bare "continue", "done"', "Do not comment on it",
                    "I found 1 past conversation on this computer",
@@ -820,7 +820,7 @@ def test_upload_all_handshake_and_summary(env, capsys, monkeypatch, sse, statefu
         ticket_env(monkeypatch, fake.url)
         code, out = upload(capsys, "--all")
         assert code == 0, out
-        assert out.splitlines()[-1] == "Imported 2 sessions (5 turns): 5 stored, 0 duplicate, 0 rejected."
+        assert out.splitlines()[-1] == "Imported 2 conversations. Substrate is reading them now; ask about them in a few minutes."
         methods = [m.get("method") for m in fake.calls]
         assert methods[0] == "initialize"
         if stateful:
@@ -850,7 +850,7 @@ def test_upload_seals_each_session_once_after_its_turns(env, capsys, server, mon
     ticket_env(monkeypatch, server.url)
     code, out = upload(capsys, "--all")
     assert code == 0
-    assert out == "Imported 2 sessions (73 turns): 73 stored, 0 duplicate, 0 rejected."
+    assert out == "Imported 2 conversations. Substrate is reading them now; ask about them in a few minutes."
     sent = server.sent_items()
     _validate(sent)
     for session in ("a", "b"):
@@ -868,7 +868,7 @@ def test_upload_seals_each_session_once_after_its_turns(env, capsys, server, mon
     assert status["sessions_sealed"] == 2 and status["seal_failed"] == 0
     # Rerun (forced past the local skip): the seals dedupe on the server too.
     code, out = upload(capsys, "--all", "--force")
-    assert out.endswith("0 stored, 73 duplicate, 0 rejected.")
+    assert out.endswith("already in Substrate, so nothing new was added.")
     assert len(server.store) == 73 + 2
 
 
@@ -884,7 +884,7 @@ def test_rejected_seal_does_not_break_import(env, capsys, server, monkeypatch) -
     server.handle = refuse_seals
     ticket_env(monkeypatch, server.url)
     code, out = upload(capsys, "--all")
-    assert code == 0 and out.endswith("2 stored, 0 duplicate, 0 rejected.")
+    assert code == 0 and out.endswith("Substrate is reading them now; ask about them in a few minutes.")
     status = json.loads((env["data"] / "import-status.json").read_text())
     assert status["seal_failed"] == 1
 
@@ -944,7 +944,7 @@ def test_upload_batches_many_and_large_turns(env, capsys, server, monkeypatch) -
         batch = message["params"]["arguments"]["items"]
         assert len(c.canonical_bytes({"items": batch})) <= 240 * 1024
     assert all(len(body) <= 262144 for body in server.bodies)
-    assert "156 turns" in out and "rejected" in out
+    assert "Imported 2 conversations." in out and "Substrate is reading them now" in out
 
 
 def test_upload_retries_429_and_5xx(env, capsys, server, monkeypatch) -> None:
@@ -957,7 +957,7 @@ def test_upload_retries_429_and_5xx(env, capsys, server, monkeypatch) -> None:
     code, out = upload(capsys, "--all")
     assert code == 0, out
     assert len(waits) == 4
-    assert out.endswith("2 stored, 0 duplicate, 0 rejected.")
+    assert out.endswith("Substrate is reading them now; ask about them in a few minutes.")
 
 
 def test_upload_gives_up_after_bounded_retries(env, capsys, server, monkeypatch) -> None:
@@ -998,7 +998,7 @@ def test_upload_401_stops_cleanly_and_resumes(env, capsys, monkeypatch) -> None:
         assert code == 0, out
         # s1 skipped locally (counted as duplicate); s2's first batch is resent
         # and the server dedupes it; s2's rest and s3 are new.
-        assert out == ("Imported 3 sessions (143 turns): 9 stored, 134 duplicate, 0 rejected.")
+        assert out == "Imported 3 conversations. Substrate is reading them now; ask about them in a few minutes."
         assert len(fake.store) == 143 + 3  # plus one seal per session
     finally:
         fake.close()
@@ -1018,10 +1018,10 @@ def test_rerun_is_idempotent(env, capsys, server, monkeypatch) -> None:
     assert upload(capsys, "--all")[0] == 0
     first_calls = len(server.import_requests())
     code, out = upload(capsys, "--all")
-    assert out == "Imported 1 session (4 turns): 0 stored, 4 duplicate, 0 rejected."
+    assert out == "That conversation was already in Substrate, so nothing new was added."
     assert len(server.import_requests()) == first_calls  # skipped locally
     code, out = upload(capsys, "--all", "--force")
-    assert out == "Imported 1 session (4 turns): 0 stored, 4 duplicate, 0 rejected."
+    assert out == "That conversation was already in Substrate, so nothing new was added."
     assert len(server.import_requests()) == first_calls + 1  # server-side dedupe
 
 
@@ -1031,7 +1031,7 @@ def test_changed_session_is_resent(env, capsys, server, monkeypatch) -> None:
     upload(capsys, "--all")
     write_claude_session(env["claude"], "a", turns=3)  # the conversation continued
     code, out = upload(capsys, "--all")
-    assert out.endswith("1 stored, 2 duplicate, 0 rejected.")
+    assert out.endswith("Substrate is reading them now; ask about them in a few minutes.")
 
 
 def test_bad_item_is_isolated_by_bisection(env, capsys, server, monkeypatch) -> None:
@@ -1042,7 +1042,7 @@ def test_bad_item_is_isolated_by_bisection(env, capsys, server, monkeypatch) -> 
     ticket_env(monkeypatch, server.url)
     code, out = upload(capsys, "--all")
     assert code == 0
-    assert out.endswith("9 stored, 0 duplicate, 1 rejected.")
+    assert out.endswith("Substrate is reading them now; ask about them in a few minutes. 1 item could not be saved.")
 
 
 def test_413_is_bisected(env, capsys, server, monkeypatch) -> None:
@@ -1050,7 +1050,7 @@ def test_413_is_bisected(env, capsys, server, monkeypatch) -> None:
     server.http_queue = [413]
     ticket_env(monkeypatch, server.url)
     code, out = upload(capsys, "--all")
-    assert code == 0 and out.endswith("4 stored, 0 duplicate, 0 rejected.")
+    assert code == 0 and out.endswith("Substrate is reading them now; ask about them in a few minutes.")
 
 
 def test_redaction_applied_on_upload(env, capsys, server, monkeypatch) -> None:
@@ -1092,7 +1092,7 @@ def test_codex_upload(env, capsys, server, monkeypatch) -> None:
     ticket_env(monkeypatch, server.url)
     code = sync.main(["--host", "codex", "--upload", "--all", *ticket_args()])
     out = capsys.readouterr().out.strip()
-    assert code == 0 and out == "Imported 1 session (3 turns): 3 stored, 0 duplicate, 0 rejected."
+    assert code == 0 and out == "Imported 1 conversation. Substrate is reading them now; ask about them in a few minutes."
     assert {i["session_id"] for i in server.sent_items()} == {"cx-1"}
 
 
@@ -1125,7 +1125,7 @@ def test_background_upload_and_status(env, server) -> None:
     assert TICKET not in proc.stdout
     status = _poll_until_done()
     assert status["state"] == "done"
-    assert status["message"] == "Imported 5 sessions (100 turns): 100 stored, 0 duplicate, 0 rejected."
+    assert status["message"] == "Imported 5 conversations. Substrate is reading them now; ask about them in a few minutes."
     assert {i["session_id"] for i in server.sent_items()} == {f"bg-{n}" for n in range(5)}
     for name in os.listdir(env["data"]):
         assert TICKET not in (env["data"] / name).read_text(errors="replace"), name

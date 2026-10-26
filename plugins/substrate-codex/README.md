@@ -56,8 +56,8 @@ and in the same reply offers the import:
 **Import all** uploads everything except the current conversation, in the
 background, straight from the local script to Substrate with a short-lived
 import-only ticket; your history never passes through the chat. The agent
-reports progress and the final `Imported N sessions (T turns): S stored, D
-duplicate, R rejected.` **Not now** is remembered; ask "import my past
+reports progress and a final line: how many conversations were imported, and that
+Substrate is reading them now. **Not now** is remembered; ask "import my past
 conversations" any time.
 
 ## Hook trust step

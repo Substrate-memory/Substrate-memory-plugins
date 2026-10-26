@@ -372,7 +372,7 @@ tool result through `PostToolUse`.
   Finished sessions are remembered locally and skipped on a rerun. The current
   session (named, or last seen by the offer hook, or the transcript written in
   the last 10 minutes) is never imported. Final line:
-  `Imported N sessions (T turns): S stored, D duplicate, R rejected.`
+  `Imported N conversations. Substrate is reading them now; ask about them in a few minutes.`
 - `--offer-check` — `UserPromptSubmit` command hook printing hook JSON
   (`hookSpecificOutput.additionalContext`). Until `--record-connected` it tells
   the agent to finish setup now (sign in, `memory_search`, **Connected to

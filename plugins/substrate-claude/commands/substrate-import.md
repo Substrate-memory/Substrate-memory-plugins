@@ -1,10 +1,11 @@
 ---
 description: Import past local conversations into Substrate. The script uploads them directly; nothing passes through the chat.
-allowed-tools: Bash(python3 "*/scripts/substrate_sync.py" *) Bash(python "*/scripts/substrate_sync.py" *)
+allowed-tools: Bash(python3 "*/scripts/substrate_sync.py" *) Bash(python3 */scripts/substrate_sync.py *) Bash(python "*/scripts/substrate_sync.py" *) Bash(python */scripts/substrate_sync.py *) Bash(/usr/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/usr/bin/python3 */scripts/substrate_sync.py *) Bash(/usr/bin/python "*/scripts/substrate_sync.py" *) Bash(/usr/bin/python */scripts/substrate_sync.py *) Bash(/usr/local/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/usr/local/bin/python3 */scripts/substrate_sync.py *) Bash(/opt/homebrew/bin/python3 "*/scripts/substrate_sync.py" *) Bash(/opt/homebrew/bin/python3 */scripts/substrate_sync.py *) ToolSearch mcp__plugin_substrate-claude_substrate-memory__memory_import_ticket mcp__plugin_substrate-claude_substrate-memory__memory_import_status mcp__plugin_substrate-claude_substrate-memory__memory_search
 ---
 
 `SYNC` means `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude`
-(use `python` if `python3` is missing). Requires **Connected to Substrate.**
+(use `python` if `python3` is missing), in exactly that form: no full interpreter
+path, no extra options before the script. Requires **Connected to Substrate.**
 (`/substrate-claude:substrate-connect`). The current conversation is excluded
 automatically: hooks already capture it. Conversations already imported are not
 listed or counted again.
@@ -36,8 +37,9 @@ after 10 minutes.
    again. Do not retry on your own, and do not wait on the server.
 3. Say "Importing N conversations in the background." Then repeat
    `SYNC --status --wait 60` and give its `message` in one line each time until
-   `done` is true. End with that summary line
-   (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`).
+   `done` is true. End with that summary line: it says how many conversations were
+   imported and that Substrate is reading them now. Say it as written; do not add
+   counts that the line does not give.
    Keep polling in the same turn; do not wait for the user.
 
 **Import again** (only after the account note in `/substrate-claude:substrate-connect`

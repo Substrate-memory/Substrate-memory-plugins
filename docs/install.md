@@ -77,10 +77,11 @@ Then follow the plugin's import: `/substrate-claude:substrate-import` in Claude
 Code, `$substrate-import` in Codex, `onboard.py import --yes`, `--session <id>`
 or `--no` in Hermes. If the plugin finds nothing to offer, but this computer
 already imported conversations, the account may be a different one: the plugin's
-connect command checks, and offers to import them again into this account. Report progress until the plugin's final summary line. It says how many
-conversations were imported and how many items were stored, were already there,
-or were rejected (the exact words differ by host). Not now:
-record it and never ask again. Skip on Cowork and when nothing is readable.
+connect command checks, and offers to import them again into this account. Report
+progress until the plugin's final line: how many conversations were imported, and
+that Substrate is reading them now (ask about them in a few minutes). Counts appear
+only when something was refused. Say the line as the plugin gives it.
+**Not now:** record it and never ask again. Skip on Cowork and when nothing is readable.
 
 **MCP hosts (claude.ai, ChatGPT, Cursor, other connectors).** Offer once:
 "I can save what I already know about you to Substrate. Want me to?" On yes,

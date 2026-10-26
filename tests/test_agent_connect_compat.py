@@ -53,21 +53,38 @@ def _rule_matches(rule, command):
     return re.fullmatch(pattern, command) is not None
 
 
+MCP = "mcp__plugin_substrate-claude_substrate-memory__"
+INTERPRETERS = ["python3", "python", "/usr/bin/python3", "/usr/bin/python", "/usr/local/bin/python3",
+                "/opt/homebrew/bin/python3"]
+EXPECTED_BASH = {f'Bash({i} "*/scripts/substrate_sync.py" *)' for i in INTERPRETERS} | \
+    {f"Bash({i} */scripts/substrate_sync.py *)" for i in INTERPRETERS}
+MCP_TOOLS = {
+    "substrate-connect": {"ToolSearch", MCP + "authenticate", MCP + "memory_search", MCP + "memory_import_status"},
+    "substrate-import": {"ToolSearch", MCP + "memory_import_ticket", MCP + "memory_import_status", MCP + "memory_search"},
+    "substrate-sync": set(),
+}
+
+
 @pytest.mark.parametrize("name", ["substrate-connect", "substrate-import", "substrate-sync"])
 def test_claude_commands_pre_approve_only_the_plugin_script(name):
     tools = _allowed_tools(name)
-    # Only Bash rules naming the plugin's own script; no bare python, no Write, no Bash(*).
-    assert tools == ('Bash(python3 "*/scripts/substrate_sync.py" *) '
-                     'Bash(python "*/scripts/substrate_sync.py" *)'), tools
     rules = re.findall(r"Bash\([^)]*\)", tools)
-    assert len(rules) == 2
+    # Only Bash rules naming the plugin's own script, for the listed interpreters; no Write, no Bash(*).
+    assert set(rules) == EXPECTED_BASH, sorted(set(rules) ^ EXPECTED_BASH)
+    others = set(re.sub(r"Bash\([^)]*\)", "", tools).split())
+    assert others == MCP_TOOLS[name], others
     allowed = [
+        '/usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --preview',
+        '/usr/bin/python3 /home/u/.claude/plugins/cache/x/scripts/substrate_sync.py --host claude --status --wait 60',
         'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --new-claim',
         'python3 "/home/u/.claude/plugins/cache/x/substrate-claude/0.10.0/scripts/substrate_sync.py" '
         '--host claude --upload --all --background --claim "claim_x"',
         'python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --preview',
     ]
     denied = [
+        '/usr/bin/python3 -c "import os"',
+        '/bin/sh "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py"',
+        'curl -o /tmp/x /home/u/scripts/substrate_sync.py --host claude',
         'python3 -c "import os"',
         'python3 /tmp/evil.py --host claude',
         'python3 "/tmp/substrate_sync.py.bak" --host claude',

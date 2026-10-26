@@ -75,8 +75,8 @@ notices the approval by itself, checks it with `memory_search`, says
   (already captured live) and anything already imported. The upload runs in the
   background straight from the local script to Substrate with a short-lived
   import-only ticket, so your history never passes through the chat. The agent
-  reports progress and ends with `Imported N sessions (T turns): S stored, D
-  duplicate, R rejected.`
+  reports progress and ends with a line that says how many conversations were
+  imported and that Substrate is reading them now ("ask about them in a few minutes").
 - **Let me pick**: the agent lists conversations by date and title, not counting
   the ones already imported.
 - **Not now**: never asked again. Say "import my past conversations" any time.

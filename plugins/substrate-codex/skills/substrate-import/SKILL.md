@@ -33,8 +33,8 @@ If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
    again later. Do not retry on your own.
 3. Say "Importing N conversations in the background." Then repeat
    `SYNC --status --wait 60` and give its `message` in one line each time until
-   `done` is true; end with that summary line
-   (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`).
+   `done` is true; end with that summary line: it says how many conversations were
+   imported and that Substrate is reading them now. Say it as written.
    Keep polling in the same turn; do not wait for the user.
 
 **Let me pick**: `SYNC --list`, show a short numbered list (date and title),

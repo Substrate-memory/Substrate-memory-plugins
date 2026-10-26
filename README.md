@@ -79,7 +79,7 @@ Right after **Connected to Substrate.**, in the same reply, the agent offers onc
 
 > I found 87 past conversations on this computer (1,204 turns, 3 Mar to 7 Oct 2026). Import them into Substrate? **Import all** / **Let me pick** / **Not now**
 
-- **Import all** imports every local conversation except the current one (already captured live). It runs in the background; the agent reports progress and the final line (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`) without waiting for you.
+- **Import all** imports every local conversation except the current one (already captured live). It runs in the background; the agent reports progress and the final line (how many conversations were imported, and that Substrate is reading them now) without waiting for you.
 - **Let me pick** lists conversations by date and title; only those are imported.
 - **Not now** is remembered and never asked again. Ask "import my past conversations" any time.
 - The import state is kept per computer, not per account. If you later connect a different Substrate account on the same computer, the agent checks it and offers to import the earlier conversations into that account.
