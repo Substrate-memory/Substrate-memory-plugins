@@ -1200,7 +1200,8 @@ def test_explicit_call_gives_up_after_one_retry_with_a_busy_message(monkeypatch,
     assert result["error"] == "timeout"
     assert "busy or slow right now" in result["message"]
     assert "try again in a moment" in result["message"].lower()
-    assert "do not tell the user you lack access" in result["message"]
+    assert "Say that the memory lookup is busy." in result["message"]
+    assert "lack access" not in result["message"]
 
 
 @pytest.mark.parametrize(
@@ -1329,7 +1330,8 @@ def test_server_description_is_one_clean_line():
 def test_fallback_search_description_is_direct():
     text = plugin.MEMORY_SEARCH_SCHEMA["description"]
     assert text.startswith("Search Substrate memory directly")
-    assert "Do not claim you lack access" in text
+    assert "Search before saying a source is unavailable" in text
+    assert "lack access" not in text
 
 
 def test_payload_too_large_tool_error_is_permanent(monkeypatch):

@@ -870,6 +870,7 @@ class ImportJob:
             result={
                 "sessions": int(job.get("sessions_done") or 0),
                 "turns": delta["delivered"] + delta["quarantined"] + held_total,
+                "messages": int(job.get("messages_total") or 0),
                 "stored": max(0, delta["delivered"] - delta["duplicate"]),
                 "duplicate": delta["duplicate"] + held_total,
                 "rejected": delta["quarantined"],
@@ -883,12 +884,14 @@ class ImportJob:
 def summary(result: dict[str, Any]) -> str:
     sessions = int(result.get("sessions") or 0)
     noun = "conversation" if sessions == 1 else "conversations"
-    text = (f"Imported {sessions:,} past Hermes {noun} ({int(result.get('turns') or 0):,} turns): "
+    units = (f"{int(result['messages']):,} messages" if "messages" in result
+             else f"{int(result.get('turns') or 0):,} turns")
+    text = (f"Imported {sessions:,} past Hermes {noun} ({units}): "
             f"{int(result.get('stored') or 0):,} new, "
             f"{int(result.get('duplicate') or 0):,} already in memory.")
     problems = int(result.get("rejected") or 0) + int(result.get("dropped") or 0)
     if problems:
-        text += (f" {problems:,} turns could not be saved; ask me to import your past "
+        text += (f" {problems:,} parts of conversations could not be saved; ask me to import your past "
                  "conversations again to retry them.")
     return text
 

@@ -43,7 +43,8 @@ STATIC_MEMORY_PROMPT = (
     "changed. Call `memory_evidence` when the user asks why you believe something. "
     "Call `memory_search` with your intended action before irreversible operations. "
     "Importing past conversations or sessions is the substrate_import tool, never "
-    "memory_remember. If substrate_import cannot run, say so; do not claim an import. "
+    "memory_remember. If substrate_import cannot run, say so. Report an import only when "
+    "the tool confirms it. "
     "A result that says queued is saved and syncs by itself; do not retry it. "
     "Pinned pages follow."
 )
@@ -1163,6 +1164,11 @@ def on_session_switch(
 
 
 def _error(category: str) -> str:
+    if category == "payment_required":
+        from . import onboarding as _onboarding
+
+        return json.dumps({"error": "payment_required",
+                           "message": _onboarding.billing_message()}, separators=(",", ":"))
     allowed = {"invalid_request", "invalid_response", "invalid_config", "timeout", "transport_error"}
     return json.dumps(
         {"error": category if category in allowed else "transport_error"},
@@ -1230,7 +1236,7 @@ _RETRY_CATEGORIES = frozenset({"timeout", "transport_error", "server_error", "in
 # connection, or the model tells the user it cannot reach a source.
 BUSY_MESSAGE = (
     "Substrate memory is busy or slow right now. Try again in a moment. This is a "
-    "temporary delay, not a missing source: do not tell the user you lack access."
+    "temporary delay, not a missing source. Say that the memory lookup is busy."
 )
 
 
@@ -1685,7 +1691,7 @@ MEMORY_SEARCH_SCHEMA = {
     # Short and direct so the model calls it straight away.
     "description": (
         "Search Substrate memory directly for the user's saved facts, past conversations "
-        "and connected sources. Do not claim you lack access to a source before searching. "
+        "and connected sources. Search before saying a source is unavailable. "
         "Use the intended action in the query before irreversible operations."
     ),
     "parameters": {
