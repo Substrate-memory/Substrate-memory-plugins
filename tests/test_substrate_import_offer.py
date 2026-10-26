@@ -22,12 +22,13 @@ from pathlib import Path
 
 import pytest
 
+from redaction_fixture import load as load_redaction_fixture  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 CLAUDE_PLUG = REPO / "plugins" / "substrate-claude"
 CODEX_PLUG = REPO / "plugins" / "substrate-codex"
 SCRIPT = CLAUDE_PLUG / "scripts" / "substrate_sync.py"
 FIX = REPO / "tests" / "fixtures" / "substrate-claude"
-REDACTION = json.loads((REPO / "contract" / "redaction-fixtures.json").read_text())
+REDACTION = load_redaction_fixture()
 
 HERMES_SRC = str(REPO / "plugins" / "substrate-hermes" / "src")
 if HERMES_SRC not in sys.path:

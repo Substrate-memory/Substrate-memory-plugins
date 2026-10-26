@@ -8,15 +8,11 @@ checks the plugin's ``_redact_text`` (text rules 1-2) and ``_safe_value``
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
 from substrate import plugin
 
-FIXTURES = json.loads(
-    (Path(__file__).resolve().parent.parent / "contract" / "redaction-fixtures.json")
-    .read_text(encoding="utf-8")
-)
+from redaction_fixture import load as load_redaction_fixture  # noqa: E402
+FIXTURES = load_redaction_fixture()
 
 
 def test_redaction_fixture_version() -> None:

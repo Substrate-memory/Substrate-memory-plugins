@@ -24,10 +24,11 @@ import pytest
 from substrate import contract, history, plugin
 from substrate.spool import PRIORITY_LIVE, PRIORITY_REPLAY
 
+from redaction_fixture import load as load_redaction_fixture  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "plugins" / "substrate-hermes" / "onboard.py"
 SCHEMAS = json.loads((ROOT / "tests" / "fixtures" / "hermes-state-schemas.json").read_text())["schemas"]
-REDACTION = json.loads((ROOT / "contract" / "redaction-fixtures.json").read_text())
+REDACTION = load_redaction_fixture()
 VERSIONS = sorted(int(v) for v in SCHEMAS)
 DAY = 86_400.0
 T0 = 1_772_496_000.0  # 2026-03-03T00:00:00Z

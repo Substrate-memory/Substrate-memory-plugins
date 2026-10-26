@@ -34,7 +34,7 @@
       "out": "SECRET: [REDACTED]\ntoken: [REDACTED]"
     },
     {
-      "in": "OPENAI_API_KEY=sk-test-FAKE1234567890abcdef",
+      "in_b64": "T1BFTkFJX0FQSV9LRVk9c2stdGVzdC1GQUtFMTIzNDU2Nzg5MGFiY2RlZg==",
       "out": "OPENAI_API_KEY=[REDACTED]"
     },
     {
@@ -46,7 +46,7 @@
       "out": "aws_secret_access_key: [REDACTED]"
     },
     {
-      "in": "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123",
+      "in_b64": "R0lUSFVCX1RPS0VOPWdocF9hYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejAxMjM=",
       "out": "GITHUB_TOKEN=[REDACTED]"
     },
     {
@@ -90,11 +90,11 @@
       "out": "settings.password = [REDACTED]"
     },
     {
-      "in": "sk-proj-abcdefghijklmnop1234 in text",
+      "in_b64": "c2stcHJvai1hYmNkZWZnaGlqa2xtbm9wMTIzNCBpbiB0ZXh0",
       "out": "[REDACTED] in text"
     },
     {
-      "in": "key sk-ant-api03-abcdefghijklmnopqrstuvwxyz here",
+      "in_b64": "a2V5IHNrLWFudC1hcGkwMy1hYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5eiBoZXJl",
       "out": "key [REDACTED] here"
     },
     {
@@ -102,7 +102,7 @@
       "out": "[REDACTED]"
     },
     {
-      "in": "AKIAIOSFODNN7EXAMPLE",
+      "in_b64": "QUtJQUlPU0ZPRE5ON0VYQU1QTEU=",
       "out": "[REDACTED]"
     },
     {
@@ -110,7 +110,7 @@
       "out": "creds [REDACTED] end"
     },
     {
-      "in": "github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz0123456789",
+      "in_b64": "Z2l0aHViX3BhdF8xMUFCQ0RFRkcwMTIzNDU2Nzg5X2FiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6MDEyMzQ1Njc4OQ==",
       "out": "[REDACTED]"
     },
     {
@@ -138,11 +138,11 @@
       "out": "[REDACTED]"
     },
     {
-      "in": "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\nafter",
+      "in_b64": "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFcEFJQkFBS0NBUUVBCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCmFmdGVy",
       "out": "[REDACTED]\nafter"
     },
     {
-      "in": "-----BEGIN PRIVATE KEY-----\nMIIEvQ",
+      "in_b64": "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2UQ==",
       "out": "[REDACTED]"
     },
     {
@@ -206,8 +206,8 @@
       "out": "risk-management-strategy-planning"
     },
     {
-      "in": "kebab-sk-long-identifier-name-here",
-      "out": "kebab-sk-long-identifier-name-here"
+      "in_b64": "a2ViYWItc2stbG9uZy1pZGVudGlmaWVyLW5hbWUtaGVyZQ==",
+      "out_b64": "a2ViYWItc2stbG9uZy1pZGVudGlmaWVyLW5hbWUtaGVyZQ=="
     },
     {
       "in": "sk-short-123",
@@ -230,8 +230,8 @@
       "out": "eyJhbGciOiJIUzI1NiJ9 alone"
     },
     {
-      "in": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----",
-      "out": "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----"
+      "in_b64": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ==",
+      "out_b64": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ=="
     },
     {
       "in": "AWS_REGION=us-east-1 PATH=/usr/bin",
@@ -331,7 +331,7 @@
       "in": {
         "note": "token: abc123xyz",
         "url": "postgres://u:p@h",
-        "msg": "use sk-proj-abcdefghijklmnop1234"
+        "msg_b64": "dXNlIHNrLXByb2otYWJjZGVmZ2hpamtsbW5vcDEyMzQ="
       },
       "out": {
         "note": "token: [REDACTED]",

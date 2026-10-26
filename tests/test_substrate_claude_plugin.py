@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from redaction_fixture import load as load_redaction_fixture  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 PLUG = REPO / "plugins" / "substrate-claude"
 SCRIPT = PLUG / "scripts" / "substrate_sync.py"
@@ -241,7 +242,7 @@ def test_script_list(fixture_homes: Path) -> None:
 
 def test_redaction_fixture_passes() -> None:
     module = _load_sync()
-    fixture = json.loads((REPO / "contract" / "redaction-fixtures.json").read_text())
+    fixture = load_redaction_fixture()
     for case in fixture["text"]:
         assert module._redact_text(case["in"]) == case["out"], case["in"]
     for case in fixture["objects"]:
