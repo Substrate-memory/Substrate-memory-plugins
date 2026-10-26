@@ -32,3 +32,12 @@ def test_text_cases() -> None:
 def test_object_cases() -> None:
     for case in FIXTURES["objects"]:
         assert plugin._safe_value(case["in"]) == case["out"], case["in"]
+
+
+def test_long_runs_stay_fast() -> None:
+    import time
+
+    started = time.monotonic()
+    out = plugin._redact_text("y" * 200_000 + " token: x " + "a:" * 50_000)
+    assert "token: [REDACTED]" in out
+    assert time.monotonic() - started < 2.0, "redaction of 200 KB took too long"
