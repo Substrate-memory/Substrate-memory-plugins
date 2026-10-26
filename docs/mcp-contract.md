@@ -306,11 +306,28 @@ Applied client-side by `substrate-hermes` and by the sync script, and **always**
 server-side on ingest for every tool in section 4. Both implementations must pass
 the shared fixture `contract/redaction-fixtures.json` in this repository.
 
-1. Text: `(?i)(\b(?:authorization|api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+`
-   → keep group 1, replace the value with `[REDACTED]`.
-2. Text: `\bsk_[A-Za-z0-9_-]{8,}\b` → `[REDACTED]`.
+1. Text: `(?i)((?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]*(?:authorization|api[_-]?key|secret(?:[_-]access[_-]key)?|access[_-]?token|token|password|passwd|pwd|private[_-]?key|client[_-]?secret|auth)(?![A-Za-z0-9_])\\?["']?\s*(?::|=(?!=))\s*)(?:(?:bearer|basic)\s+)?(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)`
+   → keep group 1 (the name and separator), replace the value with `[REDACTED]`.
+   A name is any identifier ending in one of the words (so `OPENAI_API_KEY`,
+   `aws_secret_access_key`, `GITHUB_TOKEN`, `DB_PASSWORD`, `PGPWD`, `MY_AUTH`
+   match; `tokens`, `token_count`, `author` do not). `==` is not an assignment.
+2. Text, anywhere, → `[REDACTED]`, each whole match:
+   - PEM private key blocks `-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----` through
+     `-----END … PRIVATE KEY-----` (or to the end of the text if unterminated);
+   - `(?<![A-Za-z0-9_])sk_[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_])` and `(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}` (OpenAI
+     `sk-proj-`, Anthropic `sk-ant-`);
+   - `(?<![A-Za-z0-9_-])(?:AKIA|ASIA)[0-9A-Z]{16}` (AWS access key ids);
+   - `gh[pousr]_[A-Za-z0-9]{20,}` and `github_pat_[A-Za-z0-9_]{22,}` (GitHub);
+   - `xox[abprs]-[A-Za-z0-9-]{10,}` (Slack);
+   - `(?:rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}` (Stripe);
+   - `AIza[0-9A-Za-z_-]{35}` (Google API keys);
+   - `eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}` (JWT).
+   - Connection strings: `scheme://user:password@host` → the password part only is
+     replaced (`scheme://user:[REDACTED]@host`). URLs without credentials are kept.
+   Order: PEM blocks, then rule 1, then connection strings, then the value
+   shapes above in the order listed. Each step's output is the next step's input.
 3. Objects: any key matching
-   `(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)`
+   `(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)|(?:auth|pwd)$`
    has its value replaced by `[REDACTED]` at any depth (max depth 8, max 128 keys
    or items per level; deeper or longer → `[TRUNCATED]`).
 4. Strings inside objects are bounded to 8192 bytes, other scalars to 1024;
