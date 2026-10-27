@@ -24,8 +24,10 @@
   `substrate-import` (invoke as `$skill-name` in Codex).
 - `scripts/substrate_sync.py` — byte-identical copy of the Claude script;
   stdlib only. Reads local rollouts; `--upload` sends them straight to the
-  `mcp_url` from `memory_import_ticket` (the ticket comes from a file the agent
-  writes and the script deletes, never from a command line).
+  `mcp_url` from `memory_import_ticket`. The agent passes a claim (`--claim`,
+  made by `--new-claim`) and the script exchanges it for the ticket; an older
+  server's ticket comes from a file the script deletes (`--ticket-file`). The ticket never
+  goes on a command line; a claim works once and expires after 10 minutes.
 
 ## Contract mapping (docs/mcp-contract.md section 7)
 
@@ -96,10 +98,13 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
 
 ## Connect and import
 
-Follow `$substrate-connect`: sign in, `memory_search`, **Connected to
-Substrate.**, and in the same reply `SYNC --preview` plus the offer **Import
-all** / **Let me pick** / **Not now**; then `$substrate-import`. The skill path
-works even where the offer hook does not run (hooks untrusted, web).
+Follow `$substrate-connect`, in this order: approve the connection
+(`codex mcp login` prints the link; the user chooses Approve connection), then
+`memory_search`, **Connected to Substrate.**, install the hooks, and in the same
+reply `SYNC --preview` plus the offer **Import all** / **Let me pick** / **Not
+now**; then `$substrate-import`. Last, the user approves the hooks in `/hooks`,
+starts a new session and says continue. The skill path works even where the
+offer hook does not run (hooks untrusted, web).
 
 ## Notes for the operator
 

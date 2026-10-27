@@ -210,6 +210,29 @@ Output:
 
 Text content: a one-line summary, e.g. `Imported 12 items (10 stored, 2 duplicate).`
 
+**Document items (MCP agents, not import tickets).** An item may also be
+`{kind: "document", title, text, source, created_at?}`:
+
+- `title`: 1–200 code points, not blank. `source`: 1–80 code points, not blank
+  (for example `"claude.ai memory"`). `created_at`: optional ISO 8601.
+- `text`: markdown, at most 160 KiB (163840 bytes) of UTF-8. The limit is 160 KiB,
+  not 200, so the JSON-escaped body still fits the 256 KiB `/mcp` request limit.
+- The document goes through the same pipeline as an uploaded document:
+  extraction, citations, Wiki, the Sources list, delete as one unit, and
+  redaction (section 6). Its source label shows as, for example, "From claude.ai
+  memory · 26 Oct".
+- Dedupe: the same agent, title and text (sha256) returns `action: "duplicate"`.
+- Non-ticket imports, documents included, appear in the agent's import history.
+- Through an import ticket (4.9) a document item is rejected on its own with
+  `error: "forbidden"`.
+
+**One-time import offer (MCP agents only).** An agent whose `integration` is
+`mcp` (the agent's `integration` value, with no hooks) gets one `[substrate]` note appended to the
+result of its first successful `memory_search` after connecting. The note asks the
+agent to offer once to save what it already knows about the user, and to mention
+the plugin when the user also uses Claude Code, Codex or Hermes. It is never
+repeated and never shown to plugin agents.
+
 ### 4.8 `memory_import_status` (scope `retrieve`)
 
 Input: `{session_id?: ≤512, batch_id?: hex}` (at least one).
@@ -249,6 +272,21 @@ Output (`structuredContent`; text is the same JSON):
   again mints a fresh ticket. On `401` the script stops and asks the agent for a
   new one; re-sending is safe (4.7 dedupe).
 
+**Ticket claim (keeps the ticket out of the chat).** `memory_import_ticket` takes
+an optional `claim` matching `^[A-Za-z0-9_-]{32,128}$`.
+
+- With `claim`: the server binds a fresh ticket to sha256(claim) for 10 minutes,
+  single use. The result is `{contract_version: 2, claim_pending: true, claim_url,
+  mcp_url, expires_at}` and carries **no** `ticket`.
+- `POST <origin>/mcp/import-ticket/claim` with JSON `{"claim": "…"}` (no auth,
+  rate-limited, body at most 1 KiB) returns `200 {ticket, mcp_url, expires_at}`
+  once. Unknown, used or expired claims return `404`; a non-POST returns `405`;
+  too many requests return `429`.
+- Claims live in server memory. A server restart drops pending claims; the client
+  mints a new claim and retries once.
+- Without `claim`, the result is unchanged (it returns `ticket`). Older clients
+  keep working.
+
 ## 5. Ledger envelope (shared with CONTRACT.md §5, unchanged)
 
 The server stores every capture, from every host, as the schema_version 3
@@ -268,11 +306,28 @@ Applied client-side by `substrate-hermes` and by the sync script, and **always**
 server-side on ingest for every tool in section 4. Both implementations must pass
 the shared fixture `contract/redaction-fixtures.json` in this repository.
 
-1. Text: `(?i)(\b(?:authorization|api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+`
-   → keep group 1, replace the value with `[REDACTED]`.
-2. Text: `\bsk_[A-Za-z0-9_-]{8,}\b` → `[REDACTED]`.
+1. Text: `(?i)((?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]*(?:authorization|api[_-]?key|secret(?:[_-]access[_-]key)?|access[_-]?token|token|password|passwd|pwd|private[_-]?key|client[_-]?secret|auth)(?![A-Za-z0-9_])\\?["']?\s*(?::|=(?!=))\s*)(?:(?:bearer|basic)\s+)?(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)`
+   → keep group 1 (the name and separator), replace the value with `[REDACTED]`.
+   A name is any identifier ending in one of the words (so `OPENAI_API_KEY`,
+   `aws_secret_access_key`, `GITHUB_TOKEN`, `DB_PASSWORD`, `PGPWD`, `MY_AUTH`
+   match; `tokens`, `token_count`, `author` do not). `==` is not an assignment.
+2. Text, anywhere, → `[REDACTED]`, each whole match:
+   - PEM private key blocks `-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----` through
+     `-----END … PRIVATE KEY-----` (or to the end of the text if unterminated);
+   - `(?<![A-Za-z0-9_])sk_[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_])` and `(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}` (OpenAI
+     `sk-proj-`, Anthropic `sk-ant-`);
+   - `(?<![A-Za-z0-9_-])(?:AKIA|ASIA)[0-9A-Z]{16}` (AWS access key ids);
+   - `gh[pousr]_[A-Za-z0-9]{20,}` and `github_pat_[A-Za-z0-9_]{22,}` (GitHub);
+   - `xox[abprs]-[A-Za-z0-9-]{10,}` (Slack);
+   - `(?:rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}` (Stripe);
+   - `AIza[0-9A-Za-z_-]{35}` (Google API keys);
+   - `eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}` (JWT).
+   - Connection strings: `scheme://user:password@host` → the password part only is
+     replaced (`scheme://user:[REDACTED]@host`). URLs without credentials are kept.
+   Order: PEM blocks, then rule 1, then connection strings, then the value
+   shapes above in the order listed. Each step's output is the next step's input.
 3. Objects: any key matching
-   `(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)`
+   `(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)|(?:auth|pwd)$`
    has its value replaced by `[REDACTED]` at any depth (max depth 8, max 128 keys
    or items per level; deeper or longer → `[TRUNCATED]`).
 4. Strings inside objects are bounded to 8192 bytes, other scalars to 1024;
@@ -334,7 +389,7 @@ tool result through `PostToolUse`.
   Finished sessions are remembered locally and skipped on a rerun. The current
   session (named, or last seen by the offer hook, or the transcript written in
   the last 10 minutes) is never imported. Final line:
-  `Imported N sessions (T turns): S stored, D duplicate, R rejected.`
+  `Imported N conversations. Substrate is reading them now; ask about them in a few minutes.`
 - `--offer-check` — `UserPromptSubmit` command hook printing hook JSON
   (`hookSpecificOutput.additionalContext`). Until `--record-connected` it tells
   the agent to finish setup now (sign in, `memory_search`, **Connected to

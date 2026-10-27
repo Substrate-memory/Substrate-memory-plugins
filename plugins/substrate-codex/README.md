@@ -33,14 +33,13 @@ Use the `/plugins` browser, or run:
 ```text
 codex plugin marketplace add Substrate-memory/Substrate-memory-plugins
 codex plugin add substrate-codex@substrate-marketplace
-```
-
-Then start a new session. Direct MCP fallback (no plugin):
-
-```text
 codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp
 codex mcp login substrate-memory
 ```
+
+`login` prints the approval link. Choose **Approve connection**; the command
+returns. The agent then installs the hooks and offers the import. Last, approve
+the hooks once in `/hooks`, start a new session, and say continue.
 
 ## Sign-in flow
 
@@ -57,8 +56,8 @@ and in the same reply offers the import:
 **Import all** uploads everything except the current conversation, in the
 background, straight from the local script to Substrate with a short-lived
 import-only ticket; your history never passes through the chat. The agent
-reports progress and the final `Imported N sessions (T turns): S stored, D
-duplicate, R rejected.` **Not now** is remembered; ask "import my past
+reports progress and a final line: how many conversations were imported, and that
+Substrate is reading them now. **Not now** is remembered; ask "import my past
 conversations" any time.
 
 ## Hook trust step

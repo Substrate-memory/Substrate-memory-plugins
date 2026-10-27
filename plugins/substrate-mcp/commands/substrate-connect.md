@@ -15,4 +15,15 @@ Run the Substrate self-check before changing configuration:
 
 Do not report **Connection approved** as **Connected to Substrate.** without a successful authenticated smoke call.
 
-5. After the first successful smoke call, ask exactly once: "Do you want to import past conversations into Substrate? I will show you the sessions I can read on this host, and import only what you confirm." Import only confirmed sessions as raw, redacted turns via `memory_import` (or confirmed facts via `memory_remember` where the host cannot replay turns). Nothing is written before confirmation. Never import secrets. If the user says no, do not ask again.
+5. After the first successful smoke call, offer once, in plain words:
+   "I can save what I already know about you to Substrate. Want me to?" If yes,
+   search your own memory and past chats (only what this host lets you read) for
+   people, projects, decisions, preferences and open items. Show the list and
+   change nothing until the user confirms it. Then call `memory_import` with one
+   document item: `{"kind": "document", "title": "<short title>", "text": "<the
+   confirmed list, markdown, at most 160 KiB>", "source": "<your app name> memory"}`.
+   If a `[substrate]` note in your context already makes this offer, that is
+   this offer: follow it, and do not offer twice. If the server
+   rejects the document item (an older server), save the confirmed facts with
+   `memory_remember`, one call each. If the user says no, do not ask again. Never
+   import secrets.

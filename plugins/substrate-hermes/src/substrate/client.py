@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
-PLUGIN_VERSION = "0.9.1"
+PLUGIN_VERSION = "0.10.0"
 _MCP_PATH = "/mcp"
 # The /mcp request body limit (substrate-v5 mcp-api.mjs, contract section 1).
 _MAX_REQUEST_BYTES = 262144
@@ -145,6 +145,8 @@ def _http_error_category(status: int) -> tuple[str, bool]:
         return "not_found", False
     if status == 409:
         return "conflict", False
+    if status == 402:
+        return "payment_required", False
     if status == 413:
         return "payload_too_large", False
     if 500 <= status <= 599:
@@ -166,7 +168,8 @@ def _tool_error_category(structured: Any) -> str:
 
 
 # payload_too_large: an oversized capture never shrinks on retry (the caller splits it).
-_PERMANENT_TOOL_ERRORS = frozenset({"invalid_request", "not_found", "forbidden", "payload_too_large"})
+_PERMANENT_TOOL_ERRORS = frozenset({"invalid_request", "not_found", "forbidden", "payload_too_large",
+                                    "payment_required"})
 
 
 def parse_mcp_body(raw: bytes) -> Any:

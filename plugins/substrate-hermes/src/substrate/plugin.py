@@ -43,7 +43,8 @@ STATIC_MEMORY_PROMPT = (
     "changed. Call `memory_evidence` when the user asks why you believe something. "
     "Call `memory_search` with your intended action before irreversible operations. "
     "Importing past conversations or sessions is the substrate_import tool, never "
-    "memory_remember. If substrate_import cannot run, say so; do not claim an import. "
+    "memory_remember. If substrate_import cannot run, say so. Report an import only when "
+    "the tool confirms it. "
     "A result that says queued is saved and syncs by itself; do not retry it. "
     "Pinned pages follow."
 )
@@ -59,13 +60,32 @@ TESTED_HERMES_FLOOR = (0, 21, 0)
 TESTED_HERMES_RANGE = "0.21.0 or newer"
 _version_notice_shown = False
 _TOOL_RESULT_BYTES = contract.LIMITS["max_tool_result_bytes"]
+# Contract section 6 (keep in step with agent-api/redaction.mjs; both must pass
+# contract/redaction-fixtures.json). Rule 1: NAME ends in a credential word.
 _TEXT_SECRET_RE = re.compile(
-    r"(?i)(\b(?:authorization|api[_-]?key|access[_-]?token|token|password|secret)\b\s*[:=]\s*)"
-    r"(?:bearer\s+)?[^\s,;]+"
+    r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]*(?:authorization|api[_-]?key|secret(?:[_-]access[_-]key)?|access[_-]?token|token|password|passwd|pwd|private[_-]?key|client[_-]?secret|auth)(?![A-Za-z0-9_])\\?[\"']?\s*(?::|=(?!=))\s*)"
+    r"(?:(?:bearer|basic)\s+)?(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;]+)",
+    re.IGNORECASE,
 )
-_SK_RE = re.compile(r"\bsk_[A-Za-z0-9_-]{8,}\b")
+# Rule 2: PEM private key blocks, passwords in scheme://user:pw@host, and secret shapes.
+_PEM_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|(?![\s\S]))"
+)
+_URL_PASSWORD_RE = re.compile(r"(?<![A-Za-z0-9+.-])([A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s:/@\"']+:)[^\s/\"',;]+(?=@)")
+_SECRET_TOKEN_RES = (
+    re.compile(r"(?<![A-Za-z0-9_])sk_[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_])"),
+    re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])"),
+    re.compile(r"(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])github_pat_[A-Za-z0-9_]{22,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])xox[abprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])(?:rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}"),
+    re.compile(r"(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}"),
+    re.compile(r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}"),
+)
+# Rule 3: sensitive keys (substring), plus keys ending in auth or pwd.
 _SENSITIVE_KEY_RE = re.compile(
-    r"(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)"
+    r"(?i)(?:authorization|cookie|password|passwd|secret|token|api[_-]?key|private[_-]?key)|(?:auth|pwd)$"
 )
 
 
@@ -83,8 +103,12 @@ def _clip_utf8(value: str, maximum: int) -> str:
 
 def _redact_text(value: str) -> str:
     value = _clean_unicode(value)
+    value = _PEM_PRIVATE_KEY_RE.sub("[REDACTED]", value)
     value = _TEXT_SECRET_RE.sub(r"\1[REDACTED]", value)
-    return _SK_RE.sub("[REDACTED]", value)
+    value = _URL_PASSWORD_RE.sub(r"\1[REDACTED]", value)
+    for pattern in _SECRET_TOKEN_RES:
+        value = pattern.sub("[REDACTED]", value)
+    return value
 
 
 def _as_text(value: Any) -> str:
@@ -529,6 +553,18 @@ def _login_notice(status: dict[str, Any] | None = None) -> str:
         )
     if isinstance(status, dict) and status.get("status") == "authorization_pending":
         minutes = max(1, (int(status.get("expires_in") or 0) + 59) // 60)
+        from . import onboarding as _onboarding
+
+        if not _onboarding.claim_full_notice(str(status.get("user_code", ""))):
+            # Shown in full on an earlier turn: one reminder line, same link and code.
+            return (
+                "<substrate-connect>\n"
+                f"Substrate memory is still waiting for approval. Link: {status.get('verification_uri_complete', '')} "
+                f"Code: {status.get('user_code', '')} (valid for {minutes} minutes). If the user asks "
+                "about connecting, repeat this link and code in one short line. Do not start a new "
+                "sign-in or run onboard.py start while this code is valid.\n"
+                "</substrate-connect>"
+            )
         lines = [
             "<substrate-connect>",
             "Substrate memory is installed but not connected yet. In your reply, show the "
@@ -1163,6 +1199,11 @@ def on_session_switch(
 
 
 def _error(category: str) -> str:
+    if category == "payment_required":
+        from . import onboarding as _onboarding
+
+        return json.dumps({"error": "payment_required",
+                           "message": _onboarding.billing_message()}, separators=(",", ":"))
     allowed = {"invalid_request", "invalid_response", "invalid_config", "timeout", "transport_error"}
     return json.dumps(
         {"error": category if category in allowed else "transport_error"},
@@ -1230,7 +1271,7 @@ _RETRY_CATEGORIES = frozenset({"timeout", "transport_error", "server_error", "in
 # connection, or the model tells the user it cannot reach a source.
 BUSY_MESSAGE = (
     "Substrate memory is busy or slow right now. Try again in a moment. This is a "
-    "temporary delay, not a missing source: do not tell the user you lack access."
+    "temporary delay, not a missing source. Say that the memory lookup is busy."
 )
 
 
@@ -1685,7 +1726,7 @@ MEMORY_SEARCH_SCHEMA = {
     # Short and direct so the model calls it straight away.
     "description": (
         "Search Substrate memory directly for the user's saved facts, past conversations "
-        "and connected sources. Do not claim you lack access to a source before searching. "
+        "and connected sources. Search before saying a source is unavailable. "
         "Use the intended action in the query before irreversible operations."
     ),
     "parameters": {

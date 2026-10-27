@@ -24,10 +24,11 @@ import pytest
 from substrate import contract, history, plugin
 from substrate.spool import PRIORITY_LIVE, PRIORITY_REPLAY
 
+from redaction_fixture import load as load_redaction_fixture  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "plugins" / "substrate-hermes" / "onboard.py"
 SCHEMAS = json.loads((ROOT / "tests" / "fixtures" / "hermes-state-schemas.json").read_text())["schemas"]
-REDACTION = json.loads((ROOT / "contract" / "redaction-fixtures.json").read_text())
+REDACTION = load_redaction_fixture()
 VERSIONS = sorted(int(v) for v in SCHEMAS)
 DAY = 86_400.0
 T0 = 1_772_496_000.0  # 2026-03-03T00:00:00Z
@@ -322,10 +323,10 @@ def test_import_job_delivers_everything_eligible(home, real_spool, connected):
     assert {item["batch_id"] for item in items} == {history.profile_batch_id(home)}
     assert sum(item["kind"] == "capture_turn" for item in items) == 5
     assert sum(item["kind"] == "capture_session" for item in items) == 2
-    assert result["result"] == {"sessions": 2, "turns": 5, "stored": 5, "duplicate": 0,
+    assert result["result"] == {"sessions": 2, "turns": 5, "messages": 10, "stored": 5, "duplicate": 0,
                                 "rejected": 0, "dropped": 0}
-    assert result["message"] == ("Imported 2 past Hermes conversations (5 turns): "
-                                 "5 new, 0 already in memory.")
+    assert result["message"] == ("Imported 2 past Hermes conversations. Substrate is reading them now; "
+                                 "ask about them in a few minutes.")
     assert history.take_finished_announcement(home) == result["message"]
     assert history.take_finished_announcement(home) == ""
 
@@ -348,9 +349,9 @@ def test_rerun_only_produces_duplicates(home, real_spool, connected):
     second_ids = [i["event_id"] for i in import_calls(connected)]
     assert sorted(first_ids) == sorted(second_ids)
     assert first["result"]["stored"] == 5
-    assert second["result"] == {"sessions": 2, "turns": 5, "stored": 0, "duplicate": 5,
+    assert second["result"] == {"sessions": 2, "turns": 5, "messages": 10, "stored": 0, "duplicate": 5,
                                 "rejected": 0, "dropped": 0}
-    assert "0 new, 5 already in memory" in second["message"]
+    assert "already in Substrate, so nothing new was added" in second["message"]
 
 
 def test_turns_substrate_already_holds_are_skipped(home, real_spool, connected):
@@ -362,7 +363,7 @@ def test_turns_substrate_already_holds_are_skipped(home, real_spool, connected):
     tg = [i for i in import_calls(connected) if i["session_id"] == "tg-1"]
     assert [i["offset"] for i in tg] == [{"start": 4, "end": 6}, {"start": 6, "end": 6}]
     # The two held turns count as "already in memory", not as missing.
-    assert result["result"] == {"sessions": 2, "turns": 5, "stored": 3, "duplicate": 2,
+    assert result["result"] == {"sessions": 2, "turns": 5, "messages": 10, "stored": 3, "duplicate": 2,
                                 "rejected": 0, "dropped": 0}
 
 
@@ -437,7 +438,7 @@ def test_rejected_items_are_reported(home, real_spool, connected):
         "rejected" if item["kind"] == "capture_turn" and item["offset"]["start"] == 2 else "stored")
     result = run_job(home, real_spool)
     assert result["result"]["rejected"] == 2
-    assert "2 turns could not be saved" in result["message"]
+    assert "2 items could not be saved" in result["message"]
 
 
 def test_picked_sessions_only(home, real_spool, connected):
@@ -586,7 +587,7 @@ def test_tool_preview_start_status_and_finished_announcement(home, monkeypatch, 
             break
         time.sleep(0.05)
     assert state["state"] == "done", state
-    assert state["message"].startswith("Imported 2 past Hermes conversations (5 turns)")
+    assert state["message"].startswith("Imported 2 past Hermes conversations.")
     _turn_context(monkeypatch)
     context = plugin.pre_llm_call("live-1", "hi", [])["context"]
     assert "<substrate-import>" in context and "Imported 2 past Hermes conversations" in context

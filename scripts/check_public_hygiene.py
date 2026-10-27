@@ -88,7 +88,8 @@ def scan(root: Path) -> list[str]:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
             continue
-        for _class, pattern in SECRET_PATTERNS:
+        patterns = SECRET_PATTERNS
+        for _class, pattern in patterns:
             if pattern.search(text):
                 findings.append(f"{relative}: {_class}")
                 break

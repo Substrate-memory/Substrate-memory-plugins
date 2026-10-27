@@ -31,13 +31,17 @@ Each package is a thin client. The server owns storage, ranking, redaction check
 
 ## Install
 
-Paste this request into the agent you want to connect:
+Paste this into the agent you want to connect:
+
+```text
+Install Substrate memory in this agent by following https://trysubstrate.co/install.md
+```
+
+The agent follows [docs/install.md](docs/install.md) (the same file served at that link). It identifies its host and installs the right package. From this repository, the same request works too:
 
 ```text
 Install the memory plug-in at https://github.com/Substrate-memory/Substrate-memory-plugins
-```
-
-The agent identifies its host and installs the right package. The flow is the same everywhere: **Install → Sign in → Review → Approve connection → Connected to Substrate.** Only report **Connected to Substrate.** after an authenticated memory smoke test (`memory_search`) succeeds. The browser's **Connection approved** state is consent only; it is not proof that the agent finished connecting. Never paste or request API keys, manual tokens, or client secrets.
+``` The flow is the same everywhere: **Install → Sign in → Review → Approve connection → Connected to Substrate.** Only report **Connected to Substrate.** after an authenticated memory smoke test (`memory_search`) succeeds. The browser's **Connection approved** state is consent only; it is not proof that the agent finished connecting. Never paste or request API keys, manual tokens, or client secrets.
 
 | Your host | Package the agent installs | Guide |
 |---|---|---|
@@ -75,9 +79,10 @@ Right after **Connected to Substrate.**, in the same reply, the agent offers onc
 
 > I found 87 past conversations on this computer (1,204 turns, 3 Mar to 7 Oct 2026). Import them into Substrate? **Import all** / **Let me pick** / **Not now**
 
-- **Import all** imports every local conversation except the current one (already captured live). It runs in the background; the agent reports progress and the final line (`Imported N sessions (T turns): S stored, D duplicate, R rejected.`) without waiting for you.
+- **Import all** imports every local conversation except the current one (already captured live). It runs in the background; the agent reports progress and the final line (how many conversations were imported, and that Substrate is reading them now) without waiting for you.
 - **Let me pick** lists conversations by date and title; only those are imported.
 - **Not now** is remembered and never asked again. Ask "import my past conversations" any time.
+- The import state is kept per computer, not per account. If you later connect a different Substrate account on the same computer, the agent checks it and offers to import the earlier conversations into that account.
 
 Claude Code and Codex upload straight from the package script with a short-lived, import-only ticket (`memory_import_ticket`), so your history never passes through the chat. Hermes reads its own profile history and sends it through its spool. Cowork cloud sessions have no local history, so the offer is skipped. Imports are redacted client- and server-side, and repeats are ignored.
 
@@ -85,7 +90,7 @@ Claude Code and Codex upload straight from the package script with a short-lived
 
 | Release | Hermes | Claude Code | Cowork | Codex / ChatGPT Work | Other MCP clients | Status |
 |---|---|---|---|---|---|---|
-| v0.9.1 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
+| v0.10.0 | `plugins/substrate-hermes` (tested on Hermes 0.21.0 or newer) | `plugins/substrate-claude` | `plugins/substrate-claude` | `plugins/substrate-codex` | `plugins/substrate-mcp` fallback | Release candidate |
 
 Every package installs on any host version. Outside the tested range the agent (and the Hermes plugin itself) shows a friendly note instead of refusing: *Tested on Hermes 0.21.0 or newer; you are on X. It should work; tell us if not.* Newer Hermes versions get no note. See [COMPATIBILITY.md](COMPATIBILITY.md#version-policy).
 
@@ -96,6 +101,7 @@ Known limits, stated honestly:
 - If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
 - Plugin hooks in Codex must be trusted once via `/hooks`.
 - Cowork needs a new session after install before tools appear.
+- Claude Code can show red "MCP server not connected" or "Unauthorized" hook errors while you are signed out or after a removed sign-in. Claude Code reports these from the plugin's capture hooks and the plugin cannot hide them. Reconnect with `/substrate-claude:substrate-connect`.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix and history.
 

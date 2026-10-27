@@ -27,6 +27,9 @@ Pinned pages follow.
   finish Authenticate in `/mcp` (plugin:substrate-claude:substrate-memory).
 - A `[substrate] Import offer pending` note from the plugin hook carries the
   count, the date range and the exact choices; present them as written.
+- A `[substrate] Offer this once` note is an MCP fallback offer. In this plugin,
+  ignore it: the plugin handles the import.
+- A memory tool that returns `payment_required` (HTTP 402) means the trial has ended. Say plainly: "Your Substrate trial has ended. Add a card at <origin>/billing to keep using memory." where <origin> is the origin of the Substrate MCP URL (https://app.trysubstrate.co). Do not retry.
 - "MCP server … not connected" or "Unauthorized" hook errors mean the plugin is
   installed but not signed in, or the connection was removed. Do not install a
   second copy. Answer the user's request with your other tools as usual, do not

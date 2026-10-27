@@ -69,6 +69,7 @@ POLL_LOCK_WAIT_SECONDS = 10.0
 DEVICE_PATH = "/oauth/device"
 TOKEN_RE = re.compile(r"^sk_sub_[A-Za-z0-9_\-]{8,256}$")
 USER_CODE_RE = re.compile(r"^[BCDFGHJKLMNPQRSTVWXZ23456789]{4}-[BCDFGHJKLMNPQRSTVWXZ23456789]{4}$")
+AGENT_ID_RE = re.compile(r"^agent_[A-Za-z0-9_-]{4,64}$")
 DEVICE_CODE_RE = re.compile(r"^[0-9a-f]{64}$")
 FORBIDDEN_STATE_KEYS = ("access_token", "api_key", "token", "device_code")
 
@@ -281,6 +282,12 @@ def explain(error_class: str) -> str:
     return text.replace("report it", f"report it at {ISSUES_URL}")
 
 
+def billing_message(origin: str = "") -> str:
+    """Plain words for HTTP 402: the trial is over and memory needs a card."""
+    base = (origin or resolve_origin() or credentials.DEFAULT_ORIGIN).rstrip("/")
+    return (f"Your Substrate trial has ended. Add a card at {base}/billing to keep using memory.")
+
+
 def origin_notice(api_origin: str, canonical: str) -> str:
     """Non-blocking advice when the plugin reaches Substrate by another address."""
     if not canonical or canonical == api_origin:
@@ -320,6 +327,8 @@ def check_token(origin: str, token: str, *, timeout: float | None = None) -> str
             timeout=timeout,
         )
     except ClientError as exc:
+        if exc.category == "payment_required":
+            return "payment_required"
         if exc.category in _REJECTING_CLIENT_ERRORS or not exc.transient:
             return "rejected"
         return "unavailable"
@@ -408,6 +417,65 @@ def _read_private_device_code(home: Path) -> str:
     except (FileNotFoundError, OSError, UnicodeError):
         return ""
     return value if 0 < len(value) <= 4096 else ""
+
+
+def _reconnect_credential_path(home: Path) -> Path:
+    return home / "substrate" / "credentials" / "onboarding-reconnect"
+
+
+def _save_reconnect_token(home: Path, token: str) -> None:
+    """Keep the last revoked token, owner-private, so the next approval can name this agent.
+
+    The server matches it by hash to the revoked agent in the approving tenant
+    (reconnect = same agent). It is a dead credential, so it is never used for
+    anything else and is removed once a new connection succeeds.
+    """
+    if TOKEN_RE.fullmatch(token) is None:
+        return
+    try:
+        _atomic_private_write(_reconnect_credential_path(home), token)
+    except OnboardingError:
+        pass
+
+
+def _read_reconnect_token(home: Path) -> str:
+    path = _reconnect_credential_path(home)
+    try:
+        info = path.stat(follow_symlinks=False)
+        if path.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+            return ""
+        value = path.read_text(encoding="utf-8").strip()
+    except (FileNotFoundError, OSError, UnicodeError):
+        return ""
+    return value if TOKEN_RE.fullmatch(value) else ""
+
+
+def _last_agent_path(home: Path) -> Path:
+    return home / "substrate" / "credentials" / "onboarding-agent"
+
+
+def _read_last_agent(home: Path) -> str:
+    try:
+        value = _last_agent_path(home).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return ""
+    return value if AGENT_ID_RE.fullmatch(value) else ""
+
+
+def _save_last_agent(home: Path, agent_id: str) -> None:
+    try:
+        _atomic_private_write(_last_agent_path(home), agent_id)
+    except OnboardingError:
+        pass
+
+
+def _clear_reconnect_token(home: Path) -> None:
+    try:
+        path = _reconnect_credential_path(home)
+        if not path.is_symlink():
+            path.unlink()
+    except OSError:
+        pass
 
 
 def _clear_device_credential(home: Path) -> None:
@@ -538,9 +606,12 @@ class OnboardingManager:
         if phase == "connected":
             account = _clip(str(state.get("account", "")), 256)
             agent = _clip(str(state.get("agent_name", "")), MAX_AGENT_NAME_BYTES)
-            message = f"Connected to Substrate as {account}." if account else "Connected to Substrate."
+            verb = "Reconnected" if state.get("reconnected") else "Connected"
+            message = f"{verb} to Substrate as {account}." if account else f"{verb} to Substrate."
             if agent:
                 message += f" This agent appears as \"{agent}\" in Substrate."
+            if state.get("billing_required"):
+                message += " " + billing_message()
             return {"status": "connected", "account": account, "agent_name": agent,
                     "message": message}
         return {"status": _clip(str(phase), 24)}
@@ -587,17 +658,37 @@ class OnboardingManager:
             return self._begin(previous=state)
 
     def _begin(self, previous: dict[str, Any] | None = None) -> dict[str, Any]:
+        form = {
+            "client_id": CLIENT_ID,
+            "scope": SCOPES,
+            "agent_name": resolve_agent_name(),
+        }
+        reconnect = _read_reconnect_token(self.home)
+        if not reconnect:
+            try:
+                reconnect = credentials.stored_api_key(self.home) or ""
+            except (OSError, ValueError):
+                reconnect = ""
+        if reconnect:
+            # Lets the server reuse this agent (same name, avatar, history).
+            form["reconnect_token"] = reconnect
         try:
             status, value = request_json(
                 self.origin,
                 "/oauth/device_authorization",
-                form={
-                    "client_id": CLIENT_ID,
-                    "scope": SCOPES,
-                    "agent_name": resolve_agent_name(),
-                },
+                form=form,
                 timeout=BEGIN_TIMEOUT_SECONDS,
             )
+            if status == 400 and reconnect:
+                # A server without reconnect support rejects unknown fields.
+                # Ask again as a plain sign-in: a new agent, never a failure.
+                form.pop("reconnect_token")
+                status, value = request_json(
+                    self.origin,
+                    "/oauth/device_authorization",
+                    form=form,
+                    timeout=BEGIN_TIMEOUT_SECONDS,
+                )
         except OnboardingError as exc:
             return self._fail(exc.category)
         if status == 401 or status == 403:
@@ -837,13 +928,16 @@ class OnboardingManager:
             _save_state(self.home, state)
         except OnboardingError:
             pass
+        agent_id = value.get("agent_id") if isinstance(value.get("agent_id"), str) else ""
+        agent_id = agent_id if AGENT_ID_RE.fullmatch(agent_id) else ""
+        reconnected = bool(agent_id) and agent_id == _read_last_agent(self.home)
         verdict = check_token(self.origin, token)
         if verdict == "unavailable":
             # The key is issued and the server hands the same key back on the
             # next poll until the grant expires, so keep the grant (and its
             # device code) and check again instead of discarding the approval.
             return True
-        if verdict != "ok":
+        if verdict not in ("ok", "payment_required"):
             _clear_device_credential(self.home)
             try:
                 _save_state(
@@ -866,6 +960,9 @@ class OnboardingManager:
             return False
         os.environ[credentials.ENV_KEY] = token
         _clear_device_credential(self.home)
+        _clear_reconnect_token(self.home)
+        if agent_id:
+            _save_last_agent(self.home, agent_id)
         connected = {
             key: item for key, item in state.items()
             if key not in {"approved", "previous_user_code", "previous_error_class"}
@@ -878,7 +975,9 @@ class OnboardingManager:
                  "agent_name": _clip(" ".join(str(
                      value.get("agent_name") or state.get("agent_name") or "").split()),
                      MAX_AGENT_NAME_BYTES),
-                 "announced": False},
+                 "announced": False,
+                 "reconnected": reconnected,
+                 "billing_required": verdict == "payment_required"},
             )
         except OnboardingError:
             pass
@@ -906,6 +1005,30 @@ def ensure_started(*, force: bool = False) -> dict[str, Any] | None:
         return _failed("internal_error")
 
 
+def mark_announced(home: Path | None = None) -> None:
+    """The connection was shown to the user by a CLI command: no chat turn repeats it."""
+    try:
+        home = home or active_home()
+        state = _load_state(home)
+        if state.get("phase") == "connected" and state.get("announced") is False:
+            _save_state(home, {**state, "announced": True})
+    except (OSError, ValueError, OnboardingError):
+        pass
+
+
+def claim_full_notice(user_code: str) -> bool:
+    """True the first time this approval code is shown in chat; later turns get a one-line reminder."""
+    try:
+        home = active_home()
+        state = _load_state(home)
+        if state.get("notice_code") == user_code:
+            return False
+        _save_state(home, {**state, "notice_code": _clip(str(user_code), 16)})
+    except (OSError, ValueError, OnboardingError):
+        return True
+    return True
+
+
 def take_connected_announcement() -> str:
     """Return the one-time "Connected to Substrate as ..." line after a login.
 
@@ -918,6 +1041,9 @@ def take_connected_announcement() -> str:
         return ""
     state = _load_state(home)
     if state.get("phase") != "connected" or state.get("announced") is not False:
+        return ""
+    if not (os.environ.get(credentials.ENV_KEY) or credentials.stored_api_key(home)):
+        # Disconnected or revoked since the approval: a "connected" line would be false.
         return ""
     try:
         _save_state(home, {**state, "announced": True})
@@ -963,6 +1089,12 @@ def note_auth_failure(rejected: str = "") -> None:
             # never delete what this plugin did not store.
             return
     try:
+        stored_token = credentials.stored_api_key(home)
+    except (OSError, ValueError):
+        stored_token = ""
+    if stored_token:
+        _save_reconnect_token(home, stored_token)
+    try:
         credentials.clear_stored_token(home)
     except (OSError, ValueError):
         return
@@ -994,8 +1126,11 @@ def _ready(credential: str, state: dict[str, Any] | None = None,
         "status": "ready",
         "credential": credential,
         "account": account,
-        "message": f"Connected to Substrate as {account}." if account else "Connected to Substrate.",
+        "message": (("Reconnected" if (state or {}).get("reconnected") else "Connected")
+                    + (f" to Substrate as {account}." if account else " to Substrate.")),
     }
+    if (state or {}).get("billing_required"):
+        payload["message"] += " " + billing_message()
     if home is not None:
         offer = import_offer(home)
         if offer is not None:
@@ -1130,11 +1265,13 @@ def _cli_start(home: Path, origin: str, as_json: bool) -> int:
         except credentials.CredentialError:
             pass
         _print_payload(_ready("existing", _load_state(home), home), as_json)
+        mark_announced(home)
         return 0
     manager = OnboardingManager(home, origin)
     status = manager.ensure(force=True)
     if status is None:
         _print_payload(_ready("existing", _load_state(home), home), as_json)
+        mark_announced(home)
         return 0
     _print_payload(status, as_json)
     return 0 if status.get("status") in {"authorization_pending", "finishing"} else 1
@@ -1158,6 +1295,7 @@ def _cli_poll(home: Path, origin: str, timeout: float, as_json: bool) -> int:
         phase = state.get("phase")
         if phase == "connected":
             _print_payload(_ready("device_authorization", state, home), as_json)
+            mark_announced(home)
             return 0
         if phase in {"failed", "declined", "invalid"}:
             _print_payload(manager.describe(state), as_json)

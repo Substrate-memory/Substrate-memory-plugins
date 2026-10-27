@@ -870,6 +870,7 @@ class ImportJob:
             result={
                 "sessions": int(job.get("sessions_done") or 0),
                 "turns": delta["delivered"] + delta["quarantined"] + held_total,
+                "messages": int(job.get("messages_total") or 0),
                 "stored": max(0, delta["delivered"] - delta["duplicate"]),
                 "duplicate": delta["duplicate"] + held_total,
                 "rejected": delta["quarantined"],
@@ -881,15 +882,24 @@ class ImportJob:
 
 
 def summary(result: dict[str, Any]) -> str:
+    """The one line the user sees when an import ends. Counts only when something was refused."""
     sessions = int(result.get("sessions") or 0)
-    noun = "conversation" if sessions == 1 else "conversations"
-    text = (f"Imported {sessions:,} past Hermes {noun} ({int(result.get('turns') or 0):,} turns): "
-            f"{int(result.get('stored') or 0):,} new, "
-            f"{int(result.get('duplicate') or 0):,} already in memory.")
+    stored = int(result.get("stored") or 0)
+    duplicate = int(result.get("duplicate") or 0)
     problems = int(result.get("rejected") or 0) + int(result.get("dropped") or 0)
+    if sessions <= 0:
+        text = "No conversations were left to import."
+    elif stored == 0 and duplicate > 0 and problems == 0:
+        if sessions == 1:
+            text = "That past Hermes conversation was already in Substrate, so nothing new was added."
+        else:
+            text = f"Those {sessions:,} past Hermes conversations were already in Substrate, so nothing new was added."
+    else:
+        noun = "conversation" if sessions == 1 else "conversations"
+        text = (f"Imported {sessions:,} past Hermes {noun}. Substrate is reading them now; "
+                "ask about them in a few minutes.")
     if problems:
-        text += (f" {problems:,} turns could not be saved; ask me to import your past "
-                 "conversations again to retry them.")
+        text += f" {problems:,} {'item' if problems == 1 else 'items'} could not be saved."
     return text
 
 
