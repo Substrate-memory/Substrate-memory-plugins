@@ -35,9 +35,11 @@ the hooks in `/hooks`, a new session, then "continue".
    is the endpoint in `mcp.json`. Then run `codex mcp list --json`. If the
    `substrate-memory` row's `auth_status` is `not_logged_in`, or `memory_search` reports
    an expired or missing sign-in, say one sentence: "Your Substrate sign-in needs
-   renewing; here is the link." Then run `codex mcp login substrate-memory` with network
-   permission. Always log in this way, even after `codex mcp add` (that add does not
-   store a sign-in from inside a session). The command prints the approval link. Paste that full link into your reply as plain text, and
+   renewing; here is the link." Then run `codex mcp login substrate-memory` in the
+   foreground, with escalated permissions (network and a local callback listener) and a
+   600000 ms timeout (`timeout_ms` / `yield_time_ms`). Do not background it and do not end
+   your turn while it waits: it returns only after the browser approval. Always log in this
+   way, even after `codex mcp add` (that add does not store a sign-in from inside a session). The command prints the approval link. Paste that full link into your reply as plain text, and
    say: *Open this link, sign in and choose **Approve connection**. I'll continue
    automatically.* The user cannot see the terminal, so paste the link again whenever
    they say they cannot see it. The command returns once they approve; then rerun

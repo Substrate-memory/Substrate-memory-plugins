@@ -1331,7 +1331,7 @@ def _setup_text_codex(data_dir: str, session_id: str,
         "plugin handles the import.\n"
         "2. If `memory_search` is missing or fails with \"not connected\", \"needs authentication\", "
         "\"unauthorized\" or \"expired\", or `codex mcp list --json` shows substrate-memory with "
-        "auth_status not_logged_in: run `codex mcp login substrate-memory` with network permission. "
+        "auth_status not_logged_in: run `codex mcp login substrate-memory` in the foreground with escalated permissions and a 600000 ms timeout; do not background it or end your turn while it waits. "
         "In your reply, paste the full approval link it prints as plain text, then say: \"Open this "
         "link, sign in and choose Approve connection. I'll continue automatically.\" Never describe "
         "this computer as remote, local or SSH, and never mention ports, callback addresses or "
