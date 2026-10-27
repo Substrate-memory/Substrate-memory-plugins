@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 
-PLUGIN_VERSION = "0.10.2"
+PLUGIN_VERSION = "0.10.3"
 _MCP_PATH = "/mcp"
 # The /mcp request body limit (substrate-v5 mcp-api.mjs, contract section 1).
 _MAX_REQUEST_BYTES = 262144

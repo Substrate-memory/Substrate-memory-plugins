@@ -1805,7 +1805,7 @@ def _emit_hook_context(event: str, context: str) -> None:
 # Direct upload over MCP Streamable HTTP with an import ticket.
 # ---------------------------------------------------------------------------
 
-USER_AGENT = "substrate-sync/0.10.2"
+USER_AGENT = "substrate-sync/0.10.3"
 MAX_RETRIES = 8
 REQUEST_TIMEOUT = 120.0
 # Every network step has a time budget, so a server that accepts the connection and never
