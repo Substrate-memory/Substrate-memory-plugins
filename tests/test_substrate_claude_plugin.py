@@ -94,7 +94,12 @@ def test_every_hook_maps_to_contract_table() -> None:
 
 def test_post_tool_use_has_no_matcher() -> None:
     entries = _hook_entries()
+    # The capture group stays unmatched; the only matched group is the sign-in
+    # hook for the plugin's own authenticate tool.
     for group in entries["PostToolUse"]:
+        if group.get("matcher"):
+            assert group["matcher"] == "mcp__plugin_substrate-claude_substrate-memory__authenticate", group
+            continue
         assert group.get("matcher", "") in ("", "*"), group
 
 
@@ -119,6 +124,9 @@ def test_hook_timeouts() -> None:
     for event in ("UserPromptSubmit", "PostToolUse", "Stop"):
         for group in entries[event]:
             for hook in group["hooks"]:
+                if hook.get("type") == "command" and ("--stop-check" in hook["command"]):
+                    assert hook["timeout"] == 45, event  # the sign-in wait (30 s) plus margin
+                    continue
                 assert hook["timeout"] == 5, event
 
 
