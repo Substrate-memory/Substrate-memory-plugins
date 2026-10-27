@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1
 
 Claude Code: setup keeps going after the sign-in link, and says the same thing about reconnects.
 
