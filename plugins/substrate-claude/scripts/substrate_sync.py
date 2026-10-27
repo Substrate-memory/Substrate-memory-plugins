@@ -21,6 +21,8 @@ Usage:
     substrate_sync.py --host H --record-decision yes|no|picked|none
     substrate_sync.py --host H --record-connected     (after memory_search worked)
     substrate_sync.py --host H --pause SECONDS        (wait <= 60 s, e.g. for sign-in)
+    substrate_sync.py --host H --signin-start         (PostToolUse hook: authenticate ran)
+    substrate_sync.py --host H --stop-check           (Stop hook: keep a pending sign-in polling)
     (every mode also takes --data-dir DIR)
 
 Upload reads the import ticket from --ticket-file: a file the agent wrote with
@@ -927,6 +929,16 @@ LAST_SESSION_MAX_AGE = 12 * 3600
 NAG_LIMIT = 12
 # Connection probe budget. The hook has a 5 s timeout; the probe must leave room.
 PROBE_TIMEOUT = 2.0
+# Sign-in continuation (Claude Code). After the authenticate tool shows the sign-in link,
+# the Stop hook keeps the setup turn polling until the plugin's own memory_search works.
+# Bounded by block count and wall time, ended by a cancel-style prompt, and keyed to the
+# session, so it can never hold a normal turn for long or forever.
+SIGNIN_KEY = "signin"
+SIGNIN_MAX_BLOCKS = 8
+SIGNIN_MAX_SECONDS = 600.0
+SIGNIN_STOP_WAIT = 30.0
+SIGNIN_CANCEL_RE = re.compile(r"^\s*(stop|cancel|never ?mind|forget it|skip|not now)\b", re.I)
+SIGNIN_LINK_RE = re.compile(r"https://[^\s\"'<>\\]+/authorize[^\s\"'<>\\]*")
 MCP_SERVER_NAME = "substrate-memory"
 MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 
@@ -1309,7 +1321,8 @@ def _setup_text(host: str, data_dir: str, session_id: str,
         "plugin:substrate-claude:substrate-memory, choose Enable if shown, then Authenticate.\" "
         "Then call the tool. In your reply, paste the full sign-in URL it returns "
         "as plain text (the user cannot see tool output), then say: \"Open this link, sign in and "
-        "choose Approve connection. I'll continue automatically.\" Paste the link again whenever "
+        "choose Approve connection. I'll continue automatically.\" Omit the tool's notes about error pages, "
+        "localhost, redirects or pasting the URL. Paste the link again whenever "
         "the user says they cannot see it. If the result has no link, say so and ask the user to "
         "run /mcp, choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the "
         "link it shows. Never describe this session or computer as remote, local or SSH, and never "
@@ -1391,14 +1404,11 @@ def _emit_context(context: str) -> None:
 def _cmd_offer_check(host: str, data_dir: str) -> int:
     try:
         session_id = ""
-        payload = {}  # type: Dict[str, Any]
-        if not sys.stdin.isatty():
-            raw = sys.stdin.read(1 << 20)
-            try:
-                parsed = json.loads(raw) if raw.strip() else {}
-                payload = parsed if isinstance(parsed, dict) else {}
-            except ValueError:
-                payload = {}
+        payload = _hook_payload()
+        prompt = payload.get("prompt")
+        if isinstance(prompt, str) and SIGNIN_CANCEL_RE.match(prompt):
+            # The user moved on or declined: stop holding the setup turn open.
+            _signin_end(data_dir, "cancelled")
         value = payload.get("session_id")
         if isinstance(value, str) and 0 < len(value) <= 512:
             session_id = value
@@ -1453,10 +1463,177 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Sign-in continuation (Claude Code hooks, fail open).
+#   PostToolUse on the plugin's authenticate tool: record a pending sign-in for this
+#     session and hand the model the exact link sentence (--signin-start).
+#   Stop: while that sign-in is pending and inside its bounds, block the turn end
+#     with a short instruction to keep polling (--stop-check). Anything unexpected
+#     (no state, other session, bound reached, unreadable state) lets the turn end.
+# ---------------------------------------------------------------------------
+
+def _hook_payload() -> Dict[str, Any]:
+    """The hook's JSON input on stdin, or {} when there is none or it is not an object."""
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return {}
+        raw = sys.stdin.read(1 << 20)
+        parsed = json.loads(raw) if raw.strip() else {}
+    except (OSError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _hook_session(payload: Dict[str, Any]) -> str:
+    value = payload.get("session_id")
+    return value if isinstance(value, str) and 0 < len(value) <= 512 else ""
+
+
+def _signin_load(data_dir: str) -> Dict[str, Any]:
+    value = _read_json(os.path.join(data_dir, OFFER_FILE)).get(SIGNIN_KEY)
+    return value if isinstance(value, dict) else {}
+
+
+def _signin_save(data_dir: str, value: Dict[str, Any]) -> None:
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    state[SIGNIN_KEY] = value
+    _write_json(path, state)
+
+
+def _signin_end(data_dir: str, outcome: str) -> None:
+    """Close a pending sign-in with ``outcome``. Writes only when one is pending."""
+    current = _signin_load(data_dir)
+    if current.get("state") != "pending":
+        return
+    current["state"] = outcome
+    try:
+        _signin_save(data_dir, current)
+    except OSError:
+        pass
+
+
+def _plain_command(args: str) -> str:
+    """A command in the pre-approved form the connect skill uses (python3 + this script)."""
+    return 'python3 "%s" --host claude %s' % (os.path.abspath(__file__), args)
+
+
+def _signin_link(payload: Dict[str, Any]) -> str:
+    """The authorize URL from the tool result, or '' when there is none."""
+    found = SIGNIN_LINK_RE.search(json.dumps(payload.get("tool_response"), ensure_ascii=False))
+    return found.group(0) if found else ""
+
+
+def _signin_start_text(link: str, reconnect: bool) -> str:
+    if link:
+        show = ("Reply now with exactly this sentence, then the link as plain text on its own line, and "
+                "nothing else about the sign-in: \"Open this link, sign in and choose **Approve "
+                "connection**. I'll continue automatically.\" Then the link: %s") % link
+    else:
+        show = ("No sign-in link was found in the tool result. Say so, and ask the user to run /mcp, "
+                "choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the link it shows.")
+    history = "This computer was connected before" if reconnect else "This is a first connection"
+    return (
+        "[substrate] Sign-in started. %s Omit the tool's other notes (browser error pages, localhost, "
+        "redirects, ports, pasting the address-bar URL, remote or SSH); the user will say if they see an "
+        "error page. Then do not end your turn: run `%s`, call the plugin's memory_search again (load it "
+        "with ToolSearch if deferred), and repeat until it works. When it works, run `%s` and say what its "
+        "JSON says: \"Reconnected to Substrate.\" when \"reconnected\": true, otherwise \"Connected to "
+        "Substrate.\" %s. Never say either word before that command has run."
+    ) % (show, _plain_command("--pause 15"), _plain_command("--record-connected"), history + ".")
+
+
+def _cmd_signin_start(host: str, data_dir: str) -> int:
+    payload = _hook_payload()
+    session_id = _hook_session(payload)
+    link = _signin_link(payload)
+    state = _read_json(os.path.join(data_dir, OFFER_FILE))
+    reconnect = isinstance(state.get("connected_at"), str) or isinstance(state.get("disconnected_at"), str)
+    if session_id:
+        try:
+            _signin_save(data_dir, {"state": "pending", "session_id": session_id, "started": time.time(),
+                                    "blocks": 0, "reconnect": reconnect})
+        except OSError:
+            pass  # no state: no continuation, but the link text still reaches the model
+    if not link:
+        _emit_hook_context("PostToolUse", _signin_start_text(link, reconnect))
+        return 0
+    # The model sees the tool result it is given, so replace the tool's notes (error
+    # pages, pasting URLs) with the clean link. The user sees the same link through
+    # systemMessage, whatever the model writes. Older hosts ignore both fields.
+    sentence = "Open this link, sign in and choose **Approve connection**. I'll continue automatically."
+    output = {
+        "systemMessage": "Substrate sign-in: %s %s" % (sentence, link),
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": _signin_start_text(link, reconnect),
+            "updatedToolOutput": "Sign-in started. The user has the sign-in link: %s" % link,
+        },
+    }
+    sys.stdout.write(json.dumps(output, ensure_ascii=False))
+    sys.stdout.flush()
+    return 0
+
+
+def _signin_wait_seconds() -> float:
+    """How long the Stop hook waits for the approval. Never more than SIGNIN_STOP_WAIT."""
+    try:
+        value = float(os.environ.get("SUBSTRATE_SIGNIN_STOP_WAIT", SIGNIN_STOP_WAIT))
+    except ValueError:
+        value = SIGNIN_STOP_WAIT
+    return max(0.0, min(value, SIGNIN_STOP_WAIT))
+
+
+def _stop_reason(approved: bool, blocks: int) -> str:
+    base = ("Substrate sign-in is pending (continuation %d of %d). " % (blocks, SIGNIN_MAX_BLOCKS))
+    check = ("Call the plugin's memory_search now (load it with ToolSearch if deferred). If it works, run "
+             "`%s` and reply with \"Reconnected to Substrate.\" or \"Connected to Substrate.\" as its "
+             "JSON says, then continue setup. " % _plain_command("--record-connected"))
+    if approved:
+        return base + "The browser approval is in. " + check + "Do not paste the sign-in link again."
+    return (base + "Not approved yet: run `%s`, then do the memory_search check. " % _plain_command("--pause 15")
+            + check + "Do not paste the sign-in link again and do not say Connected before memory_search succeeds.")
+
+
+def _cmd_stop_check(host: str, data_dir: str) -> int:
+    payload = _hook_payload()
+    session_id = _hook_session(payload)
+    if not session_id:
+        return 0
+    current = _signin_load(data_dir)
+    if current.get("state") != "pending" or current.get("session_id") != session_id:
+        return 0
+    started = current.get("started")
+    blocks = current.get("blocks") if isinstance(current.get("blocks"), int) else 0
+    if (not isinstance(started, (int, float)) or blocks >= SIGNIN_MAX_BLOCKS
+            or time.time() - started > SIGNIN_MAX_SECONDS):
+        _signin_end(data_dir, "expired")
+        return 0
+    # Give the browser approval a short head start before the model polls again.
+    deadline = min(time.time() + _signin_wait_seconds(), started + SIGNIN_MAX_SECONDS)
+    while not _claude_mcp_signed_in() and time.time() < deadline:
+        _sleep(2.0)
+    approved = _claude_mcp_signed_in()
+    current["blocks"] = blocks + 1
+    try:
+        _signin_save(data_dir, current)  # count first: if this fails, never block
+    except OSError:
+        return 0
+    sys.stdout.write(json.dumps({"decision": "block", "reason": _stop_reason(approved, blocks + 1)}))
+    sys.stdout.flush()
+    return 0
+
+
+def _emit_hook_context(event: str, context: str) -> None:
+    output = {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
+    sys.stdout.write(json.dumps(output, ensure_ascii=False))
+    sys.stdout.flush()
+
+
+# ---------------------------------------------------------------------------
 # Direct upload over MCP Streamable HTTP with an import ticket.
 # ---------------------------------------------------------------------------
 
-USER_AGENT = "substrate-sync/0.10.0"
+USER_AGENT = "substrate-sync/0.10.1"
 MAX_RETRIES = 8
 REQUEST_TIMEOUT = 120.0
 # Every network step has a time budget, so a server that accepts the connection and never
@@ -2164,6 +2341,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _cmd_offer_check(args.host, _data_dir(args.host, args.data_dir))
         except BaseException:  # noqa: BLE001 - a hook never fails the prompt
             return 0
+    for hook_flag, hook_cmd in (("--signin-start", _cmd_signin_start), ("--stop-check", _cmd_stop_check)):
+        if hook_flag in argv:
+            # Hook entry points never exit non-zero: a Stop hook exiting 2 would block the turn.
+            try:
+                args, _unknown = parser.parse_known_args(argv)
+                return hook_cmd(args.host, _data_dir(args.host, args.data_dir))
+            except BaseException:  # noqa: BLE001 - fail open
+                return 0
     args = parser.parse_args(argv)
     if args.new_claim:
         print(json.dumps({"claim": _new_claim()}))
@@ -2177,9 +2362,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(json.dumps({"paused": max(0.0, min(args.pause, 60.0))}))
         return 0
     if args.record_connected:
-        # "reconnected": the disconnect notice ran on this computer before this successful check.
+        # "reconnected": the disconnect notice ran on this computer before this successful check,
+        # or the sign-in that this check closes was started on a computer that had been connected.
         reconnected = _take_disconnected(data_dir)
+        reconnected = reconnected or _signin_load(data_dir).get("reconnect") is True
         _record_connected(data_dir)
+        _signin_end(data_dir, "done")
         print(json.dumps({"connected": True, "reconnected": reconnected}))
         return 0
     if args.record_decision:

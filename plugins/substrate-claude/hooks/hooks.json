@@ -44,6 +44,16 @@
             }
           }
         ]
+      },
+      {
+        "matcher": "mcp__plugin_substrate-claude_substrate-memory__authenticate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py\" --host claude --signin-start 2>/dev/null || python \"${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py\" --host claude --signin-start 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [
@@ -60,6 +70,15 @@
               "agent_context": "main",
               "platform": "claude"
             }
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py\" --host claude --stop-check 2>/dev/null || python \"${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py\" --host claude --stop-check 2>/dev/null || true",
+            "timeout": 45
           }
         ]
       }
