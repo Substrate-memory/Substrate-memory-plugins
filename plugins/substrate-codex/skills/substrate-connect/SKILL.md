@@ -31,7 +31,7 @@ the hooks in `/hooks`, a new session, then "continue".
 3. **Approve the connection first.** The hooks and the sign-in call the
    `substrate-memory` server by name. If `codex mcp list` does not show
    `substrate-memory` (a local plugin install in Codex 0.154 does not register it),
-   run `codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp`; this
+   run `codex mcp add substrate-memory --url <the url in this plugin's mcp.json>`; this
    is the endpoint in `mcp.json`. Then run `codex mcp list --json`. If the
    `substrate-memory` row's `auth_status` is `not_logged_in`, or `memory_search` reports
    an expired or missing sign-in, say one sentence: "Your Substrate sign-in needs

@@ -33,7 +33,7 @@ Use the `/plugins` browser, or run:
 ```text
 codex plugin marketplace add Substrate-memory/Substrate-memory-plugins
 codex plugin add substrate-codex@substrate-marketplace
-codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp
+codex mcp add substrate-memory --url <the url in mcp.json>
 codex mcp login substrate-memory
 ```
 
@@ -71,7 +71,7 @@ its own entries. Then open `/hooks` once and approve the Substrate entries
 recall still works when you ask.
 
 The hooks call the `substrate-memory` MCP server by name, so connect also registers it
-(`codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp`) when it is
+(`codex mcp add substrate-memory --url <the url in mcp.json>`) when it is
 missing.
 
 To disconnect, run `$substrate-connect` and ask for the disconnect step, or run

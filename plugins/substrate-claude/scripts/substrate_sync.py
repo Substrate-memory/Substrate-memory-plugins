@@ -1301,6 +1301,19 @@ def _disconnect_text() -> str:
     )
 
 
+def _plugin_mcp_url() -> str:
+    """The Substrate MCP URL from this plugin's mcp.json, so a test or staging copy never hard-codes production."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mcp.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            url = json.load(handle)["mcpServers"]["substrate-memory"]["url"]
+        if isinstance(url, str) and url.startswith(("https://", "http://")):
+            return url
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return MCP_SERVER_URL
+
+
 def _setup_text_codex(data_dir: str, session_id: str,
                       summary: Optional[Dict[str, Any]], offer: bool) -> str:
     """Codex setup. Codex has no Skill tool, /mcp or /reload-plugins: it uses $skills and the codex CLI."""
@@ -1326,10 +1339,10 @@ def _setup_text_codex(data_dir: str, session_id: str,
         "`memory_search` again. Repeat up to 20 times. Never ask for a token or key, and never say "
         "Connected before `memory_search` succeeds. If the server is not registered at all "
         "(`codex mcp list` has no substrate-memory), run `codex mcp add substrate-memory --url "
-        "https://app.trysubstrate.co/mcp` with network permission first, then the login.\n"
+        "%(mcp_url)s` with network permission first, then the login.\n"
         "3. If no `memory_search` tool exists at all, tell the user to start a new Codex session and "
         "then say \"continue\"."
-    ) % {"base": base}
+    ) % {"base": base, "mcp_url": _plugin_mcp_url()}
     if offer:
         if summary is not None:
             offer_text = 'say, word for word: "%s"' % _offer_sentence(summary)
@@ -1649,7 +1662,89 @@ def _stop_reason(approved: bool, blocks: int, host: str = "claude") -> str:
             + check + "Do not paste the sign-in link again and do not say Connected before memory_search succeeds.")
 
 
+# Codex Stop hook (0.154 honours {"decision": "block", "reason": ...} on Stop: the turn
+# continues with the reason as a prompt, no user message needed). While
+# `codex mcp login substrate-memory` is still waiting for the browser approval, the hook
+# waits for it, then continues the turn so the agent checks memory and says "Connected".
+CODEX_STOP_FILE = "codex-signin-stop.json"
+CODEX_STOP_WAIT = 100.0  # the hook timeout in hooks.json must stay above this
+CODEX_STOP_MAX_BLOCKS = 8
+CODEX_STOP_MAX_SECONDS = 600.0
+
+
+def _codex_login_running() -> bool:
+    """True while a `codex mcp login substrate-memory` process is alive (waiting for approval)."""
+    try:
+        proc = subprocess.run(["ps", "-eo", "args="], capture_output=True, text=True,
+                              timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    for line in proc.stdout.splitlines():
+        if ("codex" in line and "mcp" in line and "login" in line
+                and MCP_SERVER_NAME in line and "--stop-check" not in line):
+            return True
+    return False
+
+
+def _codex_stop_state(data_dir: str) -> Dict[str, Any]:
+    state = _read_json(os.path.join(data_dir, CODEX_STOP_FILE))
+    blocks = state.get("blocks") if isinstance(state.get("blocks"), int) else 0
+    first = state.get("first") if isinstance(state.get("first"), (int, float)) else None
+    return {"blocks": blocks, "first": first}
+
+
+def _codex_stop_clear(data_dir: str) -> None:
+    try:
+        os.remove(os.path.join(data_dir, CODEX_STOP_FILE))
+    except OSError:
+        pass
+
+
+def _codex_stop_reason(approved: bool, blocks: int) -> str:
+    if approved:
+        return ("[substrate] The browser approval is in. Check the connection now: call `memory_search` "
+                "with a short, non-secret query. If it works, run `%s` and say \"Connected to Substrate.\" "
+                "(or \"Reconnected to Substrate.\" when it prints \"reconnected\": true). Then, in the same "
+                "reply, offer the import: run `SYNC --preview` and say its conversation count and date range, "
+                "then Import all / Let me pick / Not now. Do not paste the sign-in link again."
+                % _plain_command("--record-connected", "codex"))
+    return ("[substrate] The Substrate sign-in is still waiting for the browser approval (continuation "
+            "%d of %d). Reply with one short line that it is still pending, and do not paste the link "
+            "again." % (blocks, CODEX_STOP_MAX_BLOCKS))
+
+
+def _cmd_stop_check_codex(data_dir: str) -> int:
+    if not _codex_login_running():
+        _codex_stop_clear(data_dir)
+        return 0
+    state = _codex_stop_state(data_dir)
+    now = time.time()
+    first = state["first"] or now
+    if state["blocks"] >= CODEX_STOP_MAX_BLOCKS or now - first > CODEX_STOP_MAX_SECONDS:
+        _codex_stop_clear(data_dir)
+        return 0
+    deadline = now + CODEX_STOP_WAIT
+    while _codex_login_running() and time.time() < deadline:
+        _sleep(2.0)
+    approved = _codex_mcp_signed_in()
+    if not approved and not _codex_login_running():
+        _codex_stop_clear(data_dir)  # the login ended without a sign-in: nothing to continue
+        return 0
+    blocks = state["blocks"] + 1
+    try:
+        _write_json(os.path.join(data_dir, CODEX_STOP_FILE), {"blocks": blocks, "first": first})  # count first
+    except OSError:
+        return 0
+    if approved:
+        _codex_stop_clear(data_dir)
+    sys.stdout.write(json.dumps({"decision": "block", "reason": _codex_stop_reason(approved, blocks)}))
+    sys.stdout.flush()
+    return 0
+
+
 def _cmd_stop_check(host: str, data_dir: str) -> int:
+    if host == "codex":
+        return _cmd_stop_check_codex(data_dir)
     payload = _hook_payload()
     session_id = _hook_session(payload)
     if not session_id:

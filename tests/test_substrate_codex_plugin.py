@@ -79,8 +79,12 @@ def test_hooks_map_to_contract_table():
         for group in hooks[event]:
             for h in group["hooks"]:
                 if h["type"] == "command":
-                    # The local import-offer hook (test_substrate_import_offer.py).
-                    assert event == "UserPromptSubmit" and "--offer-check" in h["command"]
+                    # The local import-offer hook (test_substrate_import_offer.py) and the
+                    # Codex Stop hook that waits for a pending sign-in (--stop-check, 120 s).
+                    if event == "Stop":
+                        assert "--stop-check" in h["command"] and h["timeout"] == 120
+                    else:
+                        assert event == "UserPromptSubmit" and "--offer-check" in h["command"]
                     continue
                 assert h["type"] == "mcp_tool", event
                 assert h["server"] == SERVER, event

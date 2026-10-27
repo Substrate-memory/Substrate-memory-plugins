@@ -68,6 +68,15 @@
             "statusMessage": "Saving turn to Substrate"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "R=\"${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-.}}\"; python3 \"$R/scripts/substrate_sync.py\" --host codex --stop-check 2>/dev/null || python \"$R/scripts/substrate_sync.py\" --host codex --stop-check 2>/dev/null || true",
+            "timeout": 120
+          }
+        ]
       }
     ],
     "SubagentStop": [

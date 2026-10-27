@@ -8,7 +8,7 @@
   field: the bundled validator rejects it; Codex discovers `hooks/hooks.json`
   by default.
 - `mcp.json` — portable MCP config (`substrate-memory`,
-  `streamable-http`, `https://app.trysubstrate.co/mcp`).
+  `streamable-http`, the url in this plugin's mcp.json).
 - `.mcp.json` — legacy MCP config, same server.
 - `hooks/hooks.json` — the plugin's hook table: `mcp_tool` hooks against server
   `substrate-memory` (bare key from `mcpServers`), platform `codex`, `turn_id`
@@ -88,7 +88,7 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
   0.154 a local plugin install does not register that server (`/mcp` shows
   "No MCP servers configured"), so each hook reports `unknown MCP server` on
   every prompt until it exists. `$substrate-connect` therefore runs
-  `codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp` when
+  `codex mcp add substrate-memory --url <the url in this plugin's mcp.json>` when
   `codex mcp list` does not show it. With the server registered, the hooks
   report `not connected` (authentication required) until sign-in, and the
   prompt still goes through (verified; see the pull request).
