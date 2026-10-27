@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+Claude Code: setup keeps going after the sign-in link, and says the same thing about reconnects.
+
+- **Setup continues by itself.** After the sign-in link is shown, a Stop hook holds the setup turn and tells the agent to keep polling until the plugin's own `memory_search` works. It stops at the first success, on "stop"/"cancel"/"not now", after 8 continuations or 10 minutes, and never blocks other turns or other sessions. Any error in the hook lets the turn end, as before.
+- **One sign-in sentence.** The agent shows "Open this link, sign in and choose **Approve connection**. I'll continue automatically." with the link, and leaves out the authenticate tool's notes about error pages, localhost and pasting URLs.
+- **Reconnect wording matches the computer.** A reconnect says "Reconnected to Substrate." (from `--record-connected`, which also knows about a sign-in on a computer that was connected before).
+
 ## substrate-claude 0.10.0
 
 Claude Code and Cowork: one install line for the agent, no permission prompts for the plugin's own sync script, and an import ticket that never reaches the chat.

@@ -35,10 +35,10 @@ If a "[substrate] Offer this once" note appears, ignore it: this is the plugin, 
 the plugin handles the import.
 
 1. **Connected already?** Call the plugin's `memory_search` with a short, non-secret
-   query. Any successful result, even empty, counts: say
-   run `SYNC --record-connected`. Then say **Connected to Substrate.**, or
-   **Reconnected to Substrate.** when its output has `"reconnected": true` (this
-   computer was disconnected before). Go to step 4.
+   query. If it works (even empty), run `SYNC --record-connected` and say what its
+   JSON says: **Reconnected to Substrate.** when `"reconnected": true` (this computer
+   was connected before), otherwise **Connected to Substrate.** Never say either word
+   before that command has run. Go to step 4.
 2. **Installed but not signed in.** "MCP server … not connected" hook errors, or the
    plugin's tool reporting "needs authentication", mean the plugin is installed but
    not signed in. Do not install another copy, and do not say Connected.
@@ -51,23 +51,30 @@ the plugin handles the import.
    Re-authenticate or Clear authentication, then Authenticate." If it still does not
    exist, say so in one line and ask the user to run `/mcp`, choose
    plugin:substrate-claude:substrate-memory, Authenticate, and say continue; do not
-   keep searching. In your reply,
-   paste the full sign-in URL it returns, as plain text, then say: *Open this link,
-   sign in and choose **Approve connection**. I'll continue automatically.* The user
-   cannot see tool output, so paste the link every time, and paste it again whenever
-   the user says they cannot see it. If the result has no link, say so and ask the
-   user to run `/mcp`, choose plugin:substrate-claude:substrate-memory, Authenticate,
-   and send you the link it shows.
-   Never describe this session or computer as remote, local, or SSH, and never mention
-   ports, callback addresses, or localhost, even if the authenticate tool's result says
-   so. Ignore such notes. Only if the user reports an error page, ask them to paste the
-   full address-bar URL.
-   Do not end the turn: run `SYNC --pause 15`, call the plugin's `memory_search`
+   keep searching.
+
+   Your reply then shows the sign-in link and nothing else about it. Use this sentence,
+   word for word, with the link as plain text on its own line:
+
+   *Open this link, sign in and choose **Approve connection**. I'll continue automatically.*
+
+   If a "[substrate] Sign-in started" note contains the link, use that exact link.
+   Otherwise use the link the tool returned. Omit the tool's other notes, even when they
+   mention error pages, redirects, pasting the address-bar URL, or a remote or SSH
+   session. Never describe this session or computer as remote, local, or SSH, and never
+   mention ports, callback addresses or localhost, even if the tool's result says so.
+   Only if the user reports an error page, ask them to paste the full address-bar URL. The user cannot see tool output, so paste the link every time, and paste it
+   again whenever the user says they cannot see it. If the result has no link, say so
+   and ask the user to run `/mcp`, choose plugin:substrate-claude:substrate-memory,
+   Authenticate, and send you the link it shows.
+
+   Keep going in this same turn: run `SYNC --pause 15`, call the plugin's `memory_search`
    again (via ToolSearch if deferred), and repeat up to 20 times. The tools appear
    mid-turn once the user approves. Only a successful call to the plugin's tool means
-   connected. If it never works, ask the user to say "done" after approving, or to
-   finish Authenticate in `/mcp` (plugin:substrate-claude:substrate-memory), then say
-   continue. Never ask for a token or key.
+   connected. The plugin may hold your turn open while sign-in is pending; when it tells
+   you to keep polling, do so. If it never works, say: "Substrate is not connected yet.
+   Open /mcp, choose plugin:substrate-claude:substrate-memory, finish Authenticate, then
+   say continue." Never ask for a token or key.
    A bare "continue", "done", "ok" or "approved" during setup just means carry
    on; don't comment on it.
 4. **Same reply: offer the import.** Run `SYNC --preview`. If `sessions` is 0 and
