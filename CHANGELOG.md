@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.10.2
 
-Codex import: a blocked network is reported as blocked, not as a slow server.
+Codex: setup, import and sign-in work end to end (first live Codex test).
 
 - **Network blocked is its own error.** When the sandbox cannot reach Substrate (DNS failure, refused connection, permission denied), `substrate_sync.py --upload` stops at once with `network_blocked` ("Network is blocked here. Rerun this command with network access.") instead of retrying for about 14 seconds and reporting `claim_timeout`. A server that accepts the connection and does not answer still gives `claim_timeout` / `server_unavailable`, as before.
 - **Codex import runs with network access.** The import skill tells the agent to run the upload and claim command with escalated permissions from the first try.
-- **Versions:** `substrate-codex` and `substrate-claude` ship the same `substrate_sync.py` (byte-identical).
+- **Codex texts name Codex skills.** The import offer, setup, sign-in and stop-check texts use `$substrate-import`, `$substrate-connect` and `codex mcp login` on Codex hosts, not Claude Code skills or slash commands. Claude Code texts are unchanged.
+- **Expired sign-in renews on the spot.** `$substrate-connect` checks `codex mcp list --json`; when Substrate shows `not_logged_in` or `memory_search` reports an expired sign-in, it says so in one sentence and runs `codex mcp login substrate-memory`.
+- **Versions:** 0.10.2 everywhere; `substrate-codex` and `substrate-claude` ship the same `substrate_sync.py` (byte-identical).
 
 ## 0.10.1
 
