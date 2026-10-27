@@ -26,8 +26,10 @@ If the user has not chosen yet, run `SYNC --preview` and offer **Import all** /
    is the `--data-dir` value that `SYNC` uses) containing only the ticket string,
    then run `SYNC --upload --all --background --ticket-file "<that file>" --mcp-url "<mcp_url>"`.
    The script reads the file and deletes it at once.
-   The upload needs network access: if the sandbox blocks it, rerun the same
-   command with escalated permissions (the user approves).
+   This command needs network (it makes the claim exchange and the upload): run it
+   with escalated permissions from the first try, as with the install curl. The
+   user approves. `SYNC --new-claim`, `--preview` and `--status` are local.
+   If the command prints `network_blocked`, rerun it with escalated permissions.
    If the command prints `claim_timeout` or `server_unavailable`, the server did
    not answer: nothing was uploaded. Say so in one line and ask whether to try
    again later. Do not retry on your own.

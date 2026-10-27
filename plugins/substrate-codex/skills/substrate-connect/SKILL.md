@@ -32,9 +32,12 @@ the hooks in `/hooks`, a new session, then "continue".
    `substrate-memory` server by name. If `codex mcp list` does not show
    `substrate-memory` (a local plugin install in Codex 0.154 does not register it),
    run `codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp`; this
-   is the endpoint in `mcp.json`. Then, if `memory_search` needs sign-in, run
-   `codex mcp login substrate-memory` (it may need network permission). The command
-   prints the approval link. Paste that full link into your reply as plain text, and
+   is the endpoint in `mcp.json`. Then run `codex mcp list --json`. If the
+   `substrate-memory` row's `auth_status` is `not_logged_in`, or `memory_search` reports
+   an expired or missing sign-in, say one sentence: "Your Substrate sign-in needs
+   renewing; here is the link." Then run `codex mcp login substrate-memory` with network
+   permission. Always log in this way, even after `codex mcp add` (that add does not
+   store a sign-in from inside a session). The command prints the approval link. Paste that full link into your reply as plain text, and
    say: *Open this link, sign in and choose **Approve connection**. I'll continue
    automatically.* The user cannot see the terminal, so paste the link again whenever
    they say they cannot see it. The command returns once they approve; then rerun

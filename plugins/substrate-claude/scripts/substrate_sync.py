@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import ipaddress
+import errno
 import json
 import math
 import os
@@ -1205,6 +1206,13 @@ def _search_tool(host: str) -> str:
     return CLAUDE_SEARCH_TOOL if host == "claude" else "memory_search"
 
 
+def _import_invoke(host: str) -> str:
+    """How the agent must start the import skill: Codex has no Skill tool, and its skill is substrate-import."""
+    if host == "codex":
+        return "use the `$substrate-import` skill"
+    return "invoke the Skill tool with skill `substrate-claude:substrate-import`"
+
+
 def _sync_base(host: str, data_dir: str, session_id: str) -> str:
     script = os.path.abspath(__file__)
     base = "%s %s --host %s --data-dir %s" % (
@@ -1259,7 +1267,7 @@ def _offer_text(host: str, data_dir: str, session_id: str,
                  "Import all / Let me pick / Not now")
     return (
         "[substrate] Import offer pending (asked once per computer). When the user chooses, invoke "
-        "the Skill tool with skill `substrate-claude:substrate-import` and follow it; its permissions "
+        "%(invoke)s and follow it; its permissions "
         "apply to that turn. Ignore this note until "
         "the Substrate memory tools work in this session. Once the plugin's own "
         "`%(search)s` has succeeded and you have said \"Connected to Substrate.\", in that same "
@@ -1279,7 +1287,7 @@ def _offer_text(host: str, data_dir: str, session_id: str,
         "Not now: `SYNC --record-decision no`; say they can ask \"import my past "
         "conversations\" any time."
     ) % {"base": base, "host": host, "search": _search_tool(host), "offer": offer,
-         "ticket": _ticket_path(data_dir)}
+         "ticket": _ticket_path(data_dir), "invoke": _import_invoke(host)}
 
 
 def _disconnect_text() -> str:
@@ -1293,8 +1301,51 @@ def _disconnect_text() -> str:
     )
 
 
+def _setup_text_codex(data_dir: str, session_id: str,
+                      summary: Optional[Dict[str, Any]], offer: bool) -> str:
+    """Codex setup. Codex has no Skill tool, /mcp or /reload-plugins: it uses $skills and the codex CLI."""
+    base = _sync_base("codex", data_dir, session_id)
+    text = (
+        "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
+        "reply, before anything else, in a few short lines. Follow the `$substrate-connect` skill "
+        "(read its SKILL.md if you have not). A bare \"continue\", \"done\", \"ok\" or \"approved\" "
+        "from the user just means: carry on with Substrate setup. Do not comment on it or ask what "
+        "to work on. SYNC means: `%(base)s`.\n"
+        "1. Check the connection with `memory_search`, a short, non-secret query. If that call works "
+        "(even empty): run `SYNC --record-connected`, then say \"Connected to Substrate.\" (or "
+        "\"Reconnected to Substrate.\" when it prints \"reconnected\": true). Say \"Connected\" only "
+        "after that call succeeds. If a \"[substrate] Offer this once\" note appears, ignore it: the "
+        "plugin handles the import.\n"
+        "2. If `memory_search` is missing or fails with \"not connected\", \"needs authentication\", "
+        "\"unauthorized\" or \"expired\", or `codex mcp list --json` shows substrate-memory with "
+        "auth_status not_logged_in: run `codex mcp login substrate-memory` with network permission. "
+        "In your reply, paste the full approval link it prints as plain text, then say: \"Open this "
+        "link, sign in and choose Approve connection. I'll continue automatically.\" Never describe "
+        "this computer as remote, local or SSH, and never mention ports, callback addresses or "
+        "localhost. The command returns once they approve; then run `SYNC --pause 15` and call "
+        "`memory_search` again. Repeat up to 20 times. Never ask for a token or key, and never say "
+        "Connected before `memory_search` succeeds. If the server is not registered at all "
+        "(`codex mcp list` has no substrate-memory), run `codex mcp add substrate-memory --url "
+        "https://app.trysubstrate.co/mcp` with network permission first, then the login.\n"
+        "3. If no `memory_search` tool exists at all, tell the user to start a new Codex session and "
+        "then say \"continue\"."
+    ) % {"base": base}
+    if offer:
+        if summary is not None:
+            offer_text = 'say, word for word: "%s"' % _offer_sentence(summary)
+        else:
+            offer_text = ("run `SYNC --preview` and say its conversation count and date range, "
+                          "then Import all / Let me pick / Not now")
+        text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
+                 "they choose, %s (its permissions apply to that turn). The import ticket never goes "
+                 "in a command or in your reply." % (offer_text, _import_invoke("codex")))
+    return text
+
+
 def _setup_text(host: str, data_dir: str, session_id: str,
                 summary: Optional[Dict[str, Any]], offer: bool) -> str:
+    if host == "codex":
+        return _setup_text_codex(data_dir, session_id, summary, offer)
     base = _sync_base(host, data_dir, session_id)
     search = _search_tool(host)
     connector = ""
@@ -1342,11 +1393,12 @@ def _setup_text(host: str, data_dir: str, session_id: str,
         else:
             offer_text = ("run `SYNC --preview` and say its conversation count and date range, "
                           "then Import all / Let me pick / Not now")
+        follow = ("$substrate-import" if host == "codex"
+                  else "/substrate-claude:substrate-import (or $substrate-import)")
         text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
-                 "they choose, follow /substrate-claude:substrate-import (or $substrate-import); "
-                 "the import ticket never goes in a command or in your reply. For the user's choice, invoke "
-                 "the Skill tool with skill `substrate-claude:substrate-import` (its permissions apply to "
-                 "that turn)." % offer_text)
+                 "they choose, follow %s; "
+                 "the import ticket never goes in a command or in your reply. For the user's choice, %s "
+                 "(its permissions apply to that turn)." % (offer_text, follow, _import_invoke(host)))
     return text
 
 
@@ -1512,9 +1564,9 @@ def _signin_end(data_dir: str, outcome: str) -> None:
         pass
 
 
-def _plain_command(args: str) -> str:
+def _plain_command(args: str, host: str = "claude") -> str:
     """A command in the pre-approved form the connect skill uses (python3 + this script)."""
-    return 'python3 "%s" --host claude %s' % (os.path.abspath(__file__), args)
+    return 'python3 "%s" --host %s %s' % (os.path.abspath(__file__), host, args)
 
 
 def _signin_link(payload: Dict[str, Any]) -> str:
@@ -1523,14 +1575,17 @@ def _signin_link(payload: Dict[str, Any]) -> str:
     return found.group(0) if found else ""
 
 
-def _signin_start_text(link: str, reconnect: bool) -> str:
+def _signin_start_text(link: str, reconnect: bool, host: str = "claude") -> str:
     if link:
         show = ("Reply now with exactly this sentence, then the link as plain text on its own line, and "
                 "nothing else about the sign-in: \"Open this link, sign in and choose **Approve "
                 "connection**. I'll continue automatically.\" Then the link: %s") % link
     else:
         show = ("No sign-in link was found in the tool result. Say so, and ask the user to run /mcp, "
-                "choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the link it shows.")
+                "choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the link it shows."
+                if host == "claude" else
+                "No sign-in link was found in the tool result. Say so, and ask the user to run "
+                "`codex mcp login substrate-memory` and send you the link it prints.")
     history = "This computer was connected before" if reconnect else "This is a first connection"
     return (
         "[substrate] Sign-in started. %s Omit the tool's other notes (browser error pages, localhost, "
@@ -1539,7 +1594,7 @@ def _signin_start_text(link: str, reconnect: bool) -> str:
         "with ToolSearch if deferred), and repeat until it works. When it works, run `%s` and say what its "
         "JSON says: \"Reconnected to Substrate.\" when \"reconnected\": true, otherwise \"Connected to "
         "Substrate.\" %s. Never say either word before that command has run."
-    ) % (show, _plain_command("--pause 15"), _plain_command("--record-connected"), history + ".")
+    ) % (show, _plain_command("--pause 15", host), _plain_command("--record-connected", host), history + ".")
 
 
 def _cmd_signin_start(host: str, data_dir: str) -> int:
@@ -1555,7 +1610,7 @@ def _cmd_signin_start(host: str, data_dir: str) -> int:
         except OSError:
             pass  # no state: no continuation, but the link text still reaches the model
     if not link:
-        _emit_hook_context("PostToolUse", _signin_start_text(link, reconnect))
+        _emit_hook_context("PostToolUse", _signin_start_text(link, reconnect, host))
         return 0
     # The model sees the tool result it is given, so replace the tool's notes (error
     # pages, pasting URLs) with the clean link. The user sees the same link through
@@ -1565,7 +1620,7 @@ def _cmd_signin_start(host: str, data_dir: str) -> int:
         "systemMessage": "Substrate sign-in: %s %s" % (sentence, link),
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "additionalContext": _signin_start_text(link, reconnect),
+            "additionalContext": _signin_start_text(link, reconnect, host),
             "updatedToolOutput": "Sign-in started. The user has the sign-in link: %s" % link,
         },
     }
@@ -1583,14 +1638,14 @@ def _signin_wait_seconds() -> float:
     return max(0.0, min(value, SIGNIN_STOP_WAIT))
 
 
-def _stop_reason(approved: bool, blocks: int) -> str:
+def _stop_reason(approved: bool, blocks: int, host: str = "claude") -> str:
     base = ("Substrate sign-in is pending (continuation %d of %d). " % (blocks, SIGNIN_MAX_BLOCKS))
     check = ("Call the plugin's memory_search now (load it with ToolSearch if deferred). If it works, run "
              "`%s` and reply with \"Reconnected to Substrate.\" or \"Connected to Substrate.\" as its "
-             "JSON says, then continue setup. " % _plain_command("--record-connected"))
+             "JSON says, then continue setup. " % _plain_command("--record-connected", host))
     if approved:
         return base + "The browser approval is in. " + check + "Do not paste the sign-in link again."
-    return (base + "Not approved yet: run `%s`, then do the memory_search check. " % _plain_command("--pause 15")
+    return (base + "Not approved yet: run `%s`, then do the memory_search check. " % _plain_command("--pause 15", host)
             + check + "Do not paste the sign-in link again and do not say Connected before memory_search succeeds.")
 
 
@@ -1618,7 +1673,7 @@ def _cmd_stop_check(host: str, data_dir: str) -> int:
         _signin_save(data_dir, current)  # count first: if this fails, never block
     except OSError:
         return 0
-    sys.stdout.write(json.dumps({"decision": "block", "reason": _stop_reason(approved, blocks + 1)}))
+    sys.stdout.write(json.dumps({"decision": "block", "reason": _stop_reason(approved, blocks + 1, host)}))
     sys.stdout.flush()
     return 0
 
@@ -1633,7 +1688,7 @@ def _emit_hook_context(event: str, context: str) -> None:
 # Direct upload over MCP Streamable HTTP with an import ticket.
 # ---------------------------------------------------------------------------
 
-USER_AGENT = "substrate-sync/0.10.1"
+USER_AGENT = "substrate-sync/0.10.2"
 MAX_RETRIES = 8
 REQUEST_TIMEOUT = 120.0
 # Every network step has a time budget, so a server that accepts the connection and never
@@ -1664,6 +1719,35 @@ class Fatal(Exception):
 
 class BadBatch(Exception):
     """The server refused this batch as a whole (schema or size)."""
+
+
+class NetworkBlocked(Exception):
+    """No route to the server from here (DNS, refused, sandbox denial). Retrying cannot help."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+# Errors that mean this process cannot reach the network at all (Codex's sandbox, a firewall).
+_BLOCKED_ERRNOS = {errno.EPERM, errno.EACCES, errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ENETDOWN}
+
+
+def _network_error(error: BaseException) -> Exception:
+    """Classify a failed request made without an HTTP response.
+
+    Blocked (no route out: DNS failure, refused connection, permission denied) is
+    not retryable. A timeout (request sent, no answer in time) and anything else
+    stay Retryable, as before.
+    """
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, TimeoutError):
+        return Retryable("network: %s" % type(error).__name__)
+    if isinstance(reason, (socket.gaierror, ConnectionError)):
+        return NetworkBlocked("network_blocked")
+    if isinstance(reason, OSError) and reason.errno in _BLOCKED_ERRNOS:
+        return NetworkBlocked("network_blocked")
+    return Retryable("network: %s" % type(error).__name__)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -1770,7 +1854,7 @@ class McpClient:
                 raise Fatal("redirect_refused") from None
             raise Fatal("http_%d" % code) from None
         except (urllib.error.URLError, OSError, socket.timeout) as error:
-            raise Retryable("network: %s" % type(error).__name__) from None
+            raise _network_error(error) from None
 
     def rpc(self, method: str, params: Dict[str, Any]) -> Any:
         self._ids += 1
@@ -2141,7 +2225,7 @@ def _claim_ticket(mcp_url: str, claim: str) -> str:
             raise Retryable("http_%d" % error.code, _retry_after(error.headers)) from None
         raise Fatal("http_%d" % error.code) from None
     except (urllib.error.URLError, OSError, socket.timeout) as error:
-        raise Retryable("network: %s" % type(error).__name__) from None
+        raise _network_error(error) from None
     try:
         value = json.loads(raw.decode("utf-8", "replace"))
     except ValueError:
@@ -2191,6 +2275,11 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
     elif claim and url:
         try:
             ticket = _with_retries(lambda: _claim_ticket(url, claim), budget=CLAIM_BUDGET)
+        except NetworkBlocked:
+            print(json.dumps({"error": "network_blocked", "message":
+                              "Network is blocked here. Rerun this command with network access. "
+                              "Nothing was uploaded."}))
+            return 2
         except Unavailable:
             print(json.dumps({"error": "claim_timeout", "message":
                               "Substrate did not answer the import claim within about %d seconds, so "
@@ -2295,6 +2384,9 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
         return finish("stopped", "The import ticket expired or was revoked after %d of %d "
                       "conversations. Ask me to continue the import; conversations already "
                       "imported are skipped." % (status.state["sessions_done"], len(sessions)), 3)
+    except NetworkBlocked:
+        return finish("failed", "Network is blocked here. Rerun this command with network access. "
+                      "Nothing new was imported.", 1)
     except Unavailable:
         return finish("failed", "Substrate did not answer, so the import stopped and nothing new was "
                       "imported. Ask me to try again later; conversations already imported are "
