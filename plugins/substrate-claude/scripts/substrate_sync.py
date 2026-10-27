@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import ipaddress
+import errno
 import json
 import math
 import os
@@ -1666,6 +1667,35 @@ class BadBatch(Exception):
     """The server refused this batch as a whole (schema or size)."""
 
 
+class NetworkBlocked(Exception):
+    """No route to the server from here (DNS, refused, sandbox denial). Retrying cannot help."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+# Errors that mean this process cannot reach the network at all (Codex's sandbox, a firewall).
+_BLOCKED_ERRNOS = {errno.EPERM, errno.EACCES, errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ENETDOWN}
+
+
+def _network_error(error: BaseException) -> Exception:
+    """Classify a failed request made without an HTTP response.
+
+    Blocked (no route out: DNS failure, refused connection, permission denied) is
+    not retryable. A timeout (request sent, no answer in time) and anything else
+    stay Retryable, as before.
+    """
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, TimeoutError):
+        return Retryable("network: %s" % type(error).__name__)
+    if isinstance(reason, (socket.gaierror, ConnectionError)):
+        return NetworkBlocked("network_blocked")
+    if isinstance(reason, OSError) and reason.errno in _BLOCKED_ERRNOS:
+        return NetworkBlocked("network_blocked")
+    return Retryable("network: %s" % type(error).__name__)
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, ANN201
         return None
@@ -1770,7 +1800,7 @@ class McpClient:
                 raise Fatal("redirect_refused") from None
             raise Fatal("http_%d" % code) from None
         except (urllib.error.URLError, OSError, socket.timeout) as error:
-            raise Retryable("network: %s" % type(error).__name__) from None
+            raise _network_error(error) from None
 
     def rpc(self, method: str, params: Dict[str, Any]) -> Any:
         self._ids += 1
@@ -2141,7 +2171,7 @@ def _claim_ticket(mcp_url: str, claim: str) -> str:
             raise Retryable("http_%d" % error.code, _retry_after(error.headers)) from None
         raise Fatal("http_%d" % error.code) from None
     except (urllib.error.URLError, OSError, socket.timeout) as error:
-        raise Retryable("network: %s" % type(error).__name__) from None
+        raise _network_error(error) from None
     try:
         value = json.loads(raw.decode("utf-8", "replace"))
     except ValueError:
@@ -2191,6 +2221,11 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
     elif claim and url:
         try:
             ticket = _with_retries(lambda: _claim_ticket(url, claim), budget=CLAIM_BUDGET)
+        except NetworkBlocked:
+            print(json.dumps({"error": "network_blocked", "message":
+                              "Network is blocked here. Rerun this command with network access. "
+                              "Nothing was uploaded."}))
+            return 2
         except Unavailable:
             print(json.dumps({"error": "claim_timeout", "message":
                               "Substrate did not answer the import claim within about %d seconds, so "
@@ -2295,6 +2330,9 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
         return finish("stopped", "The import ticket expired or was revoked after %d of %d "
                       "conversations. Ask me to continue the import; conversations already "
                       "imported are skipped." % (status.state["sessions_done"], len(sessions)), 3)
+    except NetworkBlocked:
+        return finish("failed", "Network is blocked here. Rerun this command with network access. "
+                      "Nothing new was imported.", 1)
     except Unavailable:
         return finish("failed", "Substrate did not answer, so the import stopped and nothing new was "
                       "imported. Ask me to try again later; conversations already imported are "
