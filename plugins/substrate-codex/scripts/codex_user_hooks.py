@@ -83,13 +83,11 @@ def desired_hooks(plugin_root: Path = PLUGIN_ROOT) -> dict:
             for handler in group["hooks"]:
                 if handler.get("type") == "command":
                     command = handler.get("command", "")
-                    if "--offer-check" in command:
-                        args = "--host codex --offer-check"
-                    elif event == "Stop" and "--stop-check" in command:
-                        args = "--host codex --stop-check"
-                    else:
+                    flags = {"--offer-check": "UserPromptSubmit", "--session-start": "SessionStart"}
+                    flag = next((f for f in flags if f in command), None)
+                    if flag is None or flags[flag] != event:
                         raise HookConfigError(f"unexpected plugin command hook under {event}")
-                    handler["command"] = _script_command(script, args)
+                    handler["command"] = _script_command(script, f"--host codex {flag}")
                 handler[TAG_KEY] = TAG_VALUE
             new_groups.append(group)
         out[event] = new_groups

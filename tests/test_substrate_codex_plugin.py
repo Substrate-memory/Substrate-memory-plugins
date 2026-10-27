@@ -79,10 +79,10 @@ def test_hooks_map_to_contract_table():
         for group in hooks[event]:
             for h in group["hooks"]:
                 if h["type"] == "command":
-                    # The local import-offer hook (test_substrate_import_offer.py) and the
-                    # Codex Stop hook that waits for a pending sign-in (--stop-check, 120 s).
-                    if event == "Stop":
-                        assert "--stop-check" in h["command"] and h["timeout"] == 120
+                    # The local import-offer hook (UserPromptSubmit) and the SessionStart
+                    # announcement of a working connection (test_substrate_import_offer.py).
+                    if event == "SessionStart":
+                        assert "--session-start" in h["command"]
                     else:
                         assert event == "UserPromptSubmit" and "--offer-check" in h["command"]
                     continue

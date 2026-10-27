@@ -98,13 +98,12 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
 
 ## Connect and import
 
-Follow `$substrate-connect`, in this order: approve the connection
-(`codex mcp login` prints the link; the user chooses Approve connection), then
-`memory_search`, **Connected to Substrate.**, install the hooks, and in the same
-reply `SYNC --preview` plus the offer **Import all** / **Let me pick** / **Not
-now**; then `$substrate-import`. Last, the user approves the hooks in `/hooks`,
-starts a new session and says continue. The skill path works even where the
-offer hook does not run (hooks untrusted, web).
+`$substrate-connect` runs in this order: install the hooks (`codex_user_hooks.py
+install`, quiet until sign-in), start the sign-in detached (`substrate_sync.py --host
+codex --signin-detach`, escalated, so the approval outlives the turn), and end the
+turn with the link and one line: approve the link, run `/hooks` and trust the hooks,
+start a new session with `/new`. That session's SessionStart hook says "Connected to
+Substrate." and offers the import once. A pending sign-in shows its link again.
 
 ## Notes for the operator
 

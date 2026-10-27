@@ -92,7 +92,7 @@ def test_desired_table_mirrors_plugin_hooks_with_tag_and_absolute_script():
                 if ph["type"] == "command":
                     assert "${" not in dh["command"]
                     assert str(PLUG / "scripts" / "substrate_sync.py") in dh["command"]
-                    assert ("--stop-check" if event == "Stop" else "--offer-check") in dh["command"]
+                    assert ("--session-start" if event == "SessionStart" else "--offer-check") in dh["command"]
                     assert dh["timeout"] == ph["timeout"]
                     dh.pop("command")
                     ph = {k: v for k, v in ph.items() if k != "command"}
@@ -104,8 +104,8 @@ def test_install_writes_tagged_entries_for_every_plugin_event(home):
     result = U.install(home, PLUG, check_plugin=False)
     assert result["changed"] is True
     assert result["events"] == {
-        "UserPromptSubmit": 2, "PostToolUse": 1, "Stop": 2,
-        "SubagentStop": 1, "SessionStart": 1, "PreCompact": 1,
+        "UserPromptSubmit": 2, "PostToolUse": 1, "Stop": 1,
+        "SubagentStop": 1, "SessionStart": 2, "PreCompact": 1,
     }
     doc = _read(_hooks_file(home))
     for groups in doc["hooks"].values():
@@ -220,12 +220,12 @@ def test_failed_replace_keeps_old_file_and_leaves_no_temp_files(home, monkeypatc
 def test_trust_state_is_cleared_only_for_our_keys(home):
     _hooks_file(home).write_text(json.dumps(_foreign_doc(), indent=2), encoding="utf-8")
     U.install(home, PLUG, check_plugin=False)
-    # Foreign Stop group sits after our two Stop groups in the file: its index is 2.
+    # Foreign Stop group sits after ours in the file: its index is 1.
     doc = _read(_hooks_file(home))
     path = _hooks_file(home).resolve()
     our_keys = U.owned_state_keys(doc, path)
     assert len(our_keys) == 8
-    foreign_key = f"{path}:stop:2:0"
+    foreign_key = f"{path}:stop:1:0"
     config = home / "config.toml"
     blocks = [f'[hooks.state."{k}"]\ntrusted_hash = "sha256:{i:064d}"\n' for i, k in enumerate(our_keys)]
     blocks.append(f'[hooks.state."{foreign_key}"]\ntrusted_hash = "sha256:{"f" * 64}"\n')
@@ -290,8 +290,8 @@ def test_skill_and_docs_describe_the_install_and_the_one_approval():
     skill = (PLUG / "skills" / "substrate-connect" / "SKILL.md").read_text(encoding="utf-8")
     assert "codex_user_hooks.py\" install" in skill or "codex_user_hooks.py install" in skill
     assert "/hooks" in skill and "approve" in skill.lower()
-    assert "Substrate hooks were added" in skill
-    assert "codex mcp add substrate-memory --url <the url in this plugin's mcp.json>" in skill
+    assert "Open this link and choose Approve connection" in skill and "/new" in skill
+    assert "codex mcp add substrate-memory --url" in skill and "<the url in this plugin's mcp.json>" in skill
     for doc in ("INSTALL.md", "README.md"):
         text = (PLUG / doc).read_text(encoding="utf-8")
         assert "codex_user_hooks.py" in text, doc

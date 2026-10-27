@@ -182,14 +182,12 @@ def test_import_texts_handle_timeouts_and_the_account_check() -> None:
 # F27: one Codex order everywhere: approve, hooks, /hooks, new session, continue.
 
 _CODEX_ORDER = {
-    "docs/install.md": ["codex mcp login substrate-memory", "codex_user_hooks.py install",
-                        "approve the substrate hooks once"],
+    "docs/install.md": ["codex_user_hooks.py install", "--signin-detach", "choose approve connection"],
     "docs/installation.md": ["codex mcp login substrate-memory", "approve the substrate hooks once in `/hooks`"],
     "plugins/substrate-codex/README.md": ["codex mcp login substrate-memory", "approve the hooks once in `/hooks`"],
-    "plugins/substrate-codex/INSTALL.md": ["approve the connection", "install the hooks",
-                                           "approves the hooks in `/hooks`"],
+    "plugins/substrate-codex/INSTALL.md": ["install the hooks", "--signin-detach", "run `/hooks`"],
     "plugins/substrate-codex/skills/substrate-connect/SKILL.md": [
-        "approve the connection first", "same reply: install the substrate hooks", "approve them once in /hooks"],
+        "register and install the hooks first", "--signin-detach", "start a new session with /new"],
 }
 
 
@@ -202,10 +200,10 @@ def test_codex_steps_run_in_the_same_order(relative: str) -> None:
 
 
 def test_codex_last_line_says_new_session_and_continue() -> None:
-    for relative in ("docs/install.md", "plugins/substrate-codex/skills/substrate-connect/SKILL.md",
-                     "plugins/substrate-codex/README.md"):
+    for relative in ("docs/install.md", "plugins/substrate-codex/skills/substrate-connect/SKILL.md"):
         text = _text(REPO / relative)
-        assert "new session" in text and "continue" in text, relative
+        assert "new session" in text and "/new" in text, relative
+    assert "continue" in _text(REPO / "plugins/substrate-codex/README.md")
 
 
 # ---------------------------------------------------------------------------
