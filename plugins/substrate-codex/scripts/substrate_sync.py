@@ -1206,6 +1206,13 @@ def _search_tool(host: str) -> str:
     return CLAUDE_SEARCH_TOOL if host == "claude" else "memory_search"
 
 
+def _import_invoke(host: str) -> str:
+    """How the agent must start the import skill: Codex has no Skill tool, and its skill is substrate-import."""
+    if host == "codex":
+        return "use the `$substrate-import` skill"
+    return "invoke the Skill tool with skill `substrate-claude:substrate-import`"
+
+
 def _sync_base(host: str, data_dir: str, session_id: str) -> str:
     script = os.path.abspath(__file__)
     base = "%s %s --host %s --data-dir %s" % (
@@ -1260,7 +1267,7 @@ def _offer_text(host: str, data_dir: str, session_id: str,
                  "Import all / Let me pick / Not now")
     return (
         "[substrate] Import offer pending (asked once per computer). When the user chooses, invoke "
-        "the Skill tool with skill `substrate-claude:substrate-import` and follow it; its permissions "
+        "%(invoke)s and follow it; its permissions "
         "apply to that turn. Ignore this note until "
         "the Substrate memory tools work in this session. Once the plugin's own "
         "`%(search)s` has succeeded and you have said \"Connected to Substrate.\", in that same "
@@ -1280,7 +1287,7 @@ def _offer_text(host: str, data_dir: str, session_id: str,
         "Not now: `SYNC --record-decision no`; say they can ask \"import my past "
         "conversations\" any time."
     ) % {"base": base, "host": host, "search": _search_tool(host), "offer": offer,
-         "ticket": _ticket_path(data_dir)}
+         "ticket": _ticket_path(data_dir), "invoke": _import_invoke(host)}
 
 
 def _disconnect_text() -> str:
@@ -1343,11 +1350,12 @@ def _setup_text(host: str, data_dir: str, session_id: str,
         else:
             offer_text = ("run `SYNC --preview` and say its conversation count and date range, "
                           "then Import all / Let me pick / Not now")
+        follow = ("$substrate-import" if host == "codex"
+                  else "/substrate-claude:substrate-import (or $substrate-import)")
         text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
-                 "they choose, follow /substrate-claude:substrate-import (or $substrate-import); "
-                 "the import ticket never goes in a command or in your reply. For the user's choice, invoke "
-                 "the Skill tool with skill `substrate-claude:substrate-import` (its permissions apply to "
-                 "that turn)." % offer_text)
+                 "they choose, follow %s; "
+                 "the import ticket never goes in a command or in your reply. For the user's choice, %s "
+                 "(its permissions apply to that turn)." % (offer_text, follow, _import_invoke(host)))
     return text
 
 

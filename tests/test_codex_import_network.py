@@ -308,3 +308,22 @@ def test_upload_handshake_blocked_reports_network_blocked(monkeypatch, fast, hom
 
 def test_claude_and_codex_sync_scripts_are_byte_identical() -> None:
     assert CODEX_SCRIPT.read_bytes() == CLAUDE_SCRIPT.read_bytes()
+
+
+def test_codex_offer_names_codex_import_skill_not_claude() -> None:
+    """The Codex hook must point at the Codex import skill (``$substrate-import``), never the Claude one."""
+    for module in (sync, _load(CLAUDE_SCRIPT)):
+        codex_text = module._offer_text("codex", "/tmp/data", "sess-1", None)
+        assert "substrate-claude:substrate-import" not in codex_text
+        assert "Skill tool" not in codex_text
+        assert "use the `$substrate-import` skill" in codex_text
+        setup = module._setup_text("codex", "/tmp/data", "sess-1", None, offer=True)
+        assert "substrate-claude:substrate-import" not in setup
+        assert "follow $substrate-import" in setup
+
+
+def test_claude_offer_still_names_claude_import_skill() -> None:
+    text = sync._offer_text("claude", "/tmp/data", "sess-1", None)
+    assert "invoke the Skill tool with skill `substrate-claude:substrate-import`" in text
+    setup = sync._setup_text("claude", "/tmp/data", "sess-1", None, offer=True)
+    assert "/substrate-claude:substrate-import (or $substrate-import)" in setup
