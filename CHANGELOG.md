@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+Codex import: a blocked network is reported as blocked, not as a slow server.
+
+- **Network blocked is its own error.** When the sandbox cannot reach Substrate (DNS failure, refused connection, permission denied), `substrate_sync.py --upload` stops at once with `network_blocked` ("Network is blocked here. Rerun this command with network access.") instead of retrying for about 14 seconds and reporting `claim_timeout`. A server that accepts the connection and does not answer still gives `claim_timeout` / `server_unavailable`, as before.
+- **Codex import runs with network access.** The import skill tells the agent to run the upload and claim command with escalated permissions from the first try.
+- **Versions:** `substrate-codex` and `substrate-claude` ship the same `substrate_sync.py` (byte-identical).
+
 ## 0.10.1
 
 Claude Code: setup keeps going after the sign-in link, and says the same thing about reconnects.
