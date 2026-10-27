@@ -112,6 +112,7 @@ def test_session_start_announces_a_working_connection_once(monkeypatch, tmp_path
     assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
     assert "Connected to Substrate." in context and "--host codex --preview" in context
     assert "Import all" in context and "Do not wait for another message" in context
+    assert "no conversations, say nothing about the import" in context
     # second session: already announced, so nothing is injected
     assert sync._cmd_session_start("codex", str(tmp_path)) == 0
     assert capsys.readouterr().out == ""

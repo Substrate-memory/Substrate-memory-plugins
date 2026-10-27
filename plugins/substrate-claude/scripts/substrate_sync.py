@@ -1739,8 +1739,9 @@ def _session_start_text(data_dir: str) -> str:
             return ""
         return ("[substrate] Substrate is connected on this computer. Your first reply must start with "
                 "\"Connected to Substrate.\" and, in the same reply, offer the import: run `%s` and say its "
-                "conversation count and date range, then Import all / Let me pick / Not now. Use the "
-                "`$substrate-import` skill for the choice. Do not wait for another message."
+                "conversation count and date range, then Import all / Let me pick / Not now. If it finds no "
+                "conversations, say nothing about the import. Use the `$substrate-import` skill for the "
+                "choice. Do not wait for another message."
                 % _plain_command("--preview", "codex"))
     state = _codex_login_state(data_dir)
     if _codex_login_alive(state):
