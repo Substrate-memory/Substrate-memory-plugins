@@ -319,7 +319,7 @@ def test_codex_offer_names_codex_import_skill_not_claude() -> None:
         assert "use the `$substrate-import` skill" in codex_text
         setup = module._setup_text("codex", "/tmp/data", "sess-1", None, offer=True)
         assert "substrate-claude:substrate-import" not in setup
-        assert "follow $substrate-import" in setup
+        assert "use the `$substrate-import` skill" in setup
 
 
 def test_claude_offer_still_names_claude_import_skill() -> None:
@@ -327,3 +327,48 @@ def test_claude_offer_still_names_claude_import_skill() -> None:
     assert "invoke the Skill tool with skill `substrate-claude:substrate-import`" in text
     setup = sync._setup_text("claude", "/tmp/data", "sess-1", None, offer=True)
     assert "/substrate-claude:substrate-import (or $substrate-import)" in setup
+
+
+CODEX_HOST_TEXTS = ("setup", "offer", "stop", "signin")
+
+
+def _codex_texts(module):
+    """Every agent-facing text the Codex hooks can emit, built for host codex."""
+    return {
+        "setup": module._setup_text("codex", "/tmp/data", "sess-1", None, offer=True),
+        "offer": module._offer_text("codex", "/tmp/data", "sess-1", None),
+        "stop": module._stop_reason(False, 1, "codex") + module._stop_reason(True, 1, "codex"),
+        "signin": module._signin_start_text("", False, "codex"),
+    }
+
+
+def test_codex_hook_texts_name_only_codex_skills_and_commands() -> None:
+    texts = _codex_texts(sync)
+    for name in CODEX_HOST_TEXTS:
+        text = texts[name]
+        for claude_only in (
+            "substrate-claude",
+            "Skill tool",
+            "/reload-plugins",
+            "plugin:substrate",
+            "--host claude",
+            "mcp__plugin_",
+            "Claude Code",
+        ):
+            assert claude_only not in text, (name, claude_only)
+        # /mcp is only allowed as part of the plugin's URL
+        assert "/mcp" not in text.replace("https://app.trysubstrate.co/mcp", ""), name
+    assert "$substrate-connect" in texts["setup"]
+    assert "codex mcp login substrate-memory" in texts["setup"]
+    assert "codex mcp login substrate-memory" in texts["signin"]
+    assert "--host codex" in texts["stop"]
+    assert "--host codex" in texts["setup"]
+
+
+def test_claude_hook_texts_are_unchanged_in_naming() -> None:
+    claude = _load(CLAUDE_SCRIPT)
+    setup = claude._setup_text("claude", "/tmp/data", "sess-1", None, offer=True)
+    assert "substrate-claude:substrate-connect" in setup
+    assert "/reload-plugins" in setup
+    assert "--host claude" in claude._plain_command("--pause 15")
+    assert "--host codex" in sync._plain_command("--pause 15", "codex")
