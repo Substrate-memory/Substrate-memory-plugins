@@ -1,6 +1,6 @@
 {
   "name": "substrate-codex",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "Substrate long-term memory for ChatGPT Work, Codex in the ChatGPT desktop app, and Codex CLI.",
   "author": {
     "name": "Sightline Technologies Inc",

@@ -359,7 +359,7 @@ def test_codex_hook_texts_name_only_codex_skills_and_commands() -> None:
         # /mcp is only allowed as part of the plugin's URL
         assert "/mcp" not in text.replace("https://app.trysubstrate.co/mcp", ""), name
     assert "$substrate-connect" in texts["setup"]
-    assert "codex mcp login substrate-memory" in texts["setup"]
+    assert "--signin-detach" in texts["setup"]
     assert "codex mcp login substrate-memory" in texts["signin"]
     assert "--host codex" in texts["stop"]
     assert "--host codex" in texts["setup"]

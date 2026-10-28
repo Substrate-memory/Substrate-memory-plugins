@@ -25,20 +25,22 @@ claude plugin marketplace add Substrate-memory/Substrate-memory-plugins && claud
 Then say exactly: "Installed. Type /reload-plugins, then say continue." The
 plugin carries on from the next message: sign-in, check, import offer.
 
-**Codex (CLI or app).** Run these in this order: approve first, then hooks.
+**Codex (CLI or app).** Run these in order, in this one turn. The sign-in
+runs in its own session, so it still works after the turn ends.
 ```
 codex plugin marketplace add Substrate-memory/Substrate-memory-plugins
 codex plugin add substrate-codex@substrate-marketplace
 codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp
-codex mcp login substrate-memory
+python3 <plugin>/scripts/codex_user_hooks.py install
+python3 <plugin>/scripts/substrate_sync.py --host codex --signin-detach
 ```
-`login` prints the approval link: paste the full link in your reply, say the user
-should choose Approve connection, and wait for the command to return. Then rerun
-`memory_search`. Once it works, run
-`python3 <plugin>/scripts/codex_user_hooks.py install` (the plugin is under
-`$CODEX_HOME/plugins/cache/*/substrate-codex/*/`, default `~/.codex`). Section 4
-comes next, in the same reply. Then say, last: "Approve the Substrate hooks once
-in /hooks, then start a new session and say continue."
+Run the last command with escalated permissions (network and a local listener).
+It prints JSON with `"link"`. Then end your turn with one line, the link, and:
+"Open this link and choose Approve connection. Then run /hooks, trust Substrate's
+hooks, and start a new session with /new."
+The plugin is under `$CODEX_HOME/plugins/cache/*/substrate-codex/*/` (default
+`~/.codex`). In the new session the first reply says "Connected to Substrate."
+and offers the import.
 
 **Hermes.**
 ```

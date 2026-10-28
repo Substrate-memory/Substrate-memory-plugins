@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.3
+
+Codex: no "continue" after the browser approval.
+
+- **Hooks first, sign-in detached.** Setup installs the Codex hooks before sign-in (quiet until connected) and starts `codex mcp login substrate-memory` detached (`substrate_sync.py --host codex --signin-detach`), so the sign-in survives the end of the turn. The turn ends with the link and one line: approve, trust Substrate's hooks in `/hooks`, start a new session with `/new`.
+- **The next session announces it.** A SessionStart hook says "Connected to Substrate." once and offers the import (no offer when there is nothing to import), or shows the pending link again if sign-in has not finished.
+- **Versions:** 0.10.3 everywhere; `substrate-codex` and `substrate-claude` ship the same `substrate_sync.py` (byte-identical).
+
 ## 0.10.2
 
 Codex: setup, import and sign-in work end to end (first live Codex test).

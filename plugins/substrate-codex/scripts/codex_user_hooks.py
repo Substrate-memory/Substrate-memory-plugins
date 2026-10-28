@@ -82,9 +82,12 @@ def desired_hooks(plugin_root: Path = PLUGIN_ROOT) -> dict:
             group = copy.deepcopy(group)
             for handler in group["hooks"]:
                 if handler.get("type") == "command":
-                    if "--offer-check" not in handler.get("command", ""):
+                    command = handler.get("command", "")
+                    flags = {"--offer-check": "UserPromptSubmit", "--session-start": "SessionStart"}
+                    flag = next((f for f in flags if f in command), None)
+                    if flag is None or flags[flag] != event:
                         raise HookConfigError(f"unexpected plugin command hook under {event}")
-                    handler["command"] = _script_command(script, "--host codex --offer-check")
+                    handler["command"] = _script_command(script, f"--host codex {flag}")
                 handler[TAG_KEY] = TAG_VALUE
             new_groups.append(group)
         out[event] = new_groups
