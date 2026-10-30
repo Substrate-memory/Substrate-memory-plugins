@@ -23,6 +23,7 @@ PLUGIN_DIR = Path(__file__).resolve().parent.parent / "plugins" / "substrate-her
 EXPECTED_HOOKS = {
     "pre_llm_call",
     "post_llm_call",
+    "on_session_start",
     "on_session_end",
     "on_session_finalize",
     "on_session_reset",

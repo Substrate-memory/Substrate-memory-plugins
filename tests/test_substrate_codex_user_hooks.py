@@ -77,8 +77,9 @@ def _foreign_handlers(doc: dict) -> list:
 
 # --------------------------------------------------------------------------
 
-def test_desired_table_mirrors_plugin_hooks_with_tag_and_absolute_script():
-    desired = U.desired_hooks(PLUG)
+def test_desired_table_mirrors_plugin_hooks_with_tag_and_stable_shim():
+    shim = Path("/codex/home/substrate/substrate_hook.py")
+    desired = U.desired_hooks(PLUG, shim)
     plugin = json.loads((PLUG / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
     assert set(desired) == set(plugin) == {
         "UserPromptSubmit", "PostToolUse", "Stop", "SubagentStop", "SessionStart", "PreCompact",
@@ -91,7 +92,8 @@ def test_desired_table_mirrors_plugin_hooks_with_tag_and_absolute_script():
                 assert dh.pop(U.TAG_KEY) == U.TAG_VALUE
                 if ph["type"] == "command":
                     assert "${" not in dh["command"]
-                    assert str(PLUG / "scripts" / "substrate_sync.py") in dh["command"]
+                    assert str(shim) in dh["command"]
+                    assert "substrate_sync.py" not in dh["command"] and str(PLUG) not in dh["command"]
                     assert ("--session-start" if event == "SessionStart" else "--offer-check") in dh["command"]
                     assert dh["timeout"] == ph["timeout"]
                     dh.pop("command")
@@ -290,7 +292,7 @@ def test_skill_and_docs_describe_the_install_and_the_one_approval():
     skill = (PLUG / "skills" / "substrate-connect" / "SKILL.md").read_text(encoding="utf-8")
     assert "codex_user_hooks.py\" install" in skill or "codex_user_hooks.py install" in skill
     assert "/hooks" in skill and "approve" in skill.lower()
-    assert "Open this link and choose Approve connection" in skill and "/new" in skill
+    assert "Open this link and choose Approve connection" in skill and "start a new session" in skill
     assert "codex mcp add substrate-memory --url" in skill and "<the url in this plugin's mcp.json>" in skill
     for doc in ("INSTALL.md", "README.md"):
         text = (PLUG / doc).read_text(encoding="utf-8")

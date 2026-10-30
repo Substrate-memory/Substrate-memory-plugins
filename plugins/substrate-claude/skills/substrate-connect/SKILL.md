@@ -78,7 +78,8 @@ the plugin handles the import.
    say continue." Never ask for a token or key.
    A bare "continue", "done", "ok" or "approved" during setup just means carry
    on; don't comment on it.
-4. **Same reply: offer the import.** Run `SYNC --preview`. If `sessions` is 0 and
+4. **Same reply: offer the import, once.** If this turn already has a `[substrate] Import offer
+   pending` note, follow that note and skip this step. Otherwise run `SYNC --preview`. If `sessions` is 0 and
    `already_imported` is above 0, go to the account note below: never say those
    conversations are in this account unless `memory_import_status` confirms it.
    Otherwise, if `decision` is set or `sessions` is 0, stop here. Otherwise ask once,
@@ -88,6 +89,14 @@ the plugin handles the import.
 5. Act on the answer by invoking the Skill tool with skill `substrate-claude:substrate-import`
    (its permissions apply to that turn). If the Skill tool is not available, run
    `/substrate-claude:substrate-import`.
+6. **Permissions and updates, once, after the import.** Skip this step if `SYNC --permissions-check`
+   shows `"missing": 0` or `"offered": true`. If the tool `mcp__workspace__bash` is available, this
+   is Cowork: say only *To allow Substrate's memory tools without asking each time: Customize →
+   Connectors → Substrate → Always allow.* Otherwise (Claude Code) ask once, in plain words:
+   *Allow Substrate's memory tools without asking each time, except memory_forget? **Yes** / **Not
+   now***. On yes run `SYNC --permissions-allow`; on not now run `SYNC --permissions-allow --decline`.
+   Then say once: *Turn on auto-update: `/plugin`, Marketplaces, substrate-marketplace, Enable auto-update.*
+   The agent cannot change that setting for you.
 
 **Account note.** This computer already imported these conversations, but the
 connected account may be a different one. Call `memory_import_status` with no

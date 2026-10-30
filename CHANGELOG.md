@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.0
+
+Install once, import everything local, stay current.
+
+- **Codex: one approval line.** Setup ends with the link and one instruction that covers both the Codex app (its hooks settings) and the CLI (`/hooks`), then one new session. No "continue", no repeated instruction; the import is offered once, after the check.
+- **Codex hook trust survives updates.** The hooks run a stable shim in `$CODEX_HOME/substrate/` that execs the newest installed plugin, so an update no longer needs re-approval (upgrading from 0.10.3 asks once more).
+- **Import finds all local history.** Codex also reads `archived_sessions/`, every `rollout_path` in `state_*.sqlite` (read-only) and running WSL distros' `.codex`; a conversation's own rollout wins over its subagent threads. The preview shows counts per location and says cloud-only chats are not on this computer; Claude Code notes when its retention window already removed older transcripts.
+- **Cloud chats:** agents point users at the official ChatGPT / Claude.ai export (dropped on Substrate → Sources) and never read cloud history through a browser.
+- **Permissions:** Claude Code offers once to allow the memory tools except `memory_forget` (`--permissions-check/--permissions-allow/--decline`); Cowork gets the one place to set Always allow.
+- **Updates:** a once-a-day "update available" line at session start (Claude/Cowork, Codex, Hermes; cached, 2 s timeout, silent on failure); install offers each host's auto-update; `VERSION` is the single source, checked by `scripts/check_versions.py`; Hermes README pin fixed.
+- **Versions:** 0.11.0 everywhere.
+
 ## 0.10.3
 
 Codex: no "continue" after the browser approval.

@@ -12,6 +12,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parent.parent
 CODEX_SCRIPT = REPO / "plugins" / "substrate-codex" / "scripts" / "substrate_sync.py"
 HOOKS = REPO / "plugins" / "substrate-codex" / "hooks" / "hooks.json"
@@ -45,6 +47,12 @@ class _FakePopen:
         stdout.flush()
         self.pid = 424242
         _FakePopen.last = self
+
+
+@pytest.fixture(autouse=True)
+def _no_update_check(monkeypatch):
+    """The session-start update line never touches the network in these tests."""
+    monkeypatch.setenv("SUBSTRATE_UPDATE_CHECK", "0")
 
 
 def _state(data_dir):
@@ -104,15 +112,16 @@ def test_detach_reports_error_when_no_link_appears(monkeypatch, tmp_path, capsys
     assert json.loads(capsys.readouterr().out)["status"] == "error"
 
 
-def test_session_start_announces_a_working_connection_once(monkeypatch, tmp_path, capsys):
+def test_session_start_confirms_a_working_connection_once(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(sync, "_codex_mcp_signed_in", lambda: True)
     assert sync._cmd_session_start("codex", str(tmp_path)) == 0
     out = json.loads(capsys.readouterr().out)
     context = out["hookSpecificOutput"]["additionalContext"]
     assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-    assert "Connected to Substrate." in context and "--host codex --preview" in context
-    assert "Import all" in context and "Do not wait for another message" in context
-    assert "no conversations, say nothing about the import" in context
+    assert "Connected to Substrate." in context and "memory_search" in context
+    # The import offer is made once by the offer hook after the check, never here.
+    assert "Do not offer the import here" in context
+    assert "--preview" not in context and "Import all" not in context
     # second session: already announced, so nothing is injected
     assert sync._cmd_session_start("codex", str(tmp_path)) == 0
     assert capsys.readouterr().out == ""

@@ -331,7 +331,8 @@ def test_offer_emitted_when_undecided(env) -> None:
     text = hook["additionalContext"]
     # The offer carries the count, the date range and the exact three choices.
     for phrase in ("I found 1 past conversation on this computer (2 turns, 1 Sep 2026 to "
-                   "1 Sep 2026). Import them into Substrate? Import all / Let me pick / Not now",
+                   "1 Sep 2026). Cloud-only chats aren't on this computer. Import them into "
+                   "Substrate? Import all / Let me pick / Not now",
                    "Connected to Substrate.", "memory_import_ticket", "--upload --all --background",
                    "--ticket-file", "import-ticket-", "--mcp-url", "--new-claim", "claim_pending", "--status --wait 60",
                    "--record-decision no", "never appear in your reply",
@@ -443,6 +444,10 @@ def test_offer_latency_200_transcripts(env) -> None:
     run("--host", "claude", "--offer-check", stdin='{"session_id": "s-000"}')  # warm caches
     timings = []
     for _ in range(3):
+        _state_path = env["data"] / "import-offer.json"
+        state = json.loads(_state_path.read_text())
+        state.pop("offered_at", None)  # re-arm the once-only offer for each timed call
+        _state_path.write_text(json.dumps(state))
         start = time.perf_counter()
         proc = _offer(env, stdin='{"session_id": "s-000"}')
         timings.append(time.perf_counter() - start)
@@ -1322,12 +1327,12 @@ def test_setup_nag_stops_after_limit(env) -> None:
     assert shown[-1] == ""
 
 
-def test_import_offer_nag_stops_after_limit(env) -> None:
+def test_import_offer_is_made_once_even_if_the_model_ignores_it(env) -> None:
     write_claude_session(env["claude"], "old-1")
     connect()
     shown = [_offer(env).stdout for _ in range(sync.NAG_LIMIT + 5)]
-    assert sum(1 for out in shown if "Import offer pending" in out) == sync.NAG_LIMIT
-    assert shown[-1] == ""
+    assert sum(1 for out in shown if "Import offer pending" in out) == 1
+    assert shown[-1] == "" and _state(env).get("offered_at")
 
 
 # ---------------------------------------------------------------------------

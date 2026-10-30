@@ -35,12 +35,14 @@ python3 <plugin>/scripts/codex_user_hooks.py install
 python3 <plugin>/scripts/substrate_sync.py --host codex --signin-detach
 ```
 Run the last command with escalated permissions (network and a local listener).
-It prints JSON with `"link"`. Then end your turn with one line, the link, and:
-"Open this link and choose Approve connection. Then run /hooks, trust Substrate's
-hooks, and start a new session with /new."
-The plugin is under `$CODEX_HOME/plugins/cache/*/substrate-codex/*/` (default
-`~/.codex`). In the new session the first reply says "Connected to Substrate."
-and offers the import.
+It prints JSON with `"link"`. Then end your turn with the link on its own line,
+and this one instruction, word for word:
+"Open this link and choose Approve connection. Then approve Substrate's hooks: in
+the Codex app, in its hooks settings [TODO: exact menu label]; in the terminal,
+/hooks. Then start a new session."
+Add nothing else. The plugin is under `$CODEX_HOME/plugins/cache/*/substrate-codex/*/`
+(default `~/.codex`). The first reply of the new session says "Connected to
+Substrate." and offers the import once.
 
 **Hermes.**
 ```
@@ -70,7 +72,7 @@ The user opens the link, signs in or creates an account (7 days free, no card)
 and chooses Approve connection. Keep checking; never wait for "done". Say
 "Connected to Substrate." only after `memory_search` succeeds.
 
-## 4. Import (same reply)
+## 4. Import (same reply, once, after the check)
 
 **Plugin hosts (Claude Code, Codex, Hermes).** Offer once, with the real count
 and date range the plugin reports. Say:
@@ -85,6 +87,28 @@ progress until the plugin's final line: how many conversations were imported, an
 that Substrate is reading them now (ask about them in a few minutes). Counts appear
 only when something was refused. Say the line as the plugin gives it.
 **Not now:** record it and never ask again. Skip on Cowork and when nothing is readable.
+If a `[substrate] Import offer pending` note is already in this turn, that note is
+the offer: follow it and do not offer again.
+
+**Cloud chats, every host, once.** History that lives only online is not on this
+computer. Never read it through a browser. Say only: "Older ChatGPT or Claude.ai
+chats: export them in that app's settings, then drop the emailed zip on
+Substrate → Sources."
+
+**Claude Code, once, after the import.** Ask in plain words: "Allow Substrate's
+memory tools without asking each time, except memory_forget? Yes / Not now". Run
+`substrate_sync.py --host claude --permissions-check` first and skip the question
+when `"missing"` is 0 or `"offered"` is true. On yes, run
+`substrate_sync.py --host claude --permissions-allow`; on not now, run it with
+`--decline`. Then say once: "Turn on auto-update: `/plugin`, Marketplaces,
+substrate-marketplace, Enable auto-update." The agent cannot change that for the user.
+
+**Cowork, once, after the import.** Say only: "To allow Substrate's memory tools
+without asking each time: Customize → Connectors → Substrate → Always allow."
+
+**Hermes, once, after the import.** Ask: "Keep Substrate plugin updates automatic?
+Yes / Not now". On yes, add `auto_apply: true` under `plugins:` in
+`~/.hermes/config.yaml` (create the key if missing; change nothing else).
 
 **MCP hosts (claude.ai, ChatGPT, Cursor, other connectors).** Offer once:
 "I can save what I already know about you to Substrate. Want me to?" On yes,

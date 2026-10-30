@@ -99,6 +99,17 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py\" --host claude --update-check 2>/dev/null || python \"${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py\" --host claude --update-check 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

@@ -16,7 +16,7 @@ The install path depends on the host. The agent can prepare supported settings, 
 |---|---|---|---|---|
 | Claude Code | `plugins/substrate-claude` | Install the plugin, wire `memory_*` hooks, run the sync command setup, authenticate, and run the smoke test. | Host permission prompts and the exact browser link, then **Approve connection**. Trust plugin hooks once via `/hooks`. | No documented restart requirement; use the host's session/reload action if tools are absent. |
 | Claude Cowork | `plugins/substrate-claude` | Install the marketplace plugin when permitted and configure its remote MCP entry and hooks. | Marketplace/plugin permission dialogs and the exact browser link, then **Approve connection**. | **Yes in the current Cowork build (observed). Start a new session.** If tools still do not appear, quit and reopen the app. |
-| Codex (CLI, app) and ChatGPT Work | `plugins/substrate-codex` | Install the plugin, wire `memory_*` hooks, run the sync command setup, authenticate, and run the smoke test. | Host permission prompts and the exact browser link, then **Approve connection**. Trust plugin hooks once via `/hooks`. | No documented restart requirement; if tools are absent, use the host's documented session action. |
+| Codex (CLI, app) and ChatGPT Work | `plugins/substrate-codex` | Install the plugin, wire `memory_*` hooks, run the sync command setup, authenticate, and run the smoke test. | Host permission prompts and the exact browser link, then **Approve connection**. Approve Substrate's hooks once (Codex app: its hooks settings; terminal: `/hooks`). | No documented restart requirement; if tools are absent, use the host's documented session action. |
 | Hermes | `plugins/substrate-hermes` | Install the plugin, start device login, poll approval, and run the smoke test. | The exact browser link, then **Approve connection**. | No. Verify in the active agent after approval. |
 | Other MCP clients | `plugins/substrate-mcp` (fallback) | Use the host's documented remote Streamable HTTP and browser-authorization interface. | Any host setup/permission controls and the exact browser link, then **Approve connection**. | Follow the host's documented lifecycle; do not assume a restart. |
 
@@ -61,7 +61,7 @@ claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
 claude plugin install substrate-claude@substrate-marketplace
 ```
 
-The agent ends its reply with: *Installed. Type `/reload-plugins`, then say "continue".* On that next message the plugin's offer hook tells the agent to finish setup: it starts sign-in at once, keeps checking while the user approves in the browser (no "done" needed), verifies with `memory_search`, reports **Connected to Substrate.**, and offers the import in the same reply. The package wires `memory_*` hooks so recall is injected before every turn and every completed turn is captured automatically, including bounded redacted tool calls and results. The host transcript is the spool: if the server reports missing turns, the agent runs the package sync command to re-import them with deterministic ids.
+The agent ends its reply with: *Installed. Type `/reload-plugins`, then say "continue".* On that next message the plugin's offer hook tells the agent to finish setup: it starts sign-in at once, keeps checking while the user approves in the browser (no "done" needed), verifies with `memory_search`, reports **Connected to Substrate.**, and offers the import in the same reply. The package wires `memory_*` hooks so recall is injected before every turn and every completed turn is captured automatically, including bounded redacted tool calls and results. The host transcript is the spool: if the server reports missing turns, the agent runs the package sync command to re-import them with deterministic ids. After the import it asks once whether to allow the memory tools without prompts (every tool except `memory_forget`, written to `permissions.allow` in `~/.claude/settings.json`), and tells you where to turn on auto-update.
 
 Do not use the deprecated API-key plugin described below.
 
@@ -92,7 +92,7 @@ codex mcp add substrate-memory --url https://app.trysubstrate.co/mcp
 codex mcp login substrate-memory
 ```
 
-`login` prints the approval link: approve the connection first. The agent then installs the hooks and offers the import. Last, approve the Substrate hooks once in `/hooks`, start a new session, and say continue. Do not use the deprecated API-key plugin described below. Until the hooks are trusted, Codex skips automatic capture. Codex has no session-end hook, so the server seals idle sessions after 30 minutes. On the web, plugins do not deploy scripts, so the sync and import skills need the desktop app or the CLI.
+`login` prints the approval link: approve the connection first. The agent then installs the hooks. Last, approve Substrate's hooks once: in the Codex app, in its hooks settings [TODO: exact menu label]; in the terminal, `/hooks`. Then start a new session. That session's first reply confirms the connection and offers the import once. Do not use the deprecated API-key plugin described below. Until the hooks are trusted, Codex skips automatic capture. Codex has no session-end hook, so the server seals idle sessions after 30 minutes. On the web, plugins do not deploy scripts, so the sync and import skills need the desktop app or the CLI.
 
 ### Hermes (`plugins/substrate-hermes`)
 
@@ -124,6 +124,18 @@ How each host does it:
 - **Fallback MCP hosts** list what they can read and import confirmed turns with `memory_import` (or confirmed facts with `memory_remember`), per `plugins/substrate-mcp/INSTALL.md`.
 
 Secrets are redacted client- and server-side. Imports are idempotent: repeats are stored once. If an import stops (for example the 60-minute ticket expired), the agent gets a new ticket and runs it again; finished conversations are skipped.
+
+## Updating
+
+`VERSION` in the repository is the one version number. Each host updates on its own rule:
+
+- **Claude Code.** Turn on auto-update once: `/plugin` → Marketplaces → substrate-marketplace → **Enable auto-update**. By hand: `claude plugin update substrate-claude@substrate-marketplace` in the shell, or `/plugin marketplace update substrate-marketplace` in a session, then `/reload-plugins`. An administrator can set `"autoUpdate": true` for the marketplace in managed settings.
+- **Cowork.** Turn on **Sync automatically** for the Substrate marketplace in Customize → Plugins (reported from the Cowork build; not in the public docs yet). By hand: Settings → Plugins → **Sync**, then start a new session.
+- **Codex (app and CLI).** No automatic update setting is documented for Codex. Update Substrate Memory in the plugin list, then start a new session. [TODO: exact Codex update command.] The hook command is stable across versions, so an update needs no new approval.
+- **Hermes.** Set `plugins.auto_apply: true` in `~/.hermes/config.yaml` for unattended updates (off by default). `plugins.auto_update_check_hours` sets how often Hermes checks (default 24; `0` turns the check off). By hand: `hermes plugins update substrate`.
+- **Other MCP hosts.** The remote server at `https://app.trysubstrate.co/mcp` is updated by its operator; there is nothing to install.
+
+**Update line.** In Claude Code, Cowork, Codex and Hermes, the plugin's session start checks the repository `VERSION` on `main` at most once a day (one request to GitHub, 2-second timeout, cached, in the background for Hermes). When a newer version exists it shows one line, at most once a day, and nothing otherwise. Set `SUBSTRATE_UPDATE_CHECK=0` in the environment to turn the check off.
 
 ## Legacy plugins
 
