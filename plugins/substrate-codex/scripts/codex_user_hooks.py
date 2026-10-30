@@ -8,6 +8,11 @@ module writes the plugin's hook table there, tags each entry it writes, and
 removes exactly those entries again. Codex then asks the user to trust the
 new hooks once in `/hooks`.
 
+The hook command does not contain the versioned plugin path. It runs a stable
+shim, `$CODEX_HOME/substrate/substrate_hook.py`, which execs the newest installed
+substrate-codex plugin. Codex keys its approval on the command text, so a plugin
+update leaves the hook entries byte-identical and needs no new approval.
+
 Usage:
   codex_user_hooks.py install [--codex-home DIR]
   codex_user_hooks.py remove  [--codex-home DIR]
@@ -50,6 +55,65 @@ TAG_VALUE = "substrate-codex"
 HOOKS_FILE = "hooks.json"
 BACKUP_FILE = "hooks.json.substrate-backup"
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+SHIM_DIR = "substrate"
+SHIM_FILE = "substrate_hook.py"
+POINTER_FILE = "plugin-root.txt"
+
+# The stable hook entry point. Its text never changes between plugin versions.
+SHIM_SOURCE = r'''#!/usr/bin/env python3
+"""Stable Substrate hook entry point, written by codex_user_hooks.py install.
+
+Codex approves a hook by its command text, so this command must not change when the
+plugin is updated. This file runs the newest installed substrate-codex plugin with
+the same arguments, and exits 0 silently when none is found (hooks never fail a turn).
+"""
+import glob
+import json
+import os
+import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+CODEX_HOME = os.path.dirname(HERE)
+
+
+def _version(root):
+    try:
+        with open(os.path.join(root, ".codex-plugin", "plugin.json"), encoding="utf-8") as handle:
+            text = json.load(handle).get("version", "")
+    except (OSError, ValueError, AttributeError):
+        text = ""
+    numbers = re.findall(r"\d+", text) if isinstance(text, str) else []
+    return tuple(int(number) for number in numbers[:3]) or (0,)
+
+
+def _roots():
+    found = glob.glob(os.path.join(CODEX_HOME, "plugins", "cache", "*", "substrate-codex", "*"))
+    try:
+        with open(os.path.join(HERE, "plugin-root.txt"), encoding="utf-8") as handle:
+            found.append(handle.read().strip())
+    except OSError:
+        pass
+    return [root for root in found
+            if root and os.path.isfile(os.path.join(root, "scripts", "substrate_sync.py"))]
+
+
+def main():
+    roots = _roots()
+    if not roots:
+        return 0
+    root = max(roots, key=_version)
+    script = os.path.join(root, "scripts", "substrate_sync.py")
+    exe = sys.executable or "python3"
+    os.execvp(exe, [exe, script] + sys.argv[1:])
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BaseException:
+        sys.exit(0)
+'''
 
 
 class HookConfigError(Exception):
@@ -66,15 +130,16 @@ def _script_command(script: Path, args: str) -> str:
             f"python {quoted} {args} 2>/dev/null || true")
 
 
-def desired_hooks(plugin_root: Path = PLUGIN_ROOT) -> dict:
-    """Plugin hook table with absolute script paths and the ownership tag.
+def desired_hooks(plugin_root: Path = PLUGIN_ROOT, shim: Path | None = None) -> dict:
+    """Plugin hook table with the stable shim as command and the ownership tag.
 
     `mcp_tool` handlers are copied unchanged. The plugin's `${CLAUDE_PLUGIN_ROOT}`
-    command handler is rewritten with the script's absolute path, because a
-    user hook file has no plugin root variable.
+    command handler is rewritten to run the shim in CODEX_HOME, so the command text
+    does not depend on the plugin version.
     """
     plugin_hooks = json.loads((plugin_root / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
-    script = (plugin_root / "scripts" / "substrate_sync.py").resolve()
+    if shim is None:
+        shim = default_shim_path()
     out: dict = {}
     for event, groups in plugin_hooks.items():
         new_groups = []
@@ -87,11 +152,19 @@ def desired_hooks(plugin_root: Path = PLUGIN_ROOT) -> dict:
                     flag = next((f for f in flags if f in command), None)
                     if flag is None or flags[flag] != event:
                         raise HookConfigError(f"unexpected plugin command hook under {event}")
-                    handler["command"] = _script_command(script, f"--host codex {flag}")
+                    handler["command"] = _script_command(shim, f"--host codex {flag}")
                 handler[TAG_KEY] = TAG_VALUE
             new_groups.append(group)
         out[event] = new_groups
     return out
+
+
+def codex_home_dir() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+
+
+def default_shim_path() -> Path:
+    return codex_home_dir() / SHIM_DIR / SHIM_FILE
 
 
 # --------------------------------------------------------------------------
@@ -330,9 +403,10 @@ def install(codex_home: Path, plugin_root: Path = PLUGIN_ROOT, check_plugin: boo
     if plugin_active:
         # Codex already runs the plugin's own hooks: do not add a second copy.
         return _remove_from(path, doc, existed, reason="plugin hooks already active in Codex")
-    new_doc = _merge(doc, desired_hooks(plugin_root))
+    shim_changed = _install_shim(codex_home, plugin_root)
+    new_doc = _merge(doc, desired_hooks(plugin_root, codex_home / SHIM_DIR / SHIM_FILE))
     if existed and new_doc == doc:
-        return {"action": "install", "changed": False, "path": str(path),
+        return {"action": "install", "changed": shim_changed, "path": str(path),
                 "events": _counts(new_doc), "plugin_hooks_active": plugin_active}
     if existed:
         _backup_once(path)
@@ -349,8 +423,9 @@ def remove(codex_home: Path) -> dict:
 
 def _remove_from(path: Path, doc: dict, existed: bool, reason: str | None) -> dict:
     keys = owned_state_keys(doc, path.resolve())
+    shim_removed = _remove_shim(path.parent)
     if not keys:
-        result = {"action": "remove", "changed": False, "path": str(path)}
+        result = {"action": "remove", "changed": shim_removed, "path": str(path)}
     else:
         new_doc = _strip_ours(doc)
         if _is_empty_shell(new_doc) and not path.with_name(BACKUP_FILE).exists():
@@ -366,6 +441,34 @@ def _remove_from(path: Path, doc: dict, existed: bool, reason: str | None) -> di
     return result
 
 
+def _install_shim(codex_home: Path, plugin_root: Path) -> bool:
+    """Write the stable hook entry point and the plugin-root pointer. True when either changed."""
+    directory = codex_home / SHIM_DIR
+    changed = False
+    for name, content in ((SHIM_FILE, SHIM_SOURCE), (POINTER_FILE, str(plugin_root) + "\n")):
+        target = directory / name
+        if target.is_file() and target.read_text(encoding="utf-8") == content:
+            continue
+        _write_bytes_atomic(target, content.encode("utf-8"))
+        changed = True
+    return changed
+
+
+def _remove_shim(codex_home: Path) -> bool:
+    directory = codex_home / SHIM_DIR
+    removed = False
+    for name in (SHIM_FILE, POINTER_FILE):
+        target = directory / name
+        if target.is_file():
+            target.unlink()
+            removed = True
+    try:
+        directory.rmdir()  # only when empty
+    except OSError:
+        pass
+    return removed
+
+
 def _counts(doc: dict) -> dict:
     out = {}
     for event, groups in doc.get("hooks", {}).items():
@@ -379,7 +482,8 @@ def status(codex_home: Path) -> dict:
     path = codex_home / HOOKS_FILE
     doc, existed = _load(path)
     return {"path": str(path), "present": existed,
-            "backup": path.with_name(BACKUP_FILE).exists(), "events": _counts(doc)}
+            "backup": path.with_name(BACKUP_FILE).exists(), "events": _counts(doc),
+            "shim": (codex_home / SHIM_DIR / SHIM_FILE).is_file()}
 
 
 def main(argv: list[str] | None = None) -> int:

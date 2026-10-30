@@ -29,7 +29,7 @@ hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plug
 The repository root is a Hermes plugin that loads this directory.
 Installing only this directory also works:
 `hermes plugins install Substrate-memory/Substrate-memory-plugins/plugins/substrate-hermes --enable`.
-To pin a release, add `--ref <40-character commit SHA of the v0.10.0 tag>`.
+To pin a release, add `--ref <40-character commit SHA of the v0.11.0 tag>`.
 
 ## Connect (one browser approval)
 

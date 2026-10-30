@@ -99,7 +99,7 @@ Known limits, stated honestly:
 - Codex has no session-end hook, so the server seals idle sessions after 30 minutes.
 - Claude Code allows no MCP tool hook on SessionStart, so the first turn implies the session boundary.
 - If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
-- Plugin hooks in Codex must be trusted once via `/hooks`.
+- Codex asks you to approve Substrate's hooks once: in the Codex app, in its hooks settings; in the terminal, `/hooks`.
 - Cowork needs a new session after install before tools appear.
 - Claude Code can show red "MCP server not connected" or "Unauthorized" hook errors while you are signed out or after a removed sign-in. Claude Code reports these from the plugin's capture hooks and the plugin cannot hide them. Reconnect with `/substrate-claude:substrate-connect`.
 

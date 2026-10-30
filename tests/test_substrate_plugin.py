@@ -682,6 +682,7 @@ def test_register_matches_native_hermes_context_and_has_no_side_effect(
     assert set(ctx.hooks) == {
         "pre_llm_call",
         "post_llm_call",
+        "on_session_start",
         "on_session_end",
         "on_session_finalize",
         "on_session_reset",

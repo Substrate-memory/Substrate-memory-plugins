@@ -32,7 +32,7 @@ Keep the user-facing sequence the same everywhere:
 3. **Review.** Use the same connection-name field and requested-access list. Check the connection details against the agent being installed. A displayed name is not proof of identity. Do not hide the verification code or registered callback host when those details are supplied.
 4. **Approve connection.** The user approves or denies in the browser. Never approve on the user's behalf.
 5. **Finish in the agent.** The browser shows **Connection approved**, not a claim that installation is already complete. The client resumes automatically where supported; otherwise return to the agent. It completes authentication privately and runs an authenticated memory smoke test, normally `memory_search`.
-6. **Verify.** An empty authenticated result is valid. Only after a successful request report exactly **Connected to Substrate.** If a restart is required (Cowork needs a new session after install; Codex hooks must be trusted once via `/hooks`), perform or explain it first and verify in the new session before reporting success.
+6. **Verify.** An empty authenticated result is valid. Only after a successful request report exactly **Connected to Substrate.** If a restart is required (Cowork needs a new session after install; Codex hooks must be approved once: in the Codex app's hooks settings, or `/hooks` in the terminal), perform or explain it first and verify in the new session before reporting success.
 
 **Connection approved** is consent only. It is not **Connected to Substrate.**
 

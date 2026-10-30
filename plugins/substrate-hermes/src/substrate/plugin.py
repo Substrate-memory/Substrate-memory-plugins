@@ -217,6 +217,9 @@ def pre_llm_call(
         announcement = _connected_announcement()
         if announcement:
             notes.append(announcement)
+        update = _update_notice_once()
+        if update:
+            notes.append(update)
         args = _turn_context_args(session_id, user_message, **kwargs)
         if args is None:
             return _with_notes(_import_notes(client), notes)
@@ -298,6 +301,32 @@ def _start_login() -> dict[str, Any] | None:
         return _onboarding.ensure_started()
     except Exception:
         return None
+
+
+def _update_notice_once() -> str:
+    """One line a day when main has a newer plugin (see update_check). Never raises."""
+    try:
+        from . import update_check
+
+        return update_check.notice(_onboarding_home())
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _onboarding_home() -> Path:
+    from . import onboarding as _onboarding
+
+    return _onboarding.active_home()
+
+
+def on_session_start(session_id: str = "", **kwargs: Any) -> None:
+    """Host hook at session start: refresh the once-a-day update check in the background. Never raises."""
+    try:
+        from . import update_check
+
+        update_check.refresh_in_background(_onboarding_home())
+    except Exception:  # noqa: BLE001
+        return
 
 
 def _connected_announcement() -> str:
@@ -1897,6 +1926,7 @@ def register(ctx: Any) -> None:
     # the host dispatches no hook under those names (unknown names only log
     # a warning), so they stay directly callable/tested helpers.
     ctx.register_hook("post_llm_call", post_llm_call)
+    ctx.register_hook("on_session_start", on_session_start)
     ctx.register_hook("on_session_end", on_session_end)
     ctx.register_hook("on_session_finalize", on_session_finalize)
     ctx.register_hook("on_session_reset", on_session_reset)

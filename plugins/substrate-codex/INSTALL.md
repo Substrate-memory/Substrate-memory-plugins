@@ -72,11 +72,17 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
   Our entries go first in each event list. Running it twice writes nothing the
   second time. The first write keeps `hooks.json.substrate-backup`. Writes are
   atomic. A malformed file is reported and left as it is.
-- **Approve once**: Codex shows *Hooks need review*. Open `/hooks` and press
-  `t` (trust all), or review each entry. Codex stores approvals in
+- **Approve once**: Codex shows *Hooks need review*. Approve the Substrate
+  entries once: in the Codex app, in its hooks settings [TODO: exact menu label];
+  in the terminal, `/hooks` (press `t` to trust all). Codex stores approvals in
   `config.toml` under `[hooks.state."<path>:<event>:<group>:<handler>"]` with a
-  `trusted_hash`. A changed command (for example a new plugin version path)
-  needs approval again.
+  `trusted_hash`. The approval is keyed on the command text, which does not change
+  between plugin versions (see below).
+- **Stable entry point**: the command is `python3 $CODEX_HOME/substrate/substrate_hook.py
+  --host codex <flag>`. `install` writes that file, which execs the newest installed
+  `substrate-codex` plugin (`$CODEX_HOME/plugins/cache/*/substrate-codex/*/`; the path in
+  `plugin-root.txt` is the fallback). A plugin upgrade keeps the command text, so Codex
+  does not ask again. Re-run `install` after an upgrade to refresh the file.
 - **Remove**: `python3 scripts/codex_user_hooks.py remove`. It deletes exactly
   the tagged entries and their `[hooks.state]` tables, keeps all other entries
   and tables, and deletes `hooks.json` only if install created it.
@@ -92,24 +98,21 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
   `codex mcp list` does not show it. With the server registered, the hooks
   report `not connected` (authentication required) until sign-in, and the
   prompt still goes through (verified; see the pull request).
-- The command hook points at the absolute path of the plugin's script when
-  installed. After a plugin upgrade, run `$substrate-connect` again and approve
-  the changed entry in `/hooks`.
 
 ## Connect and import
 
 `$substrate-connect` runs in this order: install the hooks (`codex_user_hooks.py
 install`, quiet until sign-in), start the sign-in detached (`substrate_sync.py --host
 codex --signin-detach`, escalated, so the approval outlives the turn), and end the
-turn with the link and one line: approve the link, run `/hooks` and trust the hooks,
-start a new session with `/new`. That session's SessionStart hook says "Connected to
-Substrate." and offers the import once. A pending sign-in shows its link again.
+turn with the link and one line: approve the link, approve the hooks (Codex app: hooks settings [TODO]; terminal:
+`/hooks`), start a new session. That session's SessionStart hook has the agent confirm "Connected to
+Substrate." after `memory_search`; the offer hook makes the import offer once, on the next prompt. A pending sign-in shows its link again.
 
 ## Notes for the operator
 
 - Plugin hooks do not load from a local install in Codex 0.154 (`/hooks`
   shows 0 for every event). The connect skill installs the same entries in the
-  user hook file; the user approves them once in `/hooks`.
+  user hook file; the user approves them once (Codex app: hooks settings; terminal: `/hooks`).
 - Not verified here: that `mcp_tool` hooks in the user file resolve the
   `substrate-memory` server and fill `${...}` placeholders the same way as
   plugin hooks. That needs a live, authenticated connection. Without one they

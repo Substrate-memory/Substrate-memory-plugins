@@ -23,6 +23,8 @@ Usage:
     substrate_sync.py --host H --pause SECONDS        (wait <= 60 s, e.g. for sign-in)
     substrate_sync.py --host H --signin-start         (PostToolUse hook: authenticate ran)
     substrate_sync.py --host H --stop-check           (Stop hook: keep a pending sign-in polling)
+    substrate_sync.py --host H --update-check         (SessionStart hook: one line when a newer plugin exists)
+    substrate_sync.py --host claude --permissions-check | --permissions-allow [--decline]
     (every mode also takes --data-dir DIR)
 
 Upload reads the import ticket from --ticket-file: a file the agent wrote with
@@ -35,7 +37,9 @@ SUBSTRATE_MCP_URL (not a secret).
 Paths:
     Claude transcripts: $CLAUDE_CONFIG_DIR/projects/**/*.jsonl
         (fallback ~/.claude/projects; subagent transcripts are skipped).
-    Codex rollouts: $CODEX_HOME/sessions/**/*.jsonl (fallback ~/.codex/sessions).
+    Codex rollouts: $CODEX_HOME/sessions and archived_sessions (fallback ~/.codex), plus
+        every rollout that the home's state_*.sqlite catalogue lists inside that home, and on
+        Windows the same under each running WSL distro.
     State (decision, status, progress): $CLAUDE_CONFIG_DIR|~/.claude or
         $CODEX_HOME|~/.codex, then /substrate-memory/ (or $SUBSTRATE_DATA_DIR).
 
@@ -54,14 +58,17 @@ import os
 import re
 import secrets
 import socket
+import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 MAX_ITEMS_PER_BATCH = 64
@@ -480,22 +487,43 @@ def _parse_codex_file(path: str) -> Tuple[str, List[Dict[str, Any]]]:
 PARSERS = {"claude": _parse_claude_file, "codex": _parse_codex_file}
 
 
-def _base_dir(host: str) -> str:
-    home = os.path.expanduser("~")
-    if host == "claude":
-        override = os.environ.get("CLAUDE_CONFIG_DIR")
-        if override:
-            return os.path.join(override, "projects")
-        return os.path.join(home, ".claude", "projects")
+# ---------------------------------------------------------------------------
+# Where transcripts live. Claude Code: one projects folder (CLAUDE_CONFIG_DIR or
+# ~/.claude). Codex: sessions/ and archived_sessions/ of its home, plus every
+# rollout that the home's state_*.sqlite thread catalogue names (inside that
+# home only), plus on Windows the same under each running WSL distro's home.
+# Every source is read; a session id is imported once (first source wins).
+# ---------------------------------------------------------------------------
+
+WINDOWS = os.name == "nt"
+WSL_SHARES = ("\\\\wsl.localhost", "\\\\wsl$")
+WSL_DISTRO_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
+WSL_CACHE_FILE = "wsl-codex-homes.json"
+WSL_CACHE_SECONDS = 300      # the offer hook runs on every prompt; wsl.exe runs at most this often
+WSL_LIST_TIMEOUT = 5.0
+LOCATION_ORDER = ("projects", "sessions", "archived", "catalogue", "wsl")
+LOCATION_LABELS = {"projects": "projects", "sessions": "sessions", "archived": "archived",
+                   "catalogue": "catalogue", "wsl": "WSL"}
+CLOUD_NOTE = "Cloud-only chats aren't on this computer."
+CLEANUP_DEFAULT_DAYS = 30    # Claude Code's cleanupPeriodDays default
+
+
+def _claude_projects_dir() -> str:
+    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    if override:
+        return os.path.join(override, "projects")
+    return os.path.join(os.path.expanduser("~"), ".claude", "projects")
+
+
+def _codex_home_dir() -> str:
     override = os.environ.get("CODEX_HOME")
     if override:
-        return os.path.join(override, "sessions")
-    return os.path.join(home, ".codex", "sessions")
+        return override
+    return os.path.join(os.path.expanduser("~"), ".codex")
 
 
-def _iter_transcript_files(host: str):
-    root = _base_dir(host)
-    found = []
+def _walk_transcripts(host: str, root: str) -> List[str]:
+    found = []  # type: List[str]
     for dirpath, dirnames, filenames in os.walk(root):
         if host == "claude":
             # Subagent transcripts repeat the parent's session id; their
@@ -507,8 +535,169 @@ def _iter_transcript_files(host: str):
             if host == "claude" and name.startswith("agent-"):
                 continue  # older/flattened subagent transcripts
             found.append(os.path.join(dirpath, name))
-    found.sort()
-    return found
+    return sorted(found)
+
+
+def _state_files(codex_home: str) -> List[str]:
+    """Codex state databases (state_5.sqlite and any other state_*.sqlite version)."""
+    try:
+        names = sorted(os.listdir(codex_home))
+    except OSError:
+        return []
+    return [os.path.join(codex_home, name) for name in names
+            if name.startswith("state_") and name.endswith(".sqlite")]
+
+
+def _state_rollout_paths(db_path: str) -> List[str]:
+    """``rollout_path`` of every thread in one Codex state database.
+
+    Opened read-only, and only that column is selected: never titles, working
+    directories or messages. A missing, locked, corrupt or differently shaped
+    database gives an empty list.
+    """
+    connection = None  # type: Optional[sqlite3.Connection]
+    try:
+        uri = Path(os.path.abspath(db_path)).as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=2.0)
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(threads)")]
+        if "rollout_path" not in columns:
+            return []
+        rows = connection.execute("SELECT rollout_path FROM threads").fetchall()
+    except Exception:  # noqa: BLE001 - a broken catalogue never blocks the import
+        return []
+    finally:
+        if connection is not None:
+            connection.close()
+    return [row[0] for row in rows if isinstance(row[0], str) and row[0]]
+
+
+def _rollout_inside(home: str, raw: str) -> Optional[str]:
+    """The rollout file a catalogue names, when it is a .jsonl file inside that Codex home."""
+    try:
+        candidate = raw if os.path.isabs(raw) else os.path.join(home, raw)
+        if not candidate.endswith(".jsonl"):
+            return None
+        path = os.path.realpath(candidate)
+        if os.path.commonpath([path, home]) != home or not os.path.isfile(path):
+            return None
+    except (OSError, ValueError):
+        return None
+    return path
+
+
+def _catalogued_rollouts(codex_home: str) -> List[str]:
+    home = os.path.realpath(codex_home)
+    found = []  # type: List[str]
+    seen = set()  # type: set
+    for db_path in _state_files(codex_home):
+        for raw in _state_rollout_paths(db_path):
+            path = _rollout_inside(home, raw)
+            if path and path not in seen:
+                seen.add(path)
+                found.append(path)
+    return sorted(found)
+
+
+def _codex_home_sources(codex_home: str, label: str = "") -> List[Tuple[str, str]]:
+    """(rollout file, location) for one Codex home: sessions, archived, then the catalogue."""
+    sources = []  # type: List[Tuple[str, str]]
+    for folder, location in (("sessions", "sessions"), ("archived_sessions", "archived")):
+        for path in _walk_transcripts("codex", os.path.join(codex_home, folder)):
+            sources.append((path, label or location))
+    for path in _catalogued_rollouts(codex_home):
+        sources.append((path, label or "catalogue"))
+    return sources
+
+
+def _parse_wsl_distros(raw: bytes) -> List[str]:
+    """Distro names from ``wsl.exe --list --running --quiet`` (UTF-16LE text on Windows)."""
+    if b"\x00" in raw:
+        text = raw.decode("utf-16-le", errors="ignore")
+    else:
+        text = raw.decode("utf-8", errors="ignore")
+    names = []  # type: List[str]
+    for line in text.splitlines():
+        name = line.replace("﻿", "").strip()
+        if WSL_DISTRO_RE.fullmatch(name) and name.strip(".") and name not in names:
+            names.append(name)
+    return names
+
+
+def _wsl_running_distros() -> List[str]:
+    """Running distros only: listing a stopped distro's files would start it."""
+    if not WINDOWS:
+        return []
+    try:
+        proc = subprocess.run(["wsl.exe", "--list", "--running", "--quiet"], capture_output=True,
+                              timeout=WSL_LIST_TIMEOUT, check=False,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return _parse_wsl_distros(proc.stdout) if proc.returncode == 0 else []
+
+
+def _scan_wsl_codex_homes() -> List[str]:
+    homes = []  # type: List[str]
+    for distro in _wsl_running_distros():
+        for share in WSL_SHARES:
+            base = os.path.join(share, distro)
+            if not os.path.isdir(base):
+                continue
+            users = [os.path.join(base, "root")]
+            try:
+                with os.scandir(os.path.join(base, "home")) as entries:
+                    users += [entry.path for entry in entries if entry.is_dir()]
+            except OSError:
+                pass
+            for user in users:
+                codex = os.path.join(user, ".codex")
+                if os.path.isdir(codex) and codex not in homes:
+                    homes.append(codex)
+            break
+    return homes
+
+
+def _wsl_codex_homes(data_dir: str = "") -> List[str]:
+    """Codex homes under running WSL distros (Windows only), cached in the data folder for a few minutes."""
+    if not WINDOWS:
+        return []
+    cache = os.path.join(data_dir, WSL_CACHE_FILE) if data_dir else ""
+    if cache:
+        saved = _read_json(cache)
+        at, homes = saved.get("at"), saved.get("homes")
+        if (isinstance(at, (int, float)) and 0 <= time.time() - at <= WSL_CACHE_SECONDS
+                and isinstance(homes, list) and all(isinstance(h, str) for h in homes)):
+            return list(homes)
+    homes = _scan_wsl_codex_homes()
+    if cache:
+        try:
+            _write_json(cache, {"at": time.time(), "homes": homes})
+        except OSError:
+            pass  # read-only data folder: the scan still counts
+    return homes
+
+
+def _transcript_sources(host: str, data_dir: str = "") -> List[Tuple[str, str]]:
+    """Every transcript file this host has on this computer, as (path, location), no repeats."""
+    if host == "claude":
+        sources = [(path, "projects") for path in _walk_transcripts(host, _claude_projects_dir())]
+    else:
+        sources = _codex_home_sources(_codex_home_dir())
+        for home in _wsl_codex_homes(data_dir):
+            sources.extend(_codex_home_sources(home, "wsl"))
+    unique = []  # type: List[Tuple[str, str]]
+    seen = set()  # type: set
+    for path, location in sources:
+        key = os.path.normcase(os.path.realpath(path))
+        if key not in seen:
+            seen.add(key)
+            unique.append((path, location))
+    return unique
+
+
+def _iter_transcript_files(host: str, data_dir: str = "") -> List[str]:
+    return [path for path, _location in _transcript_sources(host, data_dir)]
+
 
 
 def _build_envelopes(
@@ -787,14 +976,35 @@ def _has_install_prompt(path: str) -> bool:
     return False
 
 
+def _first_meta(path: str) -> Dict[str, Any]:
+    """The payload of a Codex rollout's first session_meta record (read lazily, stops there)."""
+    for record in _read_jsonl_lines(path):
+        if isinstance(record, dict) and record.get("type") == "session_meta":
+            payload = record.get("payload")
+            return payload if isinstance(payload, dict) else {}
+    return {}
+
+
+def _preferred(candidate: Dict[str, Any], current: Dict[str, Any]) -> bool:
+    """Codex: a conversation's own rollout beats a subagent rollout that shares its session id;
+    then the rollout with more turns wins. Ties keep the earlier file."""
+    if candidate["own_thread"] != current["own_thread"]:
+        return bool(candidate["own_thread"])
+    return len(candidate["turns"]) > len(current["turns"])
+
+
 def _catalogue(host: str, exclude: Optional[set] = None,
-               only: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-    """Parse local transcripts once; one entry per session id (first file wins)."""
+               only: Optional[List[str]] = None, data_dir: str = "") -> List[Dict[str, Any]]:
+    """Parse local transcripts once; one entry per session id.
+
+    Claude: the first file of a session id wins. Codex: subagent threads carry their
+    conversation's session id, so the conversation's own rollout wins (see _preferred).
+    """
     exclude = exclude or set()
     wanted = set(only) if only else None
-    seen = set()  # type: set
+    chosen = {}  # type: Dict[str, int]
     sessions = []  # type: List[Dict[str, Any]]
-    for path in _iter_transcript_files(host):
+    for path, location in _transcript_sources(host, data_dir):
         stem = os.path.splitext(os.path.basename(path))[0]
         if stem in exclude or stem.replace("rollout-", "") in exclude:
             continue
@@ -804,20 +1014,29 @@ def _catalogue(host: str, exclude: Optional[set] = None,
             session_id, turns = PARSERS[host](path)
         except Exception:
             continue
-        if session_id in seen or session_id in exclude or not turns:
+        if session_id in exclude or not turns:
             continue
         if wanted is not None and session_id not in wanted and stem not in wanted:
             continue
-        seen.add(session_id)
+        if session_id in chosen and host != "codex":
+            continue
         first, last = _turn_times(turns)
         try:
             info = os.stat(path)
             size, fingerprint = info.st_size, "%d:%d" % (info.st_size, info.st_mtime_ns)
         except OSError:
             size, fingerprint = 0, "0:0"
-        sessions.append({"session_id": session_id, "path": path, "turns": turns,
-                         "first_at": first, "last_at": last, "bytes": size,
-                         "fingerprint": fingerprint})
+        entry = {"session_id": session_id, "path": path, "turns": turns,
+                 "first_at": first, "last_at": last, "bytes": size,
+                 "fingerprint": fingerprint, "location": location}
+        if host == "codex":
+            entry["own_thread"] = _first_meta(path).get("id") == session_id
+        if session_id in chosen:
+            if _preferred(entry, sessions[chosen[session_id]]):
+                sessions[chosen[session_id]] = entry
+            continue
+        chosen[session_id] = len(sessions)
+        sessions.append(entry)
     sessions.sort(key=lambda s: (s["first_at"] or "", s["session_id"]))
     return sessions
 
@@ -874,7 +1093,7 @@ def _split_uploaded(host: str, data_dir: str,
 
 
 def _cmd_list(host: str, data_dir: str, exclude: set) -> int:
-    sessions, _done = _split_uploaded(host, data_dir, _catalogue(host, exclude))
+    sessions, _done = _split_uploaded(host, data_dir, _catalogue(host, exclude, None, data_dir))
     for entry in sessions:
         turns = entry["turns"]
         messages = sum(
@@ -885,27 +1104,36 @@ def _cmd_list(host: str, data_dir: str, exclude: set) -> int:
                 {"session_id": entry["session_id"], "turns": len(turns),
                  "messages": messages, "first_at": entry["first_at"],
                  "last_at": entry["last_at"], "title": _title(turns),
-                 "path": entry["path"]},
+                 "path": entry["path"], "location": entry["location"]},
                 ensure_ascii=False,
             )
         )
     return 0
 
 
-def _cmd_session(host: str, session: str, after_index: int, origin: str) -> int:
-    match = None
-    for path in _iter_transcript_files(host):
+def _cmd_session(host: str, session: str, after_index: int, origin: str, data_dir: str = "") -> int:
+    match = None  # type: Optional[Dict[str, Any]]
+    for path, _location in _transcript_sources(host, data_dir):
+        stem = os.path.splitext(os.path.basename(path))[0]
+        meta = _first_meta(path) if host == "codex" else {}
+        if host == "codex" and session not in (stem, stem.replace("rollout-", ""),
+                                               meta.get("session_id"), meta.get("id")):
+            continue  # cheap pre-check: parse only the rollouts that can match
         try:
             session_id, turns = PARSERS[host](path)
         except Exception:
             continue
-        if session_id == session or os.path.splitext(os.path.basename(path))[0] == session:
-            match = (session_id, turns)
-            break
+        if session_id == session or stem == session:
+            candidate = {"session_id": session_id, "turns": turns,
+                         "own_thread": host == "codex" and meta.get("id") == session_id}
+            if match is None or _preferred(candidate, match):
+                match = candidate
+            if host != "codex":
+                break
     if match is None:
         print(json.dumps({"error": "session_not_found", "session_id": session}))
         return 1
-    session_id, turns = match
+    session_id, turns = match["session_id"], match["turns"]
     items = _build_envelopes(session_id, turns, origin, after_index)
     for batch in _split_batches(items):
         print(json.dumps({"items": batch}, ensure_ascii=False))
@@ -930,6 +1158,8 @@ LAST_SESSION_MAX_AGE = 12 * 3600
 NAG_LIMIT = 12
 # Connection probe budget. The hook has a 5 s timeout; the probe must leave room.
 PROBE_TIMEOUT = 2.0
+# The offer's preview budget inside the hook (its limit is 5 s; the probe may take PROBE_TIMEOUT first).
+OFFER_PREVIEW_SECONDS = 2.0
 # Sign-in continuation (Claude Code). After the authenticate tool shows the sign-in link,
 # the Stop hook keeps the setup turn polling until the plugin's own memory_search works.
 # Bounded by block count and wall time, ended by a cancel-style prompt, and keyed to the
@@ -942,6 +1172,23 @@ SIGNIN_CANCEL_RE = re.compile(r"^\s*(stop|cancel|never ?mind|forget it|skip|not 
 SIGNIN_LINK_RE = re.compile(r"https://[^\s\"'<>\\]+/authorize[^\s\"'<>\\]*")
 MCP_SERVER_NAME = "substrate-memory"
 MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
+# The version of this copy. scripts/check_versions.py keeps it equal to the repository VERSION file.
+PLUGIN_VERSION = "0.11.0"
+# Update check (SessionStart): the repository VERSION file on main, at most once a day, 2 s timeout.
+UPDATE_FILE = "update-check.json"
+UPDATE_URL = "https://github.com/Substrate-memory/Substrate-memory-plugins/raw/main/VERSION"
+UPDATE_TIMEOUT = 2.0
+UPDATE_INTERVAL = 24 * 3600
+UPDATE_OPT_OUT = "SUBSTRATE_UPDATE_CHECK"
+# Claude Code permission rules: every memory tool of the plugin server except memory_forget,
+# which stays behind a prompt. Listed one by one: a wildcard would include memory_forget.
+CLAUDE_TOOL_PREFIX = "mcp__plugin_substrate-claude_substrate-memory__"
+MEMORY_TOOLS = (
+    "memory_search", "memory_remember", "memory_turn_context", "memory_capture_tool",
+    "memory_capture_turn", "memory_session_boundary", "memory_evidence", "memory_expand",
+    "memory_shares", "memory_import", "memory_import_ticket", "memory_import_status",
+)
+PERMISSIONS_FILE_KEY = "permissions"
 
 
 def _data_dir(host: str, override: str = "") -> str:
@@ -998,6 +1245,19 @@ def _record_connected(data_dir: str) -> None:
     state = _read_json(path)
     if not isinstance(state.get("connected_at"), str):
         state["connected_at"] = _utc_now()
+        _write_json(path, state)
+
+
+def _offered(data_dir: str) -> bool:
+    """True once the import offer has been made to the model (on any path)."""
+    return isinstance(_read_json(os.path.join(data_dir, OFFER_FILE)).get("offered_at"), str)
+
+
+def _mark_offered(data_dir: str) -> None:
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    if not isinstance(state.get("offered_at"), str):
+        state["offered_at"] = _utc_now()
         _write_json(path, state)
 
 
@@ -1124,7 +1384,7 @@ def _exclusions(data_dir: str, explicit: List[str], host: str = "") -> set:
             excluded.add(last["id"])
     if not excluded and host:
         newest, newest_at = "", 0.0
-        for path in _iter_transcript_files(host):
+        for path in _iter_transcript_files(host, data_dir):
             try:
                 modified = os.path.getmtime(path)
             except OSError:
@@ -1146,14 +1406,63 @@ def _human_date(stamp: Optional[str]) -> str:
     return "%d %s %d" % (parsed.day, parsed.strftime("%b"), parsed.year)
 
 
+def _location_counts(sessions: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {}  # type: Dict[str, int]
+    for entry in sessions:
+        location = entry.get("location") or "projects"
+        counts[location] = counts.get(location, 0) + 1
+    return {key: counts[key] for key in LOCATION_ORDER if counts.get(key)}
+
+
+def _location_text(locations: Dict[str, int]) -> str:
+    return ", ".join("%s %d" % (LOCATION_LABELS.get(key, key), count)
+                     for key, count in locations.items())
+
+
+def _coverage_line(locations: Dict[str, int]) -> str:
+    """What this computer can and cannot show. The agent repeats it rather than improvising."""
+    total = sum(locations.values())
+    if not total:
+        return ""
+    if len(locations) > 1:
+        head = "Found %s (%s)." % (_plural(total, "conversation"), _location_text(locations))
+    else:
+        head = "Found %s." % _plural(total, "conversation")
+    return head + " " + CLOUD_NOTE
+
+
+def _claude_retention_days() -> int:
+    """Claude Code's transcript retention (cleanupPeriodDays, default 30). Read only; never changed here."""
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    value = _read_json(os.path.join(config, "settings.json")).get("cleanupPeriodDays")
+    if isinstance(value, int) and not isinstance(value, bool) and 0 < value <= 36500:
+        return value
+    return CLEANUP_DEFAULT_DAYS
+
+
+def _claude_history_note(files: List[str]) -> str:
+    """One line when the oldest local Claude transcript is about as old as its retention window."""
+    if not files:
+        return ""
+    try:
+        oldest = min(os.path.getmtime(path) for path in files)
+    except (OSError, ValueError):
+        return ""
+    days = _claude_retention_days()
+    if abs((time.time() - oldest) / 86400.0 - days) > 3:
+        return ""
+    return ("Older Claude Code history was already removed by Claude Code (its retention limit is "
+            "%d days)." % days)
+
+
 def _preview(host: str, data_dir: str, explicit: List[str], force: bool = False) -> Dict[str, Any]:
-    """What the import offer shows: conversations not imported yet, and their range.
+    """What the import offer shows: conversations not imported yet, where they came from, and their range.
 
     With ``force`` every conversation is listed again: used when this account has none of
     the conversations this computer imported earlier (they went to another account).
     """
     excluded = _exclusions(data_dir, explicit, host)
-    catalogue = _catalogue(host, excluded)
+    catalogue = _catalogue(host, excluded, None, data_dir)
     if force:
         sessions, already = catalogue, 0
     else:
@@ -1161,6 +1470,8 @@ def _preview(host: str, data_dir: str, explicit: List[str], force: bool = False)
     turns = sum(len(s["turns"]) for s in sessions)
     firsts = [s["first_at"] for s in sessions if s["first_at"]]
     lasts = [s["last_at"] for s in sessions if s["last_at"]]
+    locations = _location_counts(sessions)
+    note = _claude_history_note(_iter_transcript_files(host, data_dir)) if host == "claude" else ""
     return {
         "sessions": len(sessions),
         "turns": turns,
@@ -1170,6 +1481,9 @@ def _preview(host: str, data_dir: str, explicit: List[str], force: bool = False)
         "already_imported": already,
         "excluded": sorted(excluded),
         "decision": _decision(data_dir),
+        "locations": locations,
+        "coverage": _coverage_line(locations),
+        "history_note": note,
     }
 
 
@@ -1181,9 +1495,14 @@ def _cmd_preview(host: str, data_dir: str, explicit: List[str], force: bool = Fa
         sys.stderr.write("Found %s (%s) from %s to %s.\n" % (
             _plural(count, "past conversation"), _plural(summary["turns"], "turn"),
             _human_date(summary["first_at"]), _human_date(summary["last_at"])))
+        sys.stderr.write(summary["coverage"] + "\n")
+        if summary["history_note"]:
+            sys.stderr.write(summary["history_note"] + "\n")
     else:
         sys.stderr.write("No past conversations left to import on this computer.\n")
     return 0
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -1225,10 +1544,18 @@ def _sync_base(host: str, data_dir: str, session_id: str) -> str:
 def _offer_sentence(summary: Dict[str, Any]) -> str:
     count = summary["sessions"]
     turns = summary["turns"]
-    return ("I found %s on this computer (%s, %s to %s). Import them into Substrate? "
-            "Import all / Let me pick / Not now") % (
-        _plural(count, "past conversation"), _plural(turns, "turn", "{:,}".format(turns)),
-        _human_date(summary["first_at"]), _human_date(summary["last_at"]))
+    locations = summary.get("locations") or {}
+    details = []  # type: List[str]
+    if len(locations) > 1:
+        details.append(_location_text(locations))
+    details.append("%s, %s to %s" % (_plural(turns, "turn", "{:,}".format(turns)),
+                                     _human_date(summary["first_at"]),
+                                     _human_date(summary["last_at"])))
+    text = "I found %s on this computer (%s). %s" % (
+        _plural(count, "past conversation"), "; ".join(details), CLOUD_NOTE)
+    if summary.get("history_note"):
+        text += " " + summary["history_note"]
+    return text + " Import them into Substrate? Import all / Let me pick / Not now"
 
 
 def _import_summary(sessions: int, tally: "Tally") -> str:
@@ -1266,7 +1593,7 @@ def _offer_text(host: str, data_dir: str, session_id: str,
         offer = ("run `SYNC --preview` and say its conversation count and date range, then "
                  "Import all / Let me pick / Not now")
     return (
-        "[substrate] Import offer pending (asked once per computer). When the user chooses, invoke "
+        "[substrate] Import offer pending (asked once per computer). When the user chooses, "
         "%(invoke)s and follow it; its permissions "
         "apply to that turn. Ignore this note until "
         "the Substrate memory tools work in this session. Once the plugin's own "
@@ -1314,50 +1641,41 @@ def _plugin_mcp_url() -> str:
     return MCP_SERVER_URL
 
 
-def _setup_text_codex(data_dir: str, session_id: str,
-                      summary: Optional[Dict[str, Any]], offer: bool) -> str:
-    """Codex setup. Codex has no Skill tool, /mcp or /reload-plugins: it uses $skills and the codex CLI."""
+def _setup_text_codex(data_dir: str, session_id: str) -> str:
+    """Codex setup. Codex has no Skill tool, /mcp or /reload-plugins: it uses $skills and the codex CLI.
+
+    No import offer here: the offer hook makes it once, after the connection checks out.
+    """
     base = _sync_base("codex", data_dir, session_id)
-    text = (
+    # TODO(Pavel): replace "in its hooks settings" with the exact Codex app menu label.
+    return (
         "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
-        "reply, before anything else, in a few short lines. Follow the `$substrate-connect` skill "
-        "(read its SKILL.md if you have not). A bare \"continue\", \"done\", \"ok\" or \"approved\" "
-        "from the user just means: carry on with Substrate setup. Do not comment on it or ask what "
-        "to work on. SYNC means: `%(base)s`.\n"
+        "reply, in a few short lines. Follow the `$substrate-connect` skill (read its SKILL.md if "
+        "you have not). A bare \"continue\", \"done\", \"ok\" or \"approved\" from the user just "
+        "means: carry on with Substrate setup. SYNC means: `%(base)s`.\n"
         "1. Check the connection with `memory_search`, a short, non-secret query. If that call works "
         "(even empty): run `SYNC --record-connected`, then say \"Connected to Substrate.\" (or "
         "\"Reconnected to Substrate.\" when it prints \"reconnected\": true). Say \"Connected\" only "
-        "after that call succeeds. If a \"[substrate] Offer this once\" note appears, ignore it: the "
-        "plugin handles the import.\n"
+        "after that call succeeds.\n"
         "2. If `memory_search` is missing or fails with \"not connected\", \"needs authentication\", "
         "\"unauthorized\" or \"expired\", or `codex mcp list --json` shows substrate-memory with "
-        "auth_status not_logged_in: run `SYNC --signin-detach` with escalated permissions. Its "
-        "JSON `link` is the approval link: end your turn with that link on its own line, then: "
-        "\"Open this link and choose Approve connection. Then run /hooks, trust Substrate's hooks, "
-        "and start a new session with /new.\" Never describe this computer as remote, local or SSH, and "
-        "never mention ports or callback addresses. Never ask for a token or key, and never say "
-        "Connected before `memory_search` succeeds. If the server is not registered at all "
-        "(`codex mcp list` has no substrate-memory), run `codex mcp add substrate-memory --url "
+        "auth_status not_logged_in: run `SYNC --signin-detach` with escalated permissions. Its JSON "
+        "`link` is the approval link. End your turn with that link on its own line, then this one "
+        "instruction: \"Open this link and choose Approve connection. Then approve Substrate's hooks: "
+        "in the Codex app, in its hooks settings; in the terminal, /hooks. Then start a new session.\" "
+        "Do not ask anything else and do not wait for a reply. Never describe this computer as "
+        "remote, local or SSH, and never mention ports or callback addresses. Never ask for a token or "
+        "key, and never say Connected before `memory_search` succeeds. If the server is not registered "
+        "at all (`codex mcp list` has no substrate-memory), run `codex mcp add substrate-memory --url "
         "%(mcp_url)s` with network permission first, then the login.\n"
-        "3. If no `memory_search` tool exists at all, tell the user to start a new Codex session and "
-        "then say \"continue\"."
+        "3. If no `memory_search` tool exists at all, tell the user to start a new Codex session."
     ) % {"base": base, "mcp_url": _plugin_mcp_url()}
-    if offer:
-        if summary is not None:
-            offer_text = 'say, word for word: "%s"' % _offer_sentence(summary)
-        else:
-            offer_text = ("run `SYNC --preview` and say its conversation count and date range, "
-                          "then Import all / Let me pick / Not now")
-        text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
-                 "they choose, %s (its permissions apply to that turn). The import ticket never goes "
-                 "in a command or in your reply." % (offer_text, _import_invoke("codex")))
-    return text
 
 
 def _setup_text(host: str, data_dir: str, session_id: str,
                 summary: Optional[Dict[str, Any]], offer: bool) -> str:
     if host == "codex":
-        return _setup_text_codex(data_dir, session_id, summary, offer)
+        return _setup_text_codex(data_dir, session_id)
     base = _sync_base(host, data_dir, session_id)
     search = _search_tool(host)
     connector = ""
@@ -1450,10 +1768,24 @@ def _nag_open(data_dir: str, kind: str) -> bool:
 
 
 def _offer_summary(host: str, data_dir: str, session_id: str) -> Optional[Dict[str, Any]]:
-    try:
-        return _preview(host, data_dir, [session_id] if session_id else [])
-    except Exception:  # noqa: BLE001 - the hook still gives the offer, without counts
-        return None
+    """The preview for the offer, or None when it is not ready in time.
+
+    The hook runs on every prompt until the offer is answered, and it has a 5 s limit. A large
+    archive can take longer to read than that, so the preview gets a short budget. When it
+    runs out the offer still goes out, without counts, and the agent runs --preview itself.
+    """
+    result = {}  # type: Dict[str, Any]
+
+    def work() -> None:
+        try:
+            result["summary"] = _preview(host, data_dir, [session_id] if session_id else [])
+        except Exception:  # noqa: BLE001 - the hook still gives the offer, without counts
+            pass
+
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
+    worker.join(OFFER_PREVIEW_SECONDS)
+    return result.get("summary")
 
 
 def _emit_context(context: str) -> None:
@@ -1498,7 +1830,9 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
                 _mark_disconnected(data_dir)
                 _emit_context(_disconnect_text())
             return 0
-        if connected and decided:
+        # The import offer is made exactly once: after the connection checks out, and never
+        # again once it was made or answered.
+        if connected and (decided or _offered(data_dir)):
             return 0
         kind = "offer" if connected else "setup"
         if not _nag_open(data_dir, kind):
@@ -1517,10 +1851,10 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
         if not _take_nag(data_dir, kind):
             return 0
         if connected:
-            context = _offer_text(host, data_dir, session_id, summary)
+            _emit_context(_offer_text(host, data_dir, session_id, summary))
+            _mark_offered(data_dir)
         else:
-            context = _setup_text(host, data_dir, session_id, summary, offer=not decided)
-        _emit_context(context)
+            _emit_context(_setup_text(host, data_dir, session_id, summary, offer=not decided))
     except BaseException:  # noqa: BLE001 - a hook never fails the prompt
         return 0
     return 0
@@ -1732,17 +2066,19 @@ def _cmd_signin_detach(host: str, data_dir: str) -> int:
 
 
 def _session_start_text(data_dir: str) -> str:
-    """SessionStart context for Codex: announce a working connection once, or re-show a pending link."""
+    """SessionStart context for Codex: confirm a working connection once, or re-show a pending link.
+
+    The import offer is not made here. The offer hook makes it once, on the next prompt, after
+    the check, so the user is never asked before the connection is verified or twice.
+    """
     if _codex_mcp_signed_in():
         state = _read_json(os.path.join(data_dir, OFFER_FILE))
         if state.get(CODEX_ANNOUNCED_KEY):
             return ""
-        return ("[substrate] Substrate is connected on this computer. Your first reply must start with "
-                "\"Connected to Substrate.\" and, in the same reply, offer the import: run `%s` and say its "
-                "conversation count and date range, then Import all / Let me pick / Not now. If it finds no "
-                "conversations, say nothing about the import. Use the `$substrate-import` skill for the "
-                "choice. Do not wait for another message."
-                % _plain_command("--preview", "codex"))
+        return ("[substrate] Substrate is connected on this computer. Your first reply must check the "
+                "connection with `memory_search` (a short, non-secret query). When it works, say "
+                "\"Connected to Substrate.\" in one line. Do not offer the import here. Do not wait "
+                "for another message.")
     state = _codex_login_state(data_dir)
     if _codex_login_alive(state):
         link = _codex_login_link(os.path.join(data_dir, CODEX_LOGIN_LOG))
@@ -1756,13 +2092,190 @@ def _cmd_session_start(host: str, data_dir: str) -> int:
     if host != "codex":
         return 0
     text = _session_start_text(data_dir)
-    if not text:
-        return 0
-    if _codex_mcp_signed_in():
+    if text and _codex_mcp_signed_in():
         state = _read_json(os.path.join(data_dir, OFFER_FILE))
         state[CODEX_ANNOUNCED_KEY] = True
         _write_json(os.path.join(data_dir, OFFER_FILE), state)
+    note = _update_notice(host, data_dir)
+    if note:
+        text = (text + "\n" if text else "") + "[substrate] %s Say it once, in one line." % note
+    if not text:
+        return 0
     _emit_hook_context("SessionStart", text)
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Update check (SessionStart, at most once a day). The network call is bounded, its
+# result is cached, and every failure is silent. The line is shown once a day.
+# ---------------------------------------------------------------------------
+
+_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def _is_version(value: Any) -> bool:
+    return isinstance(value, str) and _VERSION_RE.match(value.strip()) is not None
+
+
+def _version_tuple(value: str) -> Tuple[int, ...]:
+    return tuple(int(part) for part in value.strip().split("."))
+
+
+def _fetch_latest_version() -> Optional[str]:
+    try:
+        request = urllib.request.Request(UPDATE_URL, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=UPDATE_TIMEOUT) as response:  # noqa: S310 fixed https URL
+            raw = response.read(64).decode("ascii", "replace").strip()
+    except BaseException:  # noqa: BLE001 - silent on any failure, including no network
+        return None
+    return raw if _is_version(raw) else None
+
+
+def _latest_known(data_dir: str) -> str:
+    """The latest version on main, from the cache; refreshed at most once a day."""
+    path = os.path.join(data_dir, UPDATE_FILE)
+    state = _read_json(path)
+    now = time.time()
+    latest = state.get("latest") if _is_version(state.get("latest")) else ""
+    checked = state.get("checked_at")
+    if not isinstance(checked, (int, float)) or not 0 <= now - checked < UPDATE_INTERVAL:
+        fetched = _fetch_latest_version()
+        latest = fetched or latest
+        state["checked_at"] = now
+        state["latest"] = latest
+        try:
+            _write_json(path, state)
+        except OSError:
+            pass
+    return latest
+
+
+def _update_line(host: str, latest: str) -> str:
+    if host == "claude":
+        return ("Substrate %s is available (you have %s). Run /plugin marketplace update "
+                "substrate-marketplace." % (latest, PLUGIN_VERSION))
+    # Codex: no verified CLI update command yet, so the line names the plugin list only.
+    return ("Substrate %s is available (you have %s). Update the Substrate Memory plugin in "
+            "Codex's plugin list." % (latest, PLUGIN_VERSION))
+
+
+def _update_notice(host: str, data_dir: str) -> str:
+    """One line when a newer plugin is on main, shown at most once a day. Never raises."""
+    try:
+        if os.environ.get(UPDATE_OPT_OUT, "1") == "0":
+            return ""
+        latest = _latest_known(data_dir)
+        if not latest or _version_tuple(latest) <= _version_tuple(PLUGIN_VERSION):
+            return ""
+        path = os.path.join(data_dir, UPDATE_FILE)
+        state = _read_json(path)
+        now = time.time()
+        shown = state.get("notified_at")
+        if isinstance(shown, (int, float)) and 0 <= now - shown < UPDATE_INTERVAL:
+            return ""
+        state["notified_at"] = now
+        try:
+            _write_json(path, state)
+        except OSError:
+            pass
+        return _update_line(host, latest)
+    except BaseException:  # noqa: BLE001 - a hook never fails the session
+        return ""
+
+
+def _cmd_update_check(host: str, data_dir: str) -> int:
+    """SessionStart command hook for Claude Code and Cowork: a system line, never blocking."""
+    if host != "claude":
+        return 0
+    note = _update_notice(host, data_dir)
+    if note:
+        sys.stdout.write(json.dumps({"systemMessage": note}, ensure_ascii=False))
+        sys.stdout.flush()
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Claude Code permissions: the plugin's memory tools are allowed in user settings,
+# except memory_forget. Only with the user's consent (the skill asks first).
+# ---------------------------------------------------------------------------
+
+def _claude_settings_path() -> str:
+    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    return os.path.join(base, "settings.json")
+
+
+def _load_settings(path: str) -> Optional[Dict[str, Any]]:
+    """The user's settings object; {} when there is no file; None when it is not a JSON object."""
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as handle:
+            raw = handle.read()
+    except OSError:
+        return None
+    if not raw.strip():
+        return {}
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+def _write_settings(path: str, doc: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        backup = path + ".substrate-backup"
+        if not os.path.exists(backup):
+            with open(path, "rb") as source, open(backup, "wb") as target:
+                target.write(source.read())
+    temp = "%s.%d.tmp" % (path, os.getpid())
+    with open(temp, "w", encoding="utf-8") as handle:
+        json.dump(doc, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    os.replace(temp, path)
+
+
+def _record_flag(data_dir: str, key: str, value: str) -> None:
+    path = os.path.join(data_dir, OFFER_FILE)
+    state = _read_json(path)
+    state[key] = value
+    _write_json(path, state)
+
+
+def _cmd_permissions(host: str, data_dir: str, allow: bool, decline: bool) -> int:
+    if host != "claude":
+        print(json.dumps({"ok": False, "error": "Claude Code only"}))
+        return 1
+    path = _claude_settings_path()
+    rules = [CLAUDE_TOOL_PREFIX + name for name in MEMORY_TOOLS]
+    settings = _load_settings(path)
+    if settings is None:
+        print(json.dumps({"ok": False, "path": path,
+                          "error": "settings.json is not a JSON object; left unchanged"}))
+        return 1
+    perms = settings.get(PERMISSIONS_FILE_KEY, {})
+    if not isinstance(perms, dict) or not isinstance(perms.get("allow", []), list):
+        print(json.dumps({"ok": False, "path": path,
+                          "error": "permissions.allow is not a list; left unchanged"}))
+        return 1
+    current = perms.get("allow", [])
+    missing = [rule for rule in rules if rule not in current]
+    if decline:
+        _record_flag(data_dir, "permissions_offered", "declined")
+        print(json.dumps({"declined": True}))
+        return 0
+    if not allow:
+        offered = _read_json(os.path.join(data_dir, OFFER_FILE)).get("permissions_offered")
+        print(json.dumps({"path": path, "total": len(rules), "allowed": len(rules) - len(missing),
+                          "missing": len(missing), "offered": offered is not None}))
+        return 0
+    if missing:
+        perms["allow"] = list(current) + missing
+        settings[PERMISSIONS_FILE_KEY] = perms
+        _write_settings(path, settings)
+    _record_flag(data_dir, "permissions_offered", "accepted")
+    print(json.dumps({"ok": True, "changed": bool(missing), "added": len(missing), "path": path}))
     return 0
 
 
@@ -1805,7 +2318,7 @@ def _emit_hook_context(event: str, context: str) -> None:
 # Direct upload over MCP Streamable HTTP with an import ticket.
 # ---------------------------------------------------------------------------
 
-USER_AGENT = "substrate-sync/0.10.3"
+USER_AGENT = "substrate-sync/" + PLUGIN_VERSION
 MAX_RETRIES = 8
 REQUEST_TIMEOUT = 120.0
 # Every network step has a time budget, so a server that accepts the connection and never
@@ -2446,7 +2959,7 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
         "stored": 0, "duplicate": 0, "rejected": 0, "skipped_sessions": 0,
     })
     status.update()
-    sessions = _catalogue(host, excluded, None if args.all else args.session)
+    sessions = _catalogue(host, excluded, None if args.all else args.session, data_dir)
     status.update(sessions_total=len(sessions))
     progress_path = os.path.join(data_dir, PROGRESS_FILE)
     sent_digests, sent_prints = _uploaded_state(data_dir)
@@ -2543,6 +3056,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--new-claim", action="store_true")
     parser.add_argument("--mcp-url", default="")
     parser.add_argument("--pause", type=float, default=0.0)
+    parser.add_argument("--update-check", action="store_true")
+    parser.add_argument("--permissions-check", action="store_true")
+    parser.add_argument("--permissions-allow", action="store_true")
+    parser.add_argument("--decline", action="store_true")
     parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)
     if "--signin-detach" in argv:
         try:
@@ -2558,7 +3075,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         except BaseException:  # noqa: BLE001 - a hook never fails the prompt
             return 0
     for hook_flag, hook_cmd in (("--signin-start", _cmd_signin_start), ("--stop-check", _cmd_stop_check),
-                                ("--session-start", _cmd_session_start)):
+                                ("--session-start", _cmd_session_start), ("--update-check", _cmd_update_check)):
         if hook_flag in argv:
             # Hook entry points never exit non-zero: a Stop hook exiting 2 would block the turn.
             try:
@@ -2587,6 +3104,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         _signin_end(data_dir, "done")
         print(json.dumps({"connected": True, "reconnected": reconnected}))
         return 0
+    if args.permissions_check or args.permissions_allow:
+        return _cmd_permissions(args.host, data_dir, allow=args.permissions_allow, decline=args.decline)
     if args.record_decision:
         _record_decision(data_dir, args.record_decision)
         print(json.dumps({"decision": args.record_decision}))
@@ -2600,7 +3119,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.list:
         return _cmd_list(args.host, data_dir, _exclusions(data_dir, args.exclude_session))
     if args.session:
-        return _cmd_session(args.host, args.session[0], args.after_index, args.origin)
+        return _cmd_session(args.host, args.session[0], args.after_index, args.origin, data_dir)
     parser.error("need --list, --session <id>, --preview, --upload, --status, "
                  "--offer-check or --record-decision")
     return 2

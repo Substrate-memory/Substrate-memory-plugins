@@ -38,8 +38,9 @@ codex mcp login substrate-memory
 ```
 
 `login` prints the approval link. Choose **Approve connection**; the command
-returns. The agent then installs the hooks and offers the import. Last, approve
-the hooks once in `/hooks`, start a new session, and say continue.
+returns. The agent then installs the hooks. Then approve Substrate's hooks once: in the
+Codex app, in its hooks settings [TODO: exact menu label]; in the terminal, `/hooks`.
+Start a new session. Its first reply confirms the connection and offers the import once.
 
 ## Sign-in flow
 
@@ -48,7 +49,7 @@ Install → Sign in → Review → Approve connection → Connected to Substrate
 The agent starts sign-in (**Connect your agent to Substrate**). Sign in,
 review the connection, choose **Approve connection**. The agent confirms with
 an authenticated `memory_search` check, reports **Connected to Substrate.**,
-and in the same reply offers the import:
+and in the first reply of the new session offers the import once:
 
 > I found 42 past conversations on this computer (610 turns, 2 Aug to 7 Oct
 > 2026). Import them into Substrate? **Import all** / **Let me pick** / **Not now**
@@ -60,15 +61,23 @@ reports progress and a final line: how many conversations were imported, and tha
 Substrate is reading them now. **Not now** is remembered; ask "import my past
 conversations" any time.
 
-## Hook trust step
+## Hook approval step
 
 Automatic recall and capture run as Codex hooks. Codex 0.154 does not load a
 plugin's own hooks from a local install, so `$substrate-connect` adds the
 Substrate hook entries to your Codex hook file, `$CODEX_HOME/hooks.json`
 (default `~/.codex/hooks.json`). It backs the file up once and changes only
-its own entries. Then open `/hooks` once and approve the Substrate entries
-(one per event). Until you approve them, Codex skips automatic capture and
-recall still works when you ask.
+its own entries. The entries run a stable entry point in `$CODEX_HOME/substrate/`,
+so a plugin update does not change them and needs no new approval.
+
+Approve the Substrate hooks once, with the one step that fits your Codex:
+
+- **Codex app:** open its hooks settings and approve the Substrate entries
+  [TODO: exact menu label, from Pavel].
+- **Terminal:** run `/hooks` and trust the Substrate entries.
+
+Until you approve them, Codex skips automatic capture and recall still works
+when you ask.
 
 The hooks call the `substrate-memory` MCP server by name, so connect also registers it
 (`codex mcp add substrate-memory --url <the url in mcp.json>`) when it is
@@ -76,8 +85,8 @@ missing.
 
 To disconnect, run `$substrate-connect` and ask for the disconnect step, or run
 `python3 <plugin dir>/scripts/codex_user_hooks.py remove` yourself. This removes
-exactly the Substrate entries and their approval records. Run it before
-`codex plugin remove substrate-codex`, which does not remove them.
+exactly the Substrate entries, their approval records and the stable entry point.
+Run it before `codex plugin remove substrate-codex`, which does not remove them.
 
 ## What is captured
 

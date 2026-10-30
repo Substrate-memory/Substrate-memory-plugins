@@ -317,9 +317,10 @@ def test_codex_offer_names_codex_import_skill_not_claude() -> None:
         assert "substrate-claude:substrate-import" not in codex_text
         assert "Skill tool" not in codex_text
         assert "use the `$substrate-import` skill" in codex_text
+        # The Codex setup note makes no import offer: the offer hook makes it once, after the check.
         setup = module._setup_text("codex", "/tmp/data", "sess-1", None, offer=True)
         assert "substrate-claude:substrate-import" not in setup
-        assert "use the `$substrate-import` skill" in setup
+        assert "Import all" not in setup and "Import offer" not in setup
 
 
 def test_claude_offer_still_names_claude_import_skill() -> None:
