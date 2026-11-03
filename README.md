@@ -2,6 +2,13 @@
 
 **Give your agents a memory that follows you across Claude, ChatGPT, Codex and Hermes.**
 
+**AI memory for your team, editable, permissioned, owned.**
+
+[trysubstrate.co](https://trysubstrate.co/?utm_source=github-readme&utm_medium=listing&utm_campaign=plugin-listings&utm_content=plugin): a context layer for your team and agents.
+
+- Gemini CLI: `gemini extensions install https://github.com/Substrate-memory/Substrate-memory-plugins`
+- MCP registry name: `co.trysubstrate/memory` (remote server `https://app.trysubstrate.co/mcp`)
+
 Substrate remembers your decisions, preferences, people and projects. Connect once, and every supported agent recalls what matters before each turn and saves what matters after it. One connection screen, one review step, one approval. No API keys. No tokens to paste. No secrets to manage.
 
 ## What you get
@@ -61,6 +68,10 @@ hermes plugins install https://github.com/Substrate-memory/Substrate-memory-plug
 Then follow the printed steps: the agent shows a one-time approval link and code, you approve in the browser, and the agent confirms **Connected to Substrate as you@example.com.** (your account)
 
 If Cowork needs manual installation, use **Cowork tab → Customize → Plugins → Personal plugins → + → Add marketplace → Add from a repository (GitHub URL)**, then browse and install the package. Client-required permission dialogs still need the user. Follow the single [installation and recovery guide](docs/installation.md).
+
+## What is captured and where it goes
+
+With the hook plugins (Claude Code, Cowork, Codex, Hermes), each prompt, each completed turn and bounded tool calls and results go to your own Substrate tenant at app.trysubstrate.co. Secrets are redacted on the server before storage; the sync and import scripts also redact on the client. Nothing goes anywhere else, except a once-a-day read of this repository's `VERSION` file on github.com to show an update notice (nothing is sent). Without hooks (plain MCP, Gemini CLI) only what the agent explicitly saves is stored. You can read, edit and forget every line; account deletion purges within 30 days.
 
 ## Security and privacy
 

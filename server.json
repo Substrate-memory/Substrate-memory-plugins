@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "co.trysubstrate/memory",
+  "title": "Substrate",
+  "description": "Shared memory MCP server for Claude Code, Codex, Gemini CLI and Cursor. Cited, editable.",
+  "repository": {
+    "url": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+    "source": "github"
+  },
+  "version": "0.11.1",
+  "websiteUrl": "https://trysubstrate.co/?utm_source=mcp-registry&utm_medium=listing&utm_campaign=plugin-listings&utm_content=plugin",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://app.trysubstrate.co/mcp"
+    }
+  ]
+}
