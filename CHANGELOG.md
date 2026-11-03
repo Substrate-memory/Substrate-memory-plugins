@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.2
+
+Claude directory listing fields: manifest only, no behavior change.
+
+- **Claude plugin:** `plugin.json` gains `icon` (`./assets/logo.png`, a copy of the 512 px logo inside the plugin) and `privacyPolicyUrl` (https://trysubstrate.co/privacy), which Anthropic's directory reads for the listing.
+- **Versions:** 0.11.2 everywhere.
+
 ## 0.11.1
 
 Marketplace listings: manifests and copy only, no behavior change.
