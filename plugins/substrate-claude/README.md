@@ -1,5 +1,12 @@
 # Substrate memory for Claude Cowork and Claude Code
 
+**AI memory for your team, editable, permissioned, owned.**
+
+[trysubstrate.co](https://trysubstrate.co/?utm_source=github-readme&utm_medium=listing&utm_campaign=plugin-listings&utm_content=plugin): a context layer for your team and agents.
+
+- Gemini CLI: `gemini extensions install https://github.com/Substrate-memory/Substrate-memory-plugins`
+- MCP registry name: `co.trysubstrate/memory` (remote server `https://app.trysubstrate.co/mcp`)
+
 One package serves both hosts. It registers a remote Substrate MCP server, a
 usage skill, three slash commands, and the hooks that capture turns
 automatically. There is no local server and the plugin stores no credentials:
@@ -83,11 +90,9 @@ notices the approval by itself, checks it with `memory_search`, says
 
 Never paste an API key or token into chat.
 
-## What is captured
+## What is captured and where it goes
 
-Prompts, tool calls (names plus bounded, redacted arguments), tool results
-(excerpts plus digests), and assistant replies, grouped per turn. Session
-boundaries (start, clear, compact, end) seal extraction windows.
+With the hook plugins (Claude Code, Cowork, Codex, Hermes), each prompt, each completed turn and bounded tool calls and results go to your own Substrate tenant at app.trysubstrate.co. Secrets are redacted on the server before storage; the sync and import scripts also redact on the client. Nothing goes anywhere else, except a once-a-day read of this repository's `VERSION` file on github.com to show an update notice (nothing is sent). Without hooks (plain MCP, Gemini CLI) only what the agent explicitly saves is stored. You can read, edit and forget every line; account deletion purges within 30 days.
 
 ## Privacy and redaction
 

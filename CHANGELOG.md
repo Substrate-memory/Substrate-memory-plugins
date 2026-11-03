@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.1
+
+Marketplace listings: manifests and copy only, no behavior change.
+
+- **MCP registry:** `server.json` (`co.trysubstrate/memory`).
+- **Gemini CLI:** `gemini-extension.json` and `GEMINI.md` at the root; install with `gemini extensions install`.
+- **Claude plugin:** `displayName` "Substrate Memory" and a one-line description; marketplace description no longer says "for Claude Cowork" only.
+- **READMEs:** tagline, install lines, and a "What is captured and where it goes" section. `assets/logo.png` (512 px).
+- **Versions:** 0.11.1 everywhere; `server.json` and `gemini-extension.json` join `scripts/check_versions.py`.
+
 ## 0.11.0
 
 Install once, import everything local, stay current.

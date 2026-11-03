@@ -39,6 +39,7 @@ ALLOWED_HOSTS = frozenset({
     "app.trysubstrate.co",
     "trysubstrate.co",
     "agent-plugins.org",
+    "static.modelcontextprotocol.io",
     "pypi.org",
     "files.pythonhosted.org",
     "developercertificate.org",

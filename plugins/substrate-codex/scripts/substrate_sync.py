@@ -1173,7 +1173,7 @@ SIGNIN_LINK_RE = re.compile(r"https://[^\s\"'<>\\]+/authorize[^\s\"'<>\\]*")
 MCP_SERVER_NAME = "substrate-memory"
 MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 # The version of this copy. scripts/check_versions.py keeps it equal to the repository VERSION file.
-PLUGIN_VERSION = "0.11.0"
+PLUGIN_VERSION = "0.11.1"
 # Update check (SessionStart): the repository VERSION file on main, at most once a day, 2 s timeout.
 UPDATE_FILE = "update-check.json"
 UPDATE_URL = "https://github.com/Substrate-memory/Substrate-memory-plugins/raw/main/VERSION"
