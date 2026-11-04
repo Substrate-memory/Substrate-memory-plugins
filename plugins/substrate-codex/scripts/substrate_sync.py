@@ -1185,7 +1185,7 @@ SIGNIN_LINK_RE = re.compile(r"https://[^\s\"'<>\\]+/authorize[^\s\"'<>\\]*")
 MCP_SERVER_NAME = "substrate-memory"
 MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 # The version of this copy. scripts/check_versions.py keeps it equal to the repository VERSION file.
-PLUGIN_VERSION = "0.11.3"
+PLUGIN_VERSION = "0.11.4"
 # Claude Code permission rules: every memory tool of the plugin server except memory_forget,
 # which stays behind a prompt. Listed one by one: a wildcard would include memory_forget.
 CLAUDE_TOOL_PREFIX = "mcp__plugin_substrate-claude_substrate-memory__"

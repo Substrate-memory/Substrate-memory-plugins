@@ -38,6 +38,14 @@ Breaking server behavior requires a new protocol/schema identifier with concurre
 
 ## Releases
 
+Every release bumps `VERSION`, runs `python3 scripts/check_versions.py --write`, and adds a `CHANGELOG.md` entry. In order:
+
+1. Merge to `main`. The Claude directory picks up `main` through its webhook.
+2. Publish the MCP registry entry (`server.json`) with `mcp-publisher publish`.
+3. Build the OpenAI package with `python3 scripts/build_openai_package.py` and upload `dist/substrate-openai-<version>.zip` in the OpenAI portal when the listing text (`openai/plugin.json`) or the tool set changed. OpenAI rescans a hosted server's tool schema daily on its own.
+
+The same steps are in `docs/releasing.md`.
+
 Release versions and immutable artifact paths are write-once. Release archives must identify a committed source tree. Never rebuild an old version and present different bytes under the same tag. See `docs/releasing.md`.
 
 ## Sensitive material
