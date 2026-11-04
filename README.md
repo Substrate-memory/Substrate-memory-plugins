@@ -6,7 +6,7 @@
 
 [trysubstrate.co](https://trysubstrate.co/?utm_source=github-readme&utm_medium=listing&utm_campaign=plugin-listings&utm_content=plugin): a context layer for your team and agents.
 
-- Gemini CLI: `gemini extensions install https://github.com/Substrate-memory/Substrate-memory-plugins`
+- Gemini CLI: `gemini extensions install https://github.com/Substrate-memory/Substrate-memory-plugins` (follows the latest release; pin one with `--ref v<version>`)
 - MCP registry name: `co.trysubstrate/memory` (remote server `https://app.trysubstrate.co/mcp`)
 
 Substrate remembers your decisions, preferences, people and projects. Connect once, and every supported agent recalls what matters before each turn and saves what matters after it. One connection screen, one review step, one approval. No API keys. No tokens to paste. No secrets to manage.
