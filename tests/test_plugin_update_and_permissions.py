@@ -1,4 +1,4 @@
-"""Session-start update line, Claude Code permission helper, and the stable Codex hook entry point.
+"""No network update check, Claude Code permission helper, and the stable Codex hook entry point.
 
 Nothing here touches the network or a real ~/.claude or ~/.codex: every path is a temp dir.
 """
@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -34,91 +35,44 @@ U = _load("codex_user_hooks_shim", PLUG_CODEX / "scripts" / "codex_user_hooks.py
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
-    """Isolated CLAUDE_CONFIG_DIR, CODEX_HOME and data dir; the update check is on, the network off."""
+    """Isolated CLAUDE_CONFIG_DIR, CODEX_HOME and data dir."""
     claude = tmp_path / "claude"
     claude.mkdir()
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude))
-    monkeypatch.delenv("SUBSTRATE_UPDATE_CHECK", raising=False)
     data = tmp_path / "data"
     data.mkdir()
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: None)
     return {"claude": claude, "data": data, "tmp": tmp_path}
 
 
 # ---------------------------------------------------------------------------
-# Update line (SessionStart, at most once a day)
+# No update check over the network: updates come only through the plugin marketplace
 # ---------------------------------------------------------------------------
 
-def test_no_line_when_the_fetch_fails(home) -> None:
-    assert sync._update_notice("claude", str(home["data"])) == ""
-
-
-def test_newer_version_gives_one_line_once_a_day(monkeypatch, home) -> None:
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: "99.0.0")
-    line = sync._update_notice("claude", str(home["data"]))
-    assert "99.0.0" in line and "/plugin marketplace update substrate-marketplace" in line
-    assert sync._update_notice("claude", str(home["data"])) == ""  # shown already today
-
-
-def test_cache_within_a_day_means_no_second_request(monkeypatch, home) -> None:
-    calls = []
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: calls.append(1) or "99.0.0")
-    sync._update_notice("claude", str(home["data"]))
-    sync._update_notice("claude", str(home["data"]))
-    assert len(calls) == 1
-
-
-def test_older_or_equal_version_is_silent(monkeypatch, home) -> None:
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: sync.PLUGIN_VERSION)
-    assert sync._update_notice("claude", str(home["data"])) == ""
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: "0.0.1")
-    assert sync._update_notice("claude", str(home["data"])) == ""
-
-
-def test_opt_out_never_fetches(monkeypatch, home) -> None:
-    monkeypatch.setenv("SUBSTRATE_UPDATE_CHECK", "0")
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: pytest.fail("network used"))
-    assert sync._update_notice("claude", str(home["data"])) == ""
-
-
-def test_invalid_response_is_ignored(monkeypatch) -> None:
-    class _Bad(io.BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    monkeypatch.setattr(sync.urllib.request, "urlopen", lambda *a, **k: _Bad(b"<html>not a version</html>"))
-    assert sync._fetch_latest_version() is None
-
-
-def test_unreachable_server_fails_fast_and_silently(monkeypatch) -> None:
-    monkeypatch.setattr(sync, "UPDATE_URL", "http://127.0.0.1:9/VERSION")
-    assert sync._fetch_latest_version() is None
-
-
-def test_claude_hook_prints_a_system_line_only(monkeypatch, home, capsys) -> None:
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: "99.0.0")
-    assert sync._cmd_update_check("claude", str(home["data"])) == 0
-    assert "systemMessage" in json.loads(capsys.readouterr().out)
-    assert sync._cmd_update_check("codex", str(home["data"])) == 0
+def test_update_check_flag_is_a_silent_no_op(monkeypatch, home, capsys) -> None:
+    monkeypatch.setattr(sync.urllib.request, "urlopen", lambda *a, **k: pytest.fail("network used"))
+    for host in ("claude", "codex"):
+        assert sync.main(["--host", host, "--update-check", "--data-dir", str(home["data"])]) == 0
     assert capsys.readouterr().out == ""
 
 
-def test_codex_session_start_adds_the_line_to_its_context(monkeypatch, home, capsys) -> None:
+def test_script_names_no_network_host_but_substrate() -> None:
+    text = (PLUG_CLAUDE / "scripts" / "substrate_sync.py").read_text(encoding="utf-8")
+    hosts = set(re.findall(r"https?://([A-Za-z0-9.-]+)", text))
+    assert hosts <= {"app.trysubstrate.co", "trysubstrate.co"}, hosts
+    assert "github.com" not in text and "raw/main" not in text
+
+
+def test_codex_session_start_has_no_update_line(monkeypatch, home, capsys) -> None:
     monkeypatch.setattr(sync, "_codex_mcp_signed_in", lambda: False)
-    monkeypatch.setattr(sync, "_fetch_latest_version", lambda: "99.0.0")
+    monkeypatch.setattr(sync.urllib.request, "urlopen", lambda *a, **k: pytest.fail("network used"))
     sync._cmd_session_start("codex", str(home["data"]))
-    context = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["additionalContext"]
-    assert "Substrate 99.0.0 is available" in context and "Say it once" in context
+    assert "is available" not in capsys.readouterr().out
 
 
-def test_session_start_hook_for_claude_is_a_command_only() -> None:
+def test_claude_hooks_have_no_session_start_command() -> None:
     hooks = json.loads((PLUG_CLAUDE / "hooks" / "hooks.json").read_text())["hooks"]
-    handlers = [h for g in hooks["SessionStart"] for h in g["hooks"]]
-    assert [h["type"] for h in handlers] == ["command"]
-    assert "--update-check" in handlers[0]["command"] and handlers[0]["timeout"] <= 5
+    assert "SessionStart" not in hooks
+    assert "--update-check" not in (PLUG_CLAUDE / "hooks" / "hooks.json").read_text()
 
 
 # ---------------------------------------------------------------------------

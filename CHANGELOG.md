@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.3
+
+Claude directory compliance: the plugin reads no credentials but Substrate's own, talks only to Substrate, and pre-approves only its own script. Recall, capture, remember/forget and the import are unchanged.
+
+- **Narrow pre-approval.** `/substrate-connect`, `/substrate-import`, `/substrate-sync` (commands and skills) pre-approve exactly `python3|python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude ...`: no wildcard path, no other interpreter paths.
+- **No credential reads.** `substrate_sync.py` no longer reads Claude Code's `.credentials.json`. Claude Code's connection is proved only by the plugin's `memory_search` (then `--record-connected`); the "connection removed" note and the Stop hook's approval probe are gone (the Stop hook still keeps a pending sign-in polling).
+- **No download, Substrate only.** The once-a-day `VERSION` fetch from github.com is removed from the Claude and Codex script and the Claude `SessionStart` hook; updates come only through the plugin marketplace (`--update-check` is a silent no-op for older hook files). Uploads and the ticket claim go only to `*.trysubstrate.co` over HTTPS (loopback for tests); any other URL is refused.
+- **Docs:** README "What is captured and where it goes", `SECURITY.md` and `docs/threat-model.md` state what runs locally, what it reads, and where it sends.
+- **Versions:** 0.11.3 everywhere.
+
 ## 0.11.2
 
 Claude directory listing fields: manifest only, no behavior change.

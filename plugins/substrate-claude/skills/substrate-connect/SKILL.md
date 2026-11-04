@@ -2,18 +2,8 @@
 name: substrate-connect
 description: Sign in to Substrate, verify, and offer to import past conversations, in one go.
 allowed-tools:
-  - 'Bash(python3 "*/scripts/substrate_sync.py" *)'
-  - 'Bash(python3 */scripts/substrate_sync.py *)'
-  - 'Bash(python "*/scripts/substrate_sync.py" *)'
-  - 'Bash(python */scripts/substrate_sync.py *)'
-  - 'Bash(/usr/bin/python3 "*/scripts/substrate_sync.py" *)'
-  - 'Bash(/usr/bin/python3 */scripts/substrate_sync.py *)'
-  - 'Bash(/usr/bin/python "*/scripts/substrate_sync.py" *)'
-  - 'Bash(/usr/bin/python */scripts/substrate_sync.py *)'
-  - 'Bash(/usr/local/bin/python3 "*/scripts/substrate_sync.py" *)'
-  - 'Bash(/usr/local/bin/python3 */scripts/substrate_sync.py *)'
-  - 'Bash(/opt/homebrew/bin/python3 "*/scripts/substrate_sync.py" *)'
-  - 'Bash(/opt/homebrew/bin/python3 */scripts/substrate_sync.py *)'
+  - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude *)'
+  - 'Bash(python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude *)'
   - ToolSearch
   - mcp__plugin_substrate-claude_substrate-memory__authenticate
   - mcp__plugin_substrate-claude_substrate-memory__memory_search

@@ -35,8 +35,6 @@ Pinned pages follow.
   second copy. Answer the user's request with your other tools as usual, do not
   go searching other apps on Substrate's behalf, and mention the reconnect command
   once (`/substrate-claude:substrate-connect`).
-- A `[substrate] The Substrate connection on this computer was removed` note means
-  the same thing: answer normally, and say once in one line how to reconnect.
 
 ## Catch-up rule
 

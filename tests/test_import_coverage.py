@@ -590,7 +590,6 @@ def test_offer_hook_still_emits_when_preview_is_slow(home, monkeypatch, capsys) 
     monkeypatch.setattr(sync, "OFFER_PREVIEW_SECONDS", 0.2)
     monkeypatch.setattr(sync, "_hook_payload", lambda: {"session_id": "now-1"})
     monkeypatch.setattr(sync, "_connected", lambda data_dir: True)
-    monkeypatch.setattr(sync, "_signed_out_locally", lambda host: False)
     try:
         assert sync._cmd_offer_check("codex", str(home.data)) == 0
     finally:

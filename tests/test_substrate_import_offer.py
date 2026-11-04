@@ -1249,13 +1249,6 @@ def _codex_list(status: str) -> str:
     return "cat <<'JSON'\n" + json.dumps(rows) + "\nJSON"
 
 
-def _claude_credentials(env_paths: dict, url: str = sync.MCP_SERVER_URL) -> None:
-    store = {"mcpOAuth": {"plugin:substrate-claude:substrate-memory|abc": {
-        "serverName": "plugin:substrate-claude:substrate-memory", "serverUrl": url,
-        "accessToken": "at-test", "refreshToken": "rt-test", "expiresAt": 4102444800000}}}
-    (env_paths["claude"] / ".credentials.json").write_text(json.dumps(store))
-
-
 def _state(env_paths: dict) -> dict:
     return json.loads((env_paths["data"] / "import-offer.json").read_text())
 
@@ -1298,25 +1291,14 @@ def test_codex_missing_binary_is_not_signed_in(env, monkeypatch) -> None:
     assert sync._codex_mcp_signed_in() is False
 
 
-def test_claude_credentials_entry_records_connected(env) -> None:
-    _claude_credentials(env)
-    assert _offer(env).stdout == ""  # decided "none" (no transcripts) and connected: silent
-    assert _state(env)["connected_at"]
-
-
-def test_claude_credentials_for_other_server_do_not_count(env) -> None:
-    _claude_credentials(env, url="https://example.invalid/mcp")
+def test_claude_sign_in_is_never_read_from_the_credential_store(env) -> None:
+    """A Claude Code MCP sign-in on disk does not count: only memory_search + --record-connected do."""
+    store = {"mcpOAuth": {"plugin:substrate-claude:substrate-memory|abc": {
+        "serverUrl": sync.MCP_SERVER_URL, "accessToken": "at-test", "refreshToken": "rt-test"}}}
+    (env["claude"] / ".credentials.json").write_text(json.dumps(store))
     text = json.loads(_offer(env).stdout)["hookSpecificOutput"]["additionalContext"]
-    assert "Substrate setup is not finished" in text
-    assert sync._claude_mcp_signed_in() is False
-
-
-def test_claude_probe_never_prints_or_refreshes_tokens(env, capsys) -> None:
-    _claude_credentials(env)
-    before = (env["claude"] / ".credentials.json").read_text()
-    assert sync._probe_connected("claude") is True
-    assert (env["claude"] / ".credentials.json").read_text() == before
-    assert "rt-test" not in capsys.readouterr().out
+    assert "Substrate setup is not finished" in text and "at-test" not in text
+    assert sync._probe_connected("claude") is False
 
 
 def test_setup_nag_stops_after_limit(env) -> None:
@@ -1512,47 +1494,6 @@ def test_new_turns_after_import_come_back_as_pending(env, capsys, server, monkey
     _age(path)  # a file written just now is taken for the live session
     code, rows = main_json(capsys, "--host", "claude", "--preview")
     assert rows[0]["sessions"] == 1 and rows[0]["already_imported"] == 0
-
-
-# ---------------------------------------------------------------------------
-# CC-05: a removed connection is one quiet line per session, never an error
-# ---------------------------------------------------------------------------
-
-def _write_credentials(home: Path, entries: dict) -> None:
-    (home / ".credentials.json").write_text(json.dumps({"mcpOAuth": entries}), encoding="utf-8")
-
-
-def test_removed_connection_notice_once_per_session(env) -> None:
-    connect()
-    _write_credentials(env["claude"], {"other-server|1": {
-        "serverUrl": "https://example.com/mcp", "accessToken": "x"}})
-    proc = _offer(env, stdin='{"session_id": "s1"}')
-    assert proc.returncode == 0 and proc.stderr == ""
-    text = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
-    assert "connection on this computer was removed" in text
-    assert "open /mcp, select plugin:substrate-claude:substrate-memory" in text
-    assert "do not mention hook errors" in text
-    assert _offer(env, stdin='{"session_id": "s1"}').stdout == ""
-    assert "removed" in _offer(env, stdin='{"session_id": "s2"}').stdout
-
-
-def test_connected_with_substrate_entry_is_silent(env) -> None:
-    connect()
-    _write_credentials(env["claude"], {"plugin:substrate-claude:substrate-memory|1": {
-        "serverUrl": "https://app.trysubstrate.co/mcp", "accessToken": "t"}})
-    assert _offer(env, stdin='{"session_id": "s1"}').stdout == ""
-
-
-def test_no_credential_store_stays_silent(env) -> None:
-    # macOS keeps MCP sign-ins in the keychain: no file means no claim either way.
-    connect()
-    assert _offer(env, stdin='{"session_id": "s1"}').stdout == ""
-
-
-def test_removed_notice_never_for_codex(env, monkeypatch) -> None:
-    monkeypatch.setattr(sync, "_codex_mcp_signed_in", lambda: False)
-    connect("codex")
-    assert "removed" not in _offer(env, host="codex").stdout
 
 
 # ---------------------------------------------------------------------------

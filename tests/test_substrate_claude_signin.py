@@ -139,28 +139,23 @@ def test_pending_blocks_with_polling_reason(env, monkeypatch, capsys) -> None:
     reason = decision["reason"]
     assert "continuation 1 of 8" in reason
     assert "memory_search" in reason and "--pause 15" in reason and "--record-connected" in reason
-    assert "not approved yet" in reason.lower() or "Not approved yet" in reason
+    assert "do not say Connected before memory_search succeeds" in reason
     assert _state(data)["blocks"] == 1
 
 
-def test_pending_reports_approval_when_credentials_appear(env, monkeypatch, capsys) -> None:
+def test_stop_never_reads_credentials(env, monkeypatch, capsys) -> None:
     module, data = env
     _start(module, data, monkeypatch)
     capsys.readouterr()
-    monkeypatch.setattr(module, "_claude_mcp_signed_in", lambda: True)
-    _, out = _stop(module, data, monkeypatch, capsys=capsys)
-    assert "The browser approval is in." in json.loads(out)["reason"]
+    real_open = open
 
+    def guarded(path, *args, **kwargs):
+        assert "credentials" not in str(path), path
+        return real_open(path, *args, **kwargs)
 
-def test_stop_waits_for_approval_then_blocks(env, monkeypatch, capsys) -> None:
-    module, data = env
-    module.SIGNIN_STOP_WAIT = 30.0
-    _start(module, data, monkeypatch)
-    capsys.readouterr()
-    answers = iter([False, False, True])
-    monkeypatch.setattr(module, "_claude_mcp_signed_in", lambda: next(answers, True))
+    monkeypatch.setattr("builtins.open", guarded)
     _, out = _stop(module, data, monkeypatch, capsys=capsys)
-    assert "approval is in" in json.loads(out)["reason"]
+    assert json.loads(out)["decision"] == "block"
 
 
 def test_record_connected_ends_pending_and_stops_blocking(env, monkeypatch, capsys) -> None:
@@ -180,14 +175,6 @@ def test_record_connected_reports_reconnect(env, monkeypatch, capsys) -> None:
     (data / "import-offer.json").write_text(json.dumps({"connected_at": "2026-10-20T00:00:00Z"}))
     _start(module, data, monkeypatch)
     capsys.readouterr()
-    module.main(["--host", "claude", "--record-connected", "--data-dir", str(data)])
-    assert json.loads(capsys.readouterr().out)["reconnected"] is True
-
-
-def test_record_connected_still_reports_disconnect_reconnect(env, monkeypatch, capsys) -> None:
-    module, data = env
-    data.mkdir(parents=True)
-    (data / "import-offer.json").write_text(json.dumps({"disconnected_at": "2026-10-26T00:00:00Z"}))
     module.main(["--host", "claude", "--record-connected", "--data-dir", str(data)])
     assert json.loads(capsys.readouterr().out)["reconnected"] is True
 

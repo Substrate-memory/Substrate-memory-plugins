@@ -92,7 +92,7 @@ Never paste an API key or token into chat.
 
 ## What is captured and where it goes
 
-With the hook plugins (Claude Code, Cowork, Codex, Hermes), each prompt, each completed turn and bounded tool calls and results go to your own Substrate tenant at app.trysubstrate.co. Secrets are redacted on the server before storage; the sync and import scripts also redact on the client. Nothing goes anywhere else, except a once-a-day read of this repository's `VERSION` file on github.com to show an update notice (nothing is sent). Without hooks (plain MCP, Gemini CLI) only what the agent explicitly saves is stored. You can read, edit and forget every line; account deletion purges within 30 days.
+With the hook plugins (Claude Code, Cowork, Codex, Hermes), each prompt, each completed turn and bounded tool calls and results go to your own Substrate tenant at app.trysubstrate.co. Secrets are redacted on the server before storage; the sync and import scripts also redact on the client. Nothing goes anywhere else. The Claude Code and Codex plugins run one local script, the bundled `scripts/substrate_sync.py`: it reads only this agent's own conversation files (for the import you choose and for catch-up sync) and sends them only to `https://app.trysubstrate.co/mcp`; any other host is refused. The only credential it handles is Substrate's own short-lived import ticket, which it gets from the Substrate server by a single-use claim (or from a temporary file the agent writes, deleted on read). It never reads your Claude Code or Codex sign-in files, the keychain, SSH or cloud keys, it downloads no code, and it runs nothing it downloaded: updates come only through the plugin marketplace. Without hooks (plain MCP, Gemini CLI) only what the agent explicitly saves is stored. You can read, edit and forget every line; account deletion purges within 30 days.
 
 ## Privacy and redaction
 
@@ -113,8 +113,8 @@ send credentials to a memory tool yourself.
 - The capture and recall hooks are MCP tool hooks, which Claude Code calls
   directly. When the connection is gone (signed out, or removed on the Agents
   page), Claude Code shows their errors ("Unauthorized", "MCP server not
-  connected"). A plugin script cannot silence those; it can only add the one
-  quiet note described above when it sees the removal locally.
+  connected"). A plugin script cannot silence those, and it does not read the
+  host's sign-in files to detect it; run `/substrate-claude:substrate-connect`.
 - The import ticket reaches the model once, as the `memory_import_ticket` result
   (and the agent's file write), so it is part of the session transcript. It is
   60 minutes long, works only for import, and is redacted by Substrate as a
