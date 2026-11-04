@@ -106,10 +106,8 @@ def test_post_tool_use_has_no_matcher() -> None:
 def test_session_boundaries() -> None:
     entries = _hook_entries()
     # Claude Code refuses mcp_tool hooks on SessionStart ("no MCP client
-    # context") and shows the user an error on every launch: only a command hook
-    # (the once-a-day update line) may run there.
-    start = [h for group in entries.get("SessionStart", []) for h in group["hooks"]]
-    assert start and all(h["type"] == "command" and "--update-check" in h["command"] for h in start)
+    # context"), and the plugin no longer checks for updates there: no SessionStart hook.
+    assert "SessionStart" not in entries
     pre = entries["PreCompact"][0]["hooks"][0]
     assert pre["tool"] == "memory_session_boundary"
     assert pre["input"]["boundary"] == "compact"

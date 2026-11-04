@@ -1,6 +1,6 @@
 {
   "name": "substrate-memory",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "Shared AI memory for Gemini CLI, Claude Code, Codex and any MCP client. Cited and editable.",
   "mcpServers": {
     "substrate": {

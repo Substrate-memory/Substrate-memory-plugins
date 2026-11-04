@@ -63,10 +63,10 @@ def _rule_matches(rule, command):
 
 
 MCP = "mcp__plugin_substrate-claude_substrate-memory__"
-INTERPRETERS = ["python3", "python", "/usr/bin/python3", "/usr/bin/python", "/usr/local/bin/python3",
-                "/opt/homebrew/bin/python3"]
-EXPECTED_BASH = {f'Bash({i} "*/scripts/substrate_sync.py" *)' for i in INTERPRETERS} | \
-    {f"Bash({i} */scripts/substrate_sync.py *)" for i in INTERPRETERS}
+ROOT = "${CLAUDE_PLUGIN_ROOT}"
+# Exactly the plugin's own script at the plugin root (Claude Code substitutes ${CLAUDE_PLUGIN_ROOT}
+# in plugin skills' and commands' allowed-tools), for --host claude. No wildcard path, no Bash(*).
+EXPECTED_BASH = {f'Bash({i} "{ROOT}/scripts/substrate_sync.py" --host claude *)' for i in ("python3", "python")}
 MCP_TOOLS = {
     "substrate-connect": {"ToolSearch", MCP + "authenticate", MCP + "memory_search", MCP + "memory_import_status"},
     "substrate-import": {"ToolSearch", MCP + "memory_import_ticket", MCP + "memory_import_status", MCP + "memory_search"},
@@ -87,20 +87,20 @@ def test_claude_commands_pre_approve_only_the_plugin_script(folder, name):
     others = set(re.sub(r"Bash\([^)]*\)", "", tools).split())
     assert others == MCP_TOOLS[name], others
     allowed = [
-        '/usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --preview',
-        '/usr/bin/python3 /home/u/.claude/plugins/cache/x/scripts/substrate_sync.py --host claude --status --wait 60',
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --preview',
         'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --new-claim',
-        'python3 "/home/u/.claude/plugins/cache/x/substrate-claude/0.10.0/scripts/substrate_sync.py" '
-        '--host claude --upload --all --background --claim "claim_x"',
-        'python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --preview',
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --upload --all --background '
+        '--claim "claim_x" --mcp-url "https://app.trysubstrate.co/mcp"',
+        'python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude --status --wait 60',
     ]
     denied = [
         '/usr/bin/python3 -c "import os"',
-        '/bin/sh "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py"',
-        'curl -o /tmp/x /home/u/scripts/substrate_sync.py --host claude',
         'python3 -c "import os"',
+        '/bin/sh "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude',
+        'python3 /home/u/.claude/plugins/cache/x/scripts/substrate_sync.py --host claude --preview',
+        'python3 "/tmp/x/scripts/substrate_sync.py" --host claude --preview',
         'python3 /tmp/evil.py --host claude',
-        'python3 "/tmp/substrate_sync.py.bak" --host claude',
+        'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/other.py" --host claude',
         'rm -rf "${CLAUDE_PLUGIN_ROOT}"',
         'curl https://example.com/x.sh',
     ]

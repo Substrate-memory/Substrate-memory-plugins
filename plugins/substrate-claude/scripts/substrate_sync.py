@@ -23,7 +23,6 @@ Usage:
     substrate_sync.py --host H --pause SECONDS        (wait <= 60 s, e.g. for sign-in)
     substrate_sync.py --host H --signin-start         (PostToolUse hook: authenticate ran)
     substrate_sync.py --host H --stop-check           (Stop hook: keep a pending sign-in polling)
-    substrate_sync.py --host H --update-check         (SessionStart hook: one line when a newer plugin exists)
     substrate_sync.py --host claude --permissions-check | --permissions-allow [--decline]
     (every mode also takes --data-dir DIR)
 
@@ -43,7 +42,20 @@ Paths:
     State (decision, status, progress): $CLAUDE_CONFIG_DIR|~/.claude or
         $CODEX_HOME|~/.codex, then /substrate-memory/ (or $SUBSTRATE_DATA_DIR).
 
-This script never prints credentials.
+What it touches (the whole list):
+    Reads: this host's own transcripts and its own state folder (above); Claude Code's
+        settings.json (cleanupPeriodDays, and the permission rules it adds only after
+        the user said yes); for Codex, its state_*.sqlite catalogue (read-only).
+    Credentials: only Substrate's own import ticket, from the one-time file the agent
+        wrote (deleted on read) or from exchanging a single-use claim with the Substrate
+        server. It never reads any other credential store (not the host's own sign-in
+        files, the keychain, SSH or cloud keys), and it never prints a ticket.
+    Network: only the Substrate MCP endpoint, https://app.trysubstrate.co/mcp (another
+        *.trysubstrate.co host, or loopback for tests; anything else is refused). It never
+        downloads code and never runs anything it downloaded: updates come only through
+        the plugin marketplace.
+    Processes: itself (the background upload), and for --host codex only the codex CLI
+        (sign-in status, `codex mcp login`), `ps` and `wsl.exe --list`.
 """
 
 from __future__ import annotations
@@ -1173,13 +1185,7 @@ SIGNIN_LINK_RE = re.compile(r"https://[^\s\"'<>\\]+/authorize[^\s\"'<>\\]*")
 MCP_SERVER_NAME = "substrate-memory"
 MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 # The version of this copy. scripts/check_versions.py keeps it equal to the repository VERSION file.
-PLUGIN_VERSION = "0.11.2"
-# Update check (SessionStart): the repository VERSION file on main, at most once a day, 2 s timeout.
-UPDATE_FILE = "update-check.json"
-UPDATE_URL = "https://github.com/Substrate-memory/Substrate-memory-plugins/raw/main/VERSION"
-UPDATE_TIMEOUT = 2.0
-UPDATE_INTERVAL = 24 * 3600
-UPDATE_OPT_OUT = "SUBSTRATE_UPDATE_CHECK"
+PLUGIN_VERSION = "0.11.3"
 # Claude Code permission rules: every memory tool of the plugin server except memory_forget,
 # which stays behind a prompt. Listed one by one: a wildcard would include memory_forget.
 CLAUDE_TOOL_PREFIX = "mcp__plugin_substrate-claude_substrate-memory__"
@@ -1261,47 +1267,6 @@ def _mark_offered(data_dir: str) -> None:
         _write_json(path, state)
 
 
-def _mark_disconnected(data_dir: str) -> None:
-    path = os.path.join(data_dir, OFFER_FILE)
-    state = _read_json(path)
-    if not state.get("disconnected_at"):
-        state["disconnected_at"] = _utc_now()
-        _write_json(path, state)
-
-
-def _take_disconnected(data_dir: str) -> bool:
-    """True once when this computer had been disconnected (a reconnect); clears the marker."""
-    path = os.path.join(data_dir, OFFER_FILE)
-    state = _read_json(path)
-    if not state.get("disconnected_at"):
-        return False
-    state.pop("disconnected_at", None)
-    _write_json(path, state)
-    return True
-
-
-def _claude_mcp_signed_in() -> bool:
-    """True when Claude Code holds an MCP OAuth credential for the Substrate server.
-
-    Claude Code keeps MCP OAuth entries under ``mcpOAuth`` in
-    ``$CLAUDE_CONFIG_DIR/.credentials.json`` (or ``~/.claude``). The file is read
-    only to see whether such an entry exists: no token is printed, sent, or
-    refreshed, so the probe cannot race the running session's own refresh. A
-    store that is not a readable file (the macOS keychain) reads as not signed in.
-    """
-    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    entries = _read_json(os.path.join(base, ".credentials.json")).get("mcpOAuth")
-    if not isinstance(entries, dict):
-        return False
-    for entry in entries.values():
-        if not isinstance(entry, dict) or entry.get("serverUrl") != MCP_SERVER_URL:
-            continue
-        for field in ("accessToken", "refreshToken"):
-            if isinstance(entry.get(field), str) and entry[field]:
-                return True
-    return False
-
-
 def _codex_mcp_signed_in() -> bool:
     """True when ``codex mcp login`` stored OAuth for the substrate-memory server.
 
@@ -1326,12 +1291,12 @@ def _codex_mcp_signed_in() -> bool:
 
 
 def _probe_connected(host: str) -> bool:
-    """Connection check that needs no model turn: the host's own sign-in state."""
-    if host == "codex":
-        return _codex_mcp_signed_in()
-    if host == "claude":
-        return _claude_mcp_signed_in()
-    return False
+    """Connection check that needs no model turn: Codex's own sign-in status.
+
+    Claude Code has none: this script never reads Claude Code's credential store. There
+    the plugin's memory_search succeeding (then --record-connected) is the only proof.
+    """
+    return host == "codex" and _codex_mcp_signed_in()
 
 
 def _take_nag(data_dir: str, kind: str) -> bool:
@@ -1617,17 +1582,6 @@ def _offer_text(host: str, data_dir: str, session_id: str,
          "ticket": _ticket_path(data_dir), "invoke": _import_invoke(host)}
 
 
-def _disconnect_text() -> str:
-    return (
-        "[substrate] The Substrate connection on this computer was removed. Answer the user's "
-        "request normally without Substrate memory. Do not search Notion, Drive, Gmail or other "
-        "apps on your own because of this, and do not mention hook errors. In one short line, "
-        "once in this session, tell the user: Substrate is disconnected on this computer. To "
-        "reconnect: open /mcp, select plugin:substrate-claude:substrate-memory, choose Enable if "
-        "shown, then Authenticate."
-    )
-
-
 def _plugin_mcp_url() -> str:
     """The Substrate MCP URL from this plugin's mcp.json, so a test or staging copy never hard-codes production."""
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mcp.json")
@@ -1732,35 +1686,6 @@ def _setup_text(host: str, data_dir: str, session_id: str,
     return text
 
 
-def _signed_out_locally(host: str) -> bool:
-    """Claude Code only: this computer's MCP credential store lists sign-ins, but not Substrate's.
-
-    Only a readable ``.credentials.json`` with an ``mcpOAuth`` map counts. On the macOS
-    keychain there is no such file, so the check stays silent there. It cannot see a
-    sign-in revoked on the server; that shows up only as hook errors.
-    """
-    if host != "claude":
-        return False
-    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    entries = _read_json(os.path.join(base, ".credentials.json")).get("mcpOAuth")
-    return isinstance(entries, dict) and not _claude_mcp_signed_in()
-
-
-def _notice_once(data_dir: str, session_id: str) -> bool:
-    """True the first time this session needs the disconnect note (state is recorded first)."""
-    path = os.path.join(data_dir, OFFER_FILE)
-    state = _read_json(path)
-    key = session_id or "-"
-    if state.get("disconnect_notice") == key:
-        return False
-    state["disconnect_notice"] = key
-    try:
-        _write_json(path, state)
-    except OSError:
-        return False
-    return True
-
-
 def _nag_open(data_dir: str, kind: str) -> bool:
     counts = _read_json(os.path.join(data_dir, OFFER_FILE)).get("nags")
     count = counts.get(kind) if isinstance(counts, dict) else None
@@ -1824,12 +1749,6 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
             except OSError:
                 pass
             connected = True
-        if connected and _signed_out_locally(host):
-            # Removed on this computer after it worked: one quiet line per session.
-            if _notice_once(data_dir, session_id):
-                _mark_disconnected(data_dir)
-                _emit_context(_disconnect_text())
-            return 0
         # The import offer is made exactly once: after the connection checks out, and never
         # again once it was made or answered.
         if connected and (decided or _offered(data_dir)):
@@ -1948,7 +1867,7 @@ def _cmd_signin_start(host: str, data_dir: str) -> int:
     session_id = _hook_session(payload)
     link = _signin_link(payload)
     state = _read_json(os.path.join(data_dir, OFFER_FILE))
-    reconnect = isinstance(state.get("connected_at"), str) or isinstance(state.get("disconnected_at"), str)
+    reconnect = isinstance(state.get("connected_at"), str)
     if session_id:
         try:
             _signin_save(data_dir, {"state": "pending", "session_id": session_id, "started": time.time(),
@@ -1984,15 +1903,13 @@ def _signin_wait_seconds() -> float:
     return max(0.0, min(value, SIGNIN_STOP_WAIT))
 
 
-def _stop_reason(approved: bool, blocks: int, host: str = "claude") -> str:
+def _stop_reason(blocks: int, host: str = "claude") -> str:
     base = ("Substrate sign-in is pending (continuation %d of %d). " % (blocks, SIGNIN_MAX_BLOCKS))
     check = ("Call the plugin's memory_search now (load it with ToolSearch if deferred). If it works, run "
              "`%s` and reply with \"Reconnected to Substrate.\" or \"Connected to Substrate.\" as its "
              "JSON says, then continue setup. " % _plain_command("--record-connected", host))
-    if approved:
-        return base + "The browser approval is in. " + check + "Do not paste the sign-in link again."
-    return (base + "Not approved yet: run `%s`, then do the memory_search check. " % _plain_command("--pause 15", host)
-            + check + "Do not paste the sign-in link again and do not say Connected before memory_search succeeds.")
+    return (base + check + "If it does not work yet, run `%s` and check again. " % _plain_command("--pause 15", host)
+            + "Do not paste the sign-in link again and do not say Connected before memory_search succeeds.")
 
 
 # ---------------------------------------------------------------------------
@@ -2096,101 +2013,15 @@ def _cmd_session_start(host: str, data_dir: str) -> int:
         state = _read_json(os.path.join(data_dir, OFFER_FILE))
         state[CODEX_ANNOUNCED_KEY] = True
         _write_json(os.path.join(data_dir, OFFER_FILE), state)
-    note = _update_notice(host, data_dir)
-    if note:
-        text = (text + "\n" if text else "") + "[substrate] %s Say it once, in one line." % note
     if not text:
         return 0
     _emit_hook_context("SessionStart", text)
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Update check (SessionStart, at most once a day). The network call is bounded, its
-# result is cached, and every failure is silent. The line is shown once a day.
-# ---------------------------------------------------------------------------
-
-_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
-
-
-def _is_version(value: Any) -> bool:
-    return isinstance(value, str) and _VERSION_RE.match(value.strip()) is not None
-
-
-def _version_tuple(value: str) -> Tuple[int, ...]:
-    return tuple(int(part) for part in value.strip().split("."))
-
-
-def _fetch_latest_version() -> Optional[str]:
-    try:
-        request = urllib.request.Request(UPDATE_URL, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(request, timeout=UPDATE_TIMEOUT) as response:  # noqa: S310 fixed https URL
-            raw = response.read(64).decode("ascii", "replace").strip()
-    except BaseException:  # noqa: BLE001 - silent on any failure, including no network
-        return None
-    return raw if _is_version(raw) else None
-
-
-def _latest_known(data_dir: str) -> str:
-    """The latest version on main, from the cache; refreshed at most once a day."""
-    path = os.path.join(data_dir, UPDATE_FILE)
-    state = _read_json(path)
-    now = time.time()
-    latest = state.get("latest") if _is_version(state.get("latest")) else ""
-    checked = state.get("checked_at")
-    if not isinstance(checked, (int, float)) or not 0 <= now - checked < UPDATE_INTERVAL:
-        fetched = _fetch_latest_version()
-        latest = fetched or latest
-        state["checked_at"] = now
-        state["latest"] = latest
-        try:
-            _write_json(path, state)
-        except OSError:
-            pass
-    return latest
-
-
-def _update_line(host: str, latest: str) -> str:
-    if host == "claude":
-        return ("Substrate %s is available (you have %s). Run /plugin marketplace update "
-                "substrate-marketplace." % (latest, PLUGIN_VERSION))
-    # Codex: no verified CLI update command yet, so the line names the plugin list only.
-    return ("Substrate %s is available (you have %s). Update the Substrate Memory plugin in "
-            "Codex's plugin list." % (latest, PLUGIN_VERSION))
-
-
-def _update_notice(host: str, data_dir: str) -> str:
-    """One line when a newer plugin is on main, shown at most once a day. Never raises."""
-    try:
-        if os.environ.get(UPDATE_OPT_OUT, "1") == "0":
-            return ""
-        latest = _latest_known(data_dir)
-        if not latest or _version_tuple(latest) <= _version_tuple(PLUGIN_VERSION):
-            return ""
-        path = os.path.join(data_dir, UPDATE_FILE)
-        state = _read_json(path)
-        now = time.time()
-        shown = state.get("notified_at")
-        if isinstance(shown, (int, float)) and 0 <= now - shown < UPDATE_INTERVAL:
-            return ""
-        state["notified_at"] = now
-        try:
-            _write_json(path, state)
-        except OSError:
-            pass
-        return _update_line(host, latest)
-    except BaseException:  # noqa: BLE001 - a hook never fails the session
-        return ""
-
-
 def _cmd_update_check(host: str, data_dir: str) -> int:
-    """SessionStart command hook for Claude Code and Cowork: a system line, never blocking."""
-    if host != "claude":
-        return 0
-    note = _update_notice(host, data_dir)
-    if note:
-        sys.stdout.write(json.dumps({"systemMessage": note}, ensure_ascii=False))
-        sys.stdout.flush()
+    """Retired: the plugin no longer checks for updates over the network; updates come only
+    through the plugin marketplace. Kept so an older hooks file that still calls it exits 0."""
     return 0
 
 
@@ -2293,17 +2124,15 @@ def _cmd_stop_check(host: str, data_dir: str) -> int:
             or time.time() - started > SIGNIN_MAX_SECONDS):
         _signin_end(data_dir, "expired")
         return 0
-    # Give the browser approval a short head start before the model polls again.
-    deadline = min(time.time() + _signin_wait_seconds(), started + SIGNIN_MAX_SECONDS)
-    while not _claude_mcp_signed_in() and time.time() < deadline:
-        _sleep(2.0)
-    approved = _claude_mcp_signed_in()
+    # Give the browser approval a short head start before the model polls again. Nothing here
+    # looks at credentials: only the model's memory_search can tell that sign-in went through.
+    _sleep(max(0.0, min(_signin_wait_seconds(), started + SIGNIN_MAX_SECONDS - time.time())))
     current["blocks"] = blocks + 1
     try:
         _signin_save(data_dir, current)  # count first: if this fails, never block
     except OSError:
         return 0
-    sys.stdout.write(json.dumps({"decision": "block", "reason": _stop_reason(approved, blocks + 1, host)}))
+    sys.stdout.write(json.dumps({"decision": "block", "reason": _stop_reason(blocks + 1, host)}))
     sys.stdout.flush()
     return 0
 
@@ -2395,11 +2224,26 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
+SUBSTRATE_DOMAIN = "trysubstrate.co"
+
+
+def _is_substrate_host(host: str) -> bool:
+    host = (host or "").lower().rstrip(".")
+    return host == SUBSTRATE_DOMAIN or host.endswith("." + SUBSTRATE_DOMAIN)
+
+
 def _check_url(url: str) -> str:
+    """The only network destination this script accepts: Substrate over https (or loopback, for tests).
+
+    The import ticket and the transcripts go here and nowhere else; any other host is refused.
+    """
     parsed = urllib.parse.urlsplit(url)
     if parsed.username or parsed.password or not parsed.netloc or parsed.fragment:
         raise Fatal("invalid_url")
-    if parsed.scheme == "https" or (parsed.scheme == "http" and _is_loopback(parsed.hostname or "")):
+    host = parsed.hostname or ""
+    if parsed.scheme == "https" and (_is_substrate_host(host) or _is_loopback(host)):
+        return url
+    if parsed.scheme == "http" and _is_loopback(host):
         return url
     raise Fatal("invalid_url")
 
@@ -2934,7 +2778,7 @@ def _cmd_upload(host: str, data_dir: str, args: argparse.Namespace, argv: List[s
     try:
         _check_url(url)
     except Fatal:
-        print(json.dumps({"error": "invalid_url", "message": "SUBSTRATE_MCP_URL must be https."}))
+        print(json.dumps({"error": "invalid_url", "message": "SUBSTRATE_MCP_URL must be https://app.trysubstrate.co/mcp."}))
         return 2
     current = _effective_status(data_dir)
     running_pid = current.get("pid")
@@ -3096,10 +2940,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(json.dumps({"paused": max(0.0, min(args.pause, 60.0))}))
         return 0
     if args.record_connected:
-        # "reconnected": the disconnect notice ran on this computer before this successful check,
-        # or the sign-in that this check closes was started on a computer that had been connected.
-        reconnected = _take_disconnected(data_dir)
-        reconnected = reconnected or _signin_load(data_dir).get("reconnect") is True
+        # "reconnected": the pending sign-in that this check closes was started on a computer that had
+        # been connected before.
+        signin = _signin_load(data_dir)
+        reconnected = signin.get("state") == "pending" and signin.get("reconnect") is True
         _record_connected(data_dir)
         _signin_end(data_dir, "done")
         print(json.dumps({"connected": True, "reconnected": reconnected}))

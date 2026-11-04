@@ -23,7 +23,7 @@ CODEX_SCRIPT = REPO / "plugins" / "substrate-codex" / "scripts" / "substrate_syn
 CLAUDE_SCRIPT = REPO / "plugins" / "substrate-claude" / "scripts" / "substrate_sync.py"
 CLAIM = "claim_" + "a" * 40
 TICKET = "sk_imp_" + "T" * 40
-MCP_URL = "https://substrate.example.test/mcp"
+MCP_URL = "https://app.trysubstrate.co/mcp"
 
 
 def _load(path: Path):
@@ -338,7 +338,7 @@ def _codex_texts(module):
     return {
         "setup": module._setup_text("codex", "/tmp/data", "sess-1", None, offer=True),
         "offer": module._offer_text("codex", "/tmp/data", "sess-1", None),
-        "stop": module._stop_reason(False, 1, "codex") + module._stop_reason(True, 1, "codex"),
+        "stop": module._stop_reason(1, "codex"),
         "signin": module._signin_start_text("", False, "codex"),
     }
 

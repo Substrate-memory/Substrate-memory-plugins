@@ -316,7 +316,7 @@ def test_hook_text_invokes_the_skills_first() -> None:
 
 def test_record_connected_reports_a_reconnect_once(tmp_path, capsys) -> None:
     data = str(tmp_path / "d")
-    sync._mark_disconnected(data)
+    sync._signin_save(data, {"state": "pending", "session_id": "s1", "reconnect": True})
     assert sync.main(["--host", "claude", "--data-dir", data, "--record-connected"]) == 0
     assert json.loads(capsys.readouterr().out) == {"connected": True, "reconnected": True}
     assert sync.main(["--host", "claude", "--data-dir", data, "--record-connected"]) == 0
