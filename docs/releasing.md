@@ -1,34 +1,20 @@
 # Releasing
 
-Release `0.9.1` is the Hermes fix release after the 2026-10-11 customer test: explicit memory searches survive a slow server (one retry inside a 15 s budget), an unknown Hermes build gets no version note, the install no longer picks up dependency tooling, the server's connected-source description reaches `memory_search`, and rejected import items are logged with the server's reason. `0.9.0` added the one-time offer to import past conversations right after connecting, with direct uploads for Claude Code and Codex (`memory_import_ticket`) so history never passes through the model (on top of `0.8.1`). The repository ships four deterministic archives (see `scripts/build_release.py` for the exact archive set; if the builder still lists the old two-archive layout, it must be extended to the four packages below before release):
+One `VERSION` covers every listing. This is the one checklist; run it top to bottom for each release.
 
-- `substrate-hermes.zip`: the Hermes package (`plugins/substrate-hermes`) with durable write-ahead spool, session boundaries, subagent capture, and device login.
-- `substrate-claude.zip`: the Claude package (`plugins/substrate-claude`) with `memory_*` hook wiring and the sync command for Cowork and Claude Code.
-- `substrate-codex.zip`: the Codex package (`plugins/substrate-codex`) with `memory_*` hook wiring and the sync command for ChatGPT Work, the Codex app, and Codex CLI.
-- `substrate-mcp.zip`: the thin fallback (`plugins/substrate-mcp`) with a remote HTTP `.mcp.json`, usage skill, and installation documentation. It has no local server and no hooks.
+The repository ships four deterministic archives (`scripts/build_release.py`): `substrate-hermes.zip`, `substrate-claude.zip`, `substrate-codex.zip` and `substrate-mcp.zip`, one per package under `plugins/`. The remote MCP service (`https://app.trysubstrate.co/mcp`) and its OAuth backend are operated separately from this repository. Do not claim live host support until an authenticated smoke test succeeds on that host.
 
-The remote MCP service at `https://app.trysubstrate.co/mcp` and browser OAuth backend are operated separately from this client repository. Release docs must not claim live host support until an authenticated smoke test succeeds on that host. The server keeps the Hermes `/api/v1` wire during the rollout. The immutable `v0.5.0` and `v0.6.0` tags remain available for rollback.
+## Checklist
 
-## Review staging
-
-1. Prepare a review branch and draft pull request. Every commit needs DCO sign-off (`git commit -s`). Do not merge it before the owner's review acceptance.
-2. Run the repository-native checks and build the archives twice.
-3. Dispatch `.github/workflows/release-staging.yml` with the candidate for short-lived draft artifacts. For a protected-main candidate, `.github/workflows/release.yml` may also run with `publish_approval=REVIEW`; it scans, tests, double-builds, and uploads artifacts without publication.
-4. Inspect the draft artifact and verify the archive hashes. Do not tag, publish, deploy, or advertise the release from this branch.
-5. The protected release workflow may promote only an owner-created matching draft after explicit approval (`publish_approval=PUBLISH`) and exact protected-main candidate binding. It verifies the exact draft asset set and every byte, then creates the immutable tag at the reviewed main commit (or verifies an existing tag points there) and promotes the draft without replacing its notes. It refuses missing drafts, published releases, different assets or conflicting tags. The staging workflow has no publication job and cannot create tags or GitHub releases.
-
-An owner may prepare a GitHub draft targeting the review-branch commit and attach the four archives plus `SHA256SUMS` before review. This does not create a public tag. After code review, separately approved backend deployment and host acceptance, merge the reviewed changes into main. If archive bytes changed since draft preparation, rebuild and re-review the draft assets before selecting `PUBLISH`. Merely creating a draft is never deployment or publication approval.
-
-## Directory listings
-
-One `VERSION` covers every listing: the plugins, `server.json` (MCP registry), `gemini-extension.json`, the marketplace file and `openai/plugin.json` (OpenAI directory). `scripts/check_versions.py` fails CI if any copy differs. After the version-bump PR merges:
-
-1. Claude directory: nothing to do, it reads `main` through its webhook.
-2. MCP registry: `mcp-publisher publish` (signed in with the `co.trysubstrate` key).
-3. OpenAI directory: `python3 scripts/build_openai_package.py`, then upload `dist/substrate-openai-<version>.zip` in the OpenAI portal when the listing text or the tool set changed. OpenAI rescans the hosted tool schema daily on its own. The package points at `https://app.trysubstrate.co/mcp/core`, which is served by the Substrate server, not this repository.
-
-The OpenAI package holds no reviewer credentials. Give reviewers sign-in access in the portal form, never in this repository.
-The OpenAI app is matched by package name `substrate-memory`; never change it.
+1. **Bump.** Write the new number in `VERSION`, run `python3 scripts/check_versions.py --write`, then add the `CHANGELOG.md` entry. CI fails if any copy differs (plugins, `server.json`, `gemini-extension.json`, marketplace file, `openai/plugin.json`).
+2. **Check and merge.** Run the local check below, open a PR (every commit signed off: `git commit -s`), squash-merge when CI is green. Every push to `main` is live for some users (see Gemini CLI), so `main` must always be releasable.
+3. **Tag and release.** On the merged `main` commit: `gh release create v<version> --target main --title "v<version>: <headline>" --notes-file <notes> dist/*.zip dist/SHA256SUMS`, built with `scripts/build_release.py`. Tags are immutable; never rebuild or edit the assets of an old release. The staged route (owner draft, then `release.yml` with `publish_approval=PUBLISH`) does the same with extra approval; a draft is never publication approval.
+4. **MCP registry.** `mcp-publisher publish` (signed in with the `co.trysubstrate` key, kept outside the repository).
+5. **Claude directory.** A push webhook delivers `main`. Auto-publish is OFF, so press Publish for the new version at claude.ai/directory/manage.
+6. **OpenAI directory.** `python3 scripts/build_openai_package.py`, then upload `dist/substrate-openai-<version>.zip` in the OpenAI portal only if the listing text or the core tool set changed (OpenAI rescans the hosted tool schema daily). The app is matched by package name `substrate-memory`; never change it. The package holds no reviewer credentials: give reviewers sign-in access in the portal form.
+7. **Gemini CLI.** `gemini extensions install https://github.com/Substrate-memory/Substrate-memory-plugins` follows the Latest GitHub release when the repository has one, and falls back to the default branch (HEAD) when it has none; `--ref v<version>` pins a tag or branch. So step 3 is what ships to Gemini users; never leave a draft or pre-release as the newest. The gallery indexes the repository daily (topic `gemini-cli-extension`, `gemini-extension.json` at the root); the manifest `version` is what it displays, so keep it equal to the tag (step 1 does).
+8. **Glama.** Nothing to do: it syncs automatically from the MCP registry (step 4).
+9. **Docker, Cline.** Nothing to do.
 
 ## Deterministic local check
 
