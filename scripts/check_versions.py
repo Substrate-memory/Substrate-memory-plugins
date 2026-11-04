@@ -27,6 +27,7 @@ JSON_COPIES = (
     "plugins/substrate-codex/.codex-plugin/plugin.json",
     "server.json",
     "gemini-extension.json",
+    "openai/plugin.json",
 )
 MARKETPLACE_COPY = ".claude-plugin/marketplace.json"  # every entry of "plugins" carries a version
 YAML_COPIES = ("plugin.yaml", "plugins/substrate-hermes/plugin.yaml")

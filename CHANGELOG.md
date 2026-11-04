@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.4
+
+OpenAI directory package (ChatGPT and Codex listing, MCP only) now versions with the plugins. No behavior change in any plugin.
+
+- **`openai/`:** `plugin.json` (listing text, test cases, release notes) and `mcp.json` (one streamable-http server, `https://app.trysubstrate.co/mcp/core`, the six core memory tools). It reuses `assets/logo.png`. The endpoint goes live with the matching Substrate server release.
+- **`scripts/build_openai_package.py`:** validates OpenAI's limits (display and short description <= 30, long description <= 4000, https URLs, one server, core-tool test cases, no other AI platforms or pricing in the text) and writes `dist/substrate-openai-<version>.zip`. CI runs it.
+- **Versions:** `openai/plugin.json` joins `scripts/check_versions.py`; 0.11.4 everywhere.
+- **Docs:** `docs/releasing.md` lists the release steps for every listing.
+
 ## 0.11.3
 
 Claude directory compliance: the plugin reads no credentials but Substrate's own, talks only to Substrate, and pre-approves only its own script. Recall, capture, remember/forget and the import are unchanged.

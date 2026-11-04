@@ -64,6 +64,7 @@ jobs:
           EOF
       - run: .venv/bin/python scripts/build_release.py
       - run: .venv/bin/python scripts/build_release.py --check
+      - run: python3 scripts/build_openai_package.py
       - name: Validate Cowork plugin with native CLI when available
         run: |
           if command -v claude >/dev/null 2>&1; then

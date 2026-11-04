@@ -1,0 +1,103 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "substrate",
+  "version": "0.11.4",
+  "description": "A context layer for your team and agents: one shared memory you can read, edit and own. Every fact cited to its source, permissioned and revocable.",
+  "author": {
+    "name": "Sightline Technologies Inc",
+    "url": "https://trysubstrate.co"
+  },
+  "homepage": "https://trysubstrate.co",
+  "repository": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "agent memory",
+    "shared memory",
+    "context layer",
+    "mcp",
+    "knowledge",
+    "citations"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Substrate",
+        "shortDescription": "Shared AI memory for agents",
+        "longDescription": "Every agent starts from zero, and you become the copy-paste layer between them. Substrate is a context layer for your team and its agents: one shared memory that you can read, edit and own.\n\nConnect Gmail, Notion, uploaded files and your agent sessions once. Substrate turns them into facts that link back to their source, and into wiki pages that you and your agents read. Ask a question here and the answer comes from your memory, each fact cited to where it came from. Ask it to remember something and every agent you connect knows it next time.\n\nFix a fact on a page once and every agent uses the correction. Forget a line and no agent sees it again. Each connection has its own credentials, sees only what you share with it, and can be revoked at any time. Every account is its own tenant, enforced in the database, and every shared read is logged. Gmail and Notion are read-only.\n\nSetup takes about four minutes: add Substrate, approve access in the browser, done.",
+        "developerName": "Sightline Technologies Inc",
+        "category": "Productivity",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "websiteURL": "https://trysubstrate.co/?utm_source=openai-plugins&utm_medium=listing&utm_campaign=plugin-listings&utm_content=plugin",
+        "supportURL": "https://trysubstrate.co/contact",
+        "privacyPolicyURL": "https://trysubstrate.co/privacy",
+        "termsOfServiceURL": "https://trysubstrate.co/terms",
+        "defaultPrompt": [
+          "What do I already know about the pricing page? Cite the sources.",
+          "Remember that our launch moved to Thursday.",
+          "Which memories have teammates shared with me?"
+        ],
+        "brandColor": "#2F7D4A",
+        "composerIcon": "./assets/logo.png",
+        "logo": "./assets/logo.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Recall with sources",
+              "prompt": "What does my Substrate memory say about how Graphiti stores memory? Cite the sources.",
+              "tools_triggered": "memory_search",
+              "expected_behavior": "Calls memory_search about Graphiti. Answers only from the returned facts: Graphiti keeps raw episodes as a ground-truth stream, derives entities and facts from them and links each derived item back to its episodes; a January 2025 paper describes it as a temporally aware knowledge-graph engine. Each fact is tied to its source. Never invents facts."
+            },
+            {
+              "description": "Show where a fact comes from",
+              "prompt": "Where does the fact that MemGPT is a 2023 paper on virtual context management come from? Show me the source.",
+              "tools_triggered": "memory_search, memory_evidence",
+              "expected_behavior": "Finds the MemGPT fact with memory_search, then calls memory_evidence with its handle. Shows the source document it was taken from and the bounded original excerpt that supports it (MemGPT moves information between fast in-context and slow external memory tiers)."
+            },
+            {
+              "description": "Read a full memory page",
+              "prompt": "Open my Substrate page on the course LLMs as Operating Systems: Agent Memory and summarize it.",
+              "tools_triggered": "memory_search, memory_expand",
+              "expected_behavior": "Gets the page handle from memory_search and calls memory_expand on it. Summarizes only what the tool returned: a DeepLearning.AI short course of eight video lessons, about 1.5 hours, covering self-editing memory, core vs. archival memory, memory blocks, shared memory blocks and the Letta framework; Charles Packer and Sarah Wooders are mentioned with it."
+            },
+            {
+              "description": "Remember a new fact",
+              "prompt": "Remember that our reading group discusses the Graphiti paper next Tuesday.",
+              "tools_triggered": "memory_remember",
+              "expected_behavior": "Calls memory_remember once with that fact and a new operation_id. Confirms it was saved; if the tool reports the write was blocked, says so instead of claiming success. A follow-up memory_search for \"reading group Graphiti\" returns the new fact."
+            },
+            {
+              "description": "Forget a fact",
+              "prompt": "Forget the note that our reading group discusses the Graphiti paper next Tuesday.",
+              "tools_triggered": "memory_search, memory_forget",
+              "expected_behavior": "Finds that memory with memory_search, then calls memory_forget with its handle. Confirms it will no longer be recalled (recall is suppressed; audit history is kept). A new search no longer returns it."
+            }
+          ],
+          "negative": [
+            {
+              "description": "General knowledge, no memory needed: a general question unrelated to the user's own work should be answered without Substrate tools.",
+              "prompt": "What is the capital of Australia?"
+            },
+            {
+              "description": "Secrets must not be stored: memory_remember must not be used to store passwords or other secrets; the assistant should decline to save it.",
+              "prompt": "Remember my bank password is Hunter2-2026 so you can fill it in later."
+            },
+            {
+              "description": "Unrelated task in another domain: writing or transforming text the user supplies needs no memory lookup or write.",
+              "prompt": "Rewrite this sentence to sound friendlier: \"Send me the report by noon.\""
+            }
+          ]
+        },
+        "commerce": false
+      },
+      "publication": {
+        "release_notes": "First directory release of Substrate. Connects the user's Substrate memory over one remote MCP server: search memory with sources, open a fact's evidence or a full page, read memory teammates shared, save a new fact and forget one. Sign-in with OAuth; each connection is its own revocable agent and sees only what the user allows."
+      }
+    }
+  }
+}

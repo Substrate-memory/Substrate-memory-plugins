@@ -19,6 +19,16 @@ The remote MCP service at `https://app.trysubstrate.co/mcp` and browser OAuth ba
 
 An owner may prepare a GitHub draft targeting the review-branch commit and attach the four archives plus `SHA256SUMS` before review. This does not create a public tag. After code review, separately approved backend deployment and host acceptance, merge the reviewed changes into main. If archive bytes changed since draft preparation, rebuild and re-review the draft assets before selecting `PUBLISH`. Merely creating a draft is never deployment or publication approval.
 
+## Directory listings
+
+One `VERSION` covers every listing: the plugins, `server.json` (MCP registry), `gemini-extension.json`, the marketplace file and `openai/plugin.json` (OpenAI directory). `scripts/check_versions.py` fails CI if any copy differs. After the version-bump PR merges:
+
+1. Claude directory: nothing to do, it reads `main` through its webhook.
+2. MCP registry: `mcp-publisher publish` (signed in with the `co.trysubstrate` key).
+3. OpenAI directory: `python3 scripts/build_openai_package.py`, then upload `dist/substrate-openai-<version>.zip` in the OpenAI portal when the listing text or the tool set changed. OpenAI rescans the hosted tool schema daily on its own. The package points at `https://app.trysubstrate.co/mcp/core`, which is served by the Substrate server, not this repository.
+
+The OpenAI package holds no reviewer credentials. Give reviewers sign-in access in the portal form, never in this repository.
+
 ## Deterministic local check
 
 ```sh
