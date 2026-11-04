@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "substrate",
+  "name": "substrate-memory",
   "version": "0.11.4",
   "description": "A context layer for your team and agents: one shared memory you can read, edit and own. Every fact cited to its source, permissioned and revocable.",
   "author": {

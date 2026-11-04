@@ -60,3 +60,9 @@ def test_server_is_one_https_endpoint_without_secrets() -> None:
     (server,) = mcp["mcpServers"].values()
     assert server["type"] == "streamable-http" and server["url"].startswith("https://")
     assert "headers" not in server
+
+
+def test_package_name_matches_the_live_app() -> None:
+    # The OpenAI portal matches uploads to the live app by this name.
+    plugin = json.loads((REPO / "openai" / "plugin.json").read_text(encoding="utf-8"))
+    assert plugin["name"] == "substrate-memory"

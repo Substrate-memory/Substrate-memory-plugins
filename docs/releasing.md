@@ -28,6 +28,7 @@ One `VERSION` covers every listing: the plugins, `server.json` (MCP registry), `
 3. OpenAI directory: `python3 scripts/build_openai_package.py`, then upload `dist/substrate-openai-<version>.zip` in the OpenAI portal when the listing text or the tool set changed. OpenAI rescans the hosted tool schema daily on its own. The package points at `https://app.trysubstrate.co/mcp/core`, which is served by the Substrate server, not this repository.
 
 The OpenAI package holds no reviewer credentials. Give reviewers sign-in access in the portal form, never in this repository.
+The OpenAI app is matched by package name `substrate-memory`; never change it.
 
 ## Deterministic local check
 
