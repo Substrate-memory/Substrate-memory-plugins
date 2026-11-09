@@ -44,7 +44,7 @@ starts a new session. That session confirms the connection.
    paste the full link from its `"link"` on its own line, end your turn, and add this one
    approval instruction, word for word:
    *Open this link and choose Approve connection. Then approve Substrate's hooks: in the
-   Codex app, in its hooks settings; in the terminal, /hooks. Then start a new session.*
+   Codex app, select Review hooks in the composer or open Settings > Hooks; in the terminal, /hooks. Then start a new session.*
    Add nothing else: no second approval instruction, no "continue", no waiting. If the
    status is `"error"`, say the message and ask the user to try again. Never mention
    ports, callback addresses or remote machines unless the user reports an error page.

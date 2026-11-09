@@ -38,7 +38,7 @@ Run the last command with escalated permissions (network and a local listener).
 It prints JSON with `"link"`. Then end your turn with the link on its own line,
 and this one instruction, word for word:
 "Open this link and choose Approve connection. Then approve Substrate's hooks: in
-the Codex app, in its hooks settings [TODO: exact menu label]; in the terminal,
+the Codex app, select Review hooks in the composer or open Settings > Hooks; in the terminal,
 /hooks. Then start a new session."
 Add nothing else. The plugin is under `$CODEX_HOME/plugins/cache/*/substrate-codex/*/`
 (default `~/.codex`). The first reply of the new session says "Connected to

@@ -73,7 +73,7 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
   second time. The first write keeps `hooks.json.substrate-backup`. Writes are
   atomic. A malformed file is reported and left as it is.
 - **Approve once**: Codex shows *Hooks need review*. Approve the Substrate
-  entries once: in the Codex app, in its hooks settings [TODO: exact menu label];
+  entries once: in the Codex app, select Review hooks in the composer or open Settings > Hooks;
   in the terminal, `/hooks` (press `t` to trust all). Codex stores approvals in
   `config.toml` under `[hooks.state."<path>:<event>:<group>:<handler>"]` with a
   `trusted_hash`. The approval is keyed on the command text, which does not change
@@ -104,7 +104,7 @@ user `hooks.json` entry with `source: "user"`, `trustStatus: "untrusted"`.
 `$substrate-connect` runs in this order: install the hooks (`codex_user_hooks.py
 install`, quiet until sign-in), start the sign-in detached (`substrate_sync.py --host
 codex --signin-detach`, escalated, so the approval outlives the turn), and end the
-turn with the link and one line: approve the link, approve the hooks (Codex app: hooks settings [TODO]; terminal:
+turn with the link and one line: approve the link, approve the hooks (Codex app: Review hooks or Settings > Hooks; terminal:
 `/hooks`), start a new session. That session's SessionStart hook has the agent confirm "Connected to
 Substrate." after `memory_search`; the offer hook makes the import offer once, on the next prompt. A pending sign-in shows its link again.
 
@@ -112,7 +112,7 @@ Substrate." after `memory_search`; the offer hook makes the import offer once, o
 
 - Plugin hooks do not load from a local install in Codex 0.154 (`/hooks`
   shows 0 for every event). The connect skill installs the same entries in the
-  user hook file; the user approves them once (Codex app: hooks settings; terminal: `/hooks`).
+  user hook file; the user approves them once (Codex app: Review hooks or Settings > Hooks; terminal: `/hooks`).
 - Not verified here: that `mcp_tool` hooks in the user file resolve the
   `substrate-memory` server and fill `${...}` placeholders the same way as
   plugin hooks. That needs a live, authenticated connection. Without one they

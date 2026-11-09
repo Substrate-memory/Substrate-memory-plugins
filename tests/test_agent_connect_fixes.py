@@ -199,6 +199,22 @@ def test_codex_steps_run_in_the_same_order(relative: str) -> None:
     assert positions == sorted(positions), (relative, positions)
 
 
+_CODEX_HOOKS_UI = (
+    "docs/install.md", "docs/installation.md", "README.md", "AGENTS.md",
+    "plugins/substrate-codex/README.md", "plugins/substrate-codex/INSTALL.md",
+    "plugins/substrate-codex/skills/substrate-connect/SKILL.md",
+    "plugins/substrate-codex/scripts/substrate_sync.py", "plugins/substrate-claude/scripts/substrate_sync.py",
+)
+
+
+@pytest.mark.parametrize("relative", _CODEX_HOOKS_UI)
+def test_codex_app_hooks_step_names_the_real_ui(relative: str) -> None:
+    """OpenAI's Codex hooks docs: "Review hooks" in the composer, or Settings > Hooks. No placeholder."""
+    text = _text(REPO / relative)
+    assert "Review hooks" in text and "Settings > Hooks" in text, relative
+    assert "TODO: exact menu label" not in text and "hooks settings" not in text, relative
+
+
 def test_codex_last_line_says_new_session_once_and_no_continue() -> None:
     """Codex needs one new session and no "continue" from the user."""
     for relative in ("docs/install.md", "plugins/substrate-codex/skills/substrate-connect/SKILL.md"):

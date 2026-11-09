@@ -1185,7 +1185,7 @@ SIGNIN_LINK_RE = re.compile(r"https://[^\s\"'<>\\]+/authorize[^\s\"'<>\\]*")
 MCP_SERVER_NAME = "substrate-memory"
 MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 # The version of this copy. scripts/check_versions.py keeps it equal to the repository VERSION file.
-PLUGIN_VERSION = "0.11.4"
+PLUGIN_VERSION = "0.11.5"
 # Claude Code permission rules: every memory tool of the plugin server except memory_forget,
 # which stays behind a prompt. Listed one by one: a wildcard would include memory_forget.
 CLAUDE_TOOL_PREFIX = "mcp__plugin_substrate-claude_substrate-memory__"
@@ -1601,7 +1601,6 @@ def _setup_text_codex(data_dir: str, session_id: str) -> str:
     No import offer here: the offer hook makes it once, after the connection checks out.
     """
     base = _sync_base("codex", data_dir, session_id)
-    # TODO(Pavel): replace "in its hooks settings" with the exact Codex app menu label.
     return (
         "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
         "reply, in a few short lines. Follow the `$substrate-connect` skill (read its SKILL.md if "
@@ -1616,7 +1615,8 @@ def _setup_text_codex(data_dir: str, session_id: str) -> str:
         "auth_status not_logged_in: run `SYNC --signin-detach` with escalated permissions. Its JSON "
         "`link` is the approval link. End your turn with that link on its own line, then this one "
         "instruction: \"Open this link and choose Approve connection. Then approve Substrate's hooks: "
-        "in the Codex app, in its hooks settings; in the terminal, /hooks. Then start a new session.\" "
+        "in the Codex app, select Review hooks in the composer or open Settings > Hooks; in the "
+        "terminal, /hooks. Then start a new session.\" "
         "Do not ask anything else and do not wait for a reply. Never describe this computer as "
         "remote, local or SSH, and never mention ports or callback addresses. Never ask for a token or "
         "key, and never say Connected before `memory_search` succeeds. If the server is not registered "

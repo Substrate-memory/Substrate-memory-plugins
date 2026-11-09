@@ -39,7 +39,7 @@ codex mcp login substrate-memory
 
 `login` prints the approval link. Choose **Approve connection**; the command
 returns. The agent then installs the hooks. Then approve Substrate's hooks once: in the
-Codex app, in its hooks settings [TODO: exact menu label]; in the terminal, `/hooks`.
+Codex app, select Review hooks in the composer or open Settings > Hooks; in the terminal, `/hooks`.
 Start a new session. Its first reply confirms the connection and offers the import once.
 
 ## Sign-in flow
@@ -72,8 +72,8 @@ so a plugin update does not change them and needs no new approval.
 
 Approve the Substrate hooks once, with the one step that fits your Codex:
 
-- **Codex app:** open its hooks settings and approve the Substrate entries
-  [TODO: exact menu label, from Pavel].
+- **Codex app:** select **Review hooks** in the composer, or open
+  **Settings > Hooks**, and approve the Substrate entries.
 - **Terminal:** run `/hooks` and trust the Substrate entries.
 
 Until you approve them, Codex skips automatic capture and recall still works
