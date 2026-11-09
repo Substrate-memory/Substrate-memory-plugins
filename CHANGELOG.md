@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.5
+
+Codex: the hooks approval names the real Codex app controls. Text only; no behavior change.
+
+- **Codex app hooks step.** Every place that said "in its hooks settings [TODO: exact menu label]" now says what OpenAI's Codex hooks docs say: in the desktop app, select **Review hooks** in the composer or open **Settings > Hooks**; in the terminal, `/hooks`. Covers `docs/install.md` (served at trysubstrate.co/install.md), `docs/installation.md`, both READMEs, `AGENTS.md`, the Codex `INSTALL.md`, the `substrate-connect` skill and the setup text in `substrate_sync.py`.
+- **Versions:** 0.11.5 everywhere.
+
 ## 0.11.4
 
 OpenAI directory package (ChatGPT and Codex listing, MCP only) now versions with the plugins. No behavior change in any plugin.
