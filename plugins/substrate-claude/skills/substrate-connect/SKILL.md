@@ -10,8 +10,8 @@ allowed-tools:
   - mcp__plugin_substrate-claude_substrate-memory__memory_import_status
 ---
 
-Run this end to end. Pause only for the user's browser approval and their import
-choice. Never end your turn just because a step finished.
+Run this end to end. Pause only for the user's browser approval, their capture-mode
+choice and their import choice. Never end your turn just because a step finished.
 
 `SYNC` means `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude`
 (use `python` if `python3` is missing). Run it exactly in that form: do not put a
@@ -68,7 +68,18 @@ the plugin handles the import.
    say continue." Never ask for a token or key.
    A bare "continue", "done", "ok" or "approved" during setup just means carry
    on; don't comment on it.
-4. **Same reply: offer the import, once.** If this turn already has a `[substrate] Import offer
+4. **Capture mode, once.** Run `SYNC --mode-check`. If `"mode"` is set, skip to the
+   next step unless `"switch"` lists commands (then do the switch below). Otherwise ask
+   once, in plain words:
+   *How should Substrate save this conversation? **Automatic**: every turn and tool call
+   is saved as you work. **Manual**: nothing is saved unless you ask (remember this, or
+   import); memory is still recalled.*
+   Run `SYNC --record-mode automatic` or `SYNC --record-mode manual`. If its JSON has
+   `"switch"`, run each listed `claude plugin …` command in order with Bash (ask first if
+   Bash needs approval), then say: *Restart Claude Code to finish switching to Manual
+   (or Automatic).* and continue with the next step anyway. The two modes are two plugins,
+   `substrate-claude` (Automatic) and `substrate-claude-manual` (Manual); never keep both.
+5. **Same reply: offer the import, once.** If this turn already has a `[substrate] Import offer
    pending` note, follow that note and skip this step. Otherwise run `SYNC --preview`. If `sessions` is 0 and
    `already_imported` is above 0, go to the account note below: never say those
    conversations are in this account unless `memory_import_status` confirms it.
@@ -76,10 +87,10 @@ the plugin handles the import.
    in plain words, with the count and range from its output:
    *I found N past conversations on this computer (T turns, FIRST to LAST).
    Import them into Substrate? **Import all** / **Let me pick** / **Not now***
-5. Act on the answer by invoking the Skill tool with skill `substrate-claude:substrate-import`
+6. Act on the answer by invoking the Skill tool with skill `substrate-claude:substrate-import`
    (its permissions apply to that turn). If the Skill tool is not available, run
    `/substrate-claude:substrate-import`.
-6. **Permissions and updates, once, after the import.** Skip this step if `SYNC --permissions-check`
+7. **Permissions and updates, once, after the import.** Skip this step if `SYNC --permissions-check`
    shows `"missing": 0` or `"offered": true`. If the tool `mcp__workspace__bash` is available, this
    is Cowork: say only *To allow Substrate's memory tools without asking each time: Customize →
    Connectors → Substrate → Always allow.* Otherwise (Claude Code) ask once, in plain words:

@@ -22,6 +22,7 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 # Each entry: relative path and the kind of copy it holds.
 JSON_COPIES = (
     "plugins/substrate-claude/.claude-plugin/plugin.json",
+    "plugins/substrate-claude-manual/.claude-plugin/plugin.json",
     "plugins/substrate-mcp/.claude-plugin/plugin.json",
     "plugins/substrate-codex/plugin.json",
     "plugins/substrate-codex/.codex-plugin/plugin.json",
@@ -33,6 +34,7 @@ MARKETPLACE_COPY = ".claude-plugin/marketplace.json"  # every entry of "plugins"
 YAML_COPIES = ("plugin.yaml", "plugins/substrate-hermes/plugin.yaml")
 PY_COPIES = (
     "plugins/substrate-claude/scripts/substrate_sync.py",
+    "plugins/substrate-claude-manual/scripts/substrate_sync.py",
     "plugins/substrate-codex/scripts/substrate_sync.py",
     "plugins/substrate-hermes/src/substrate/client.py",
 )

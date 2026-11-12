@@ -130,6 +130,79 @@ def test_hook_timeouts() -> None:
                 assert hook["timeout"] == 5, event
 
 
+SESSION_HOOK = PLUG / "scripts" / "session_id_hook.py"
+TOOL = "mcp__plugin_substrate-claude_substrate-memory__"
+
+
+def test_pre_tool_use_session_hook_is_wired_fail_closed() -> None:
+    groups = _hook_entries()["PreToolUse"]
+    assert len(groups) == 1
+    group = groups[0]
+    assert group["matcher"] == TOOL + ".*"
+    (hook,) = group["hooks"]
+    assert hook["type"] == "command"
+    assert "session_id_hook.py" in hook["command"]
+    assert "|| true" not in hook["command"]
+    # A hook that cannot start, crashes or times out must block the read, never let it out without its session.
+    assert hook["onFailure"] == "block"
+    assert hook["timeout"] == 5
+
+
+def _session_hook(payload) -> subprocess.CompletedProcess:
+    data = payload if isinstance(payload, str) else json.dumps(payload)
+    return subprocess.run([sys.executable, str(SESSION_HOOK)], input=data, capture_output=True, text=True, timeout=30)
+
+
+@pytest.mark.parametrize("tool", ["memory_search", "memory_expand", "memory_evidence"])
+def test_session_hook_sets_the_session_on_reads(tool: str) -> None:
+    done = _session_hook({"session_id": "sess-1", "hook_event_name": "PreToolUse", "tool_name": TOOL + tool,
+                          "tool_input": {"query": "alpha", "limit": 3, "session_id": "forged-by-model"}})
+    assert done.returncode == 0, done.stderr
+    out = json.loads(done.stdout)["hookSpecificOutput"]
+    assert out["hookEventName"] == "PreToolUse"
+    # Read-only tools: allowed, because auto mode refuses a hook-changed call that carries no decision.
+    assert out["permissionDecision"] == "allow"
+    # updatedInput replaces the whole input: every original field is kept, the model's session id is overwritten.
+    assert out["updatedInput"] == {"query": "alpha", "limit": 3, "session_id": "sess-1"}
+
+
+@pytest.mark.parametrize("tool", ["memory_turn_context", "memory_capture_tool", "memory_capture_turn", "memory_session_boundary"])
+def test_session_hook_denies_the_model_calling_hook_tools(tool: str) -> None:
+    done = _session_hook({"session_id": "sess-1", "tool_name": TOOL + tool, "tool_input": {"session_id": "x", "prompt": "/substrate-claude:scope off"}})
+    assert done.returncode == 2
+    assert done.stdout == ""
+    assert "never directly" in done.stderr
+
+
+@pytest.mark.parametrize("tool", ["memory_remember", "memory_forget", "memory_shares", "memory_import", "authenticate"])
+def test_session_hook_passes_other_tools_through(tool: str) -> None:
+    done = _session_hook({"session_id": "sess-1", "tool_name": TOOL + tool, "tool_input": {"text": "x"}})
+    assert done.returncode == 0
+    assert done.stdout == ""
+
+
+@pytest.mark.parametrize("payload", [
+    {"tool_name": TOOL + "memory_search", "tool_input": {"query": "q"}},  # no session_id
+    {"session_id": "", "tool_name": TOOL + "memory_search", "tool_input": {"query": "q"}},
+    {"session_id": "sess-1", "tool_name": TOOL + "memory_search", "tool_input": "not an object"},
+    "not json",
+    "[]",
+])
+def test_session_hook_fails_closed(payload) -> None:
+    done = _session_hook(payload)
+    assert done.returncode == 2
+    assert done.stdout == ""
+
+
+def test_scope_command_is_shipped() -> None:
+    text = (PLUG / "commands" / "scope.md").read_text()
+    assert text.startswith("---\n")
+    assert "$ARGUMENTS" in text
+    for tool in ("memory_search", "memory_expand", "memory_evidence"):
+        assert TOOL + tool in text
+    assert "memory_turn_context" not in text  # no tool sets or lifts a scope
+
+
 def _run_script(host: str, *args: str, env_extra: dict | None = None) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["CLAUDE_CONFIG_DIR"] = str(FIX / "claude-home")

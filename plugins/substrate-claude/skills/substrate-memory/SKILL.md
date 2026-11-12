@@ -49,6 +49,18 @@ run the sync flow (`/substrate-claude:substrate-sync`): call
 `--after-index <message_high_water>`, and pass each printed batch to
 `memory_import`. Then continue the turn.
 
+## Scoped sessions
+
+`/substrate-claude:scope DIR` limits this session's memory reads to one Wiki
+page and the pages under it; `/substrate-claude:scope off` lifts it. The server
+enforces it: while a `[substrate] … scoped to the Wiki page …` line is in the
+context, every `memory_search` / `memory_expand` / `memory_evidence` answers
+only from that page's branch, there is no automatic recall, and shares cannot
+be read. Search for what you need, and say so when the answer may lie outside
+the scope rather than guessing. Never pass `session_id` yourself; the plugin's
+hook sets it. A read refused with "carried no session id" means the hook is
+missing: tell the user to update the plugin.
+
 ## Working with memory
 
 - Recall is best effort. Before relying on a remembered fact, call
@@ -61,6 +73,11 @@ run the sync flow (`/substrate-claude:substrate-sync`): call
   captured. Live capture runs through session hooks; turns before install,
   turns missed while hooks were unavailable, and the launch-time session start
   are covered only by the sync command, and only after it reports success.
+- Capture mode: `substrate-claude` is Automatic (the hooks capture every turn
+  and tool call). `substrate-claude-manual` is Manual: there is no live capture
+  at all, and recall still runs. In Manual, never say this conversation is being
+  saved. Save only what the user asks to remember (`memory_remember`) or imports.
+  To switch, follow the connect command's capture-mode step.
 - Never send secrets, API keys, OAuth tokens, client secrets, passwords, or
   private credentials to memory tools. Redact them before any recall query or
   write. The client and server both redact, but do not rely on that: strip

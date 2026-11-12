@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+Capture mode (Claude Code): **Automatic** or **Manual**. Automatic (`substrate-claude`) is unchanged and captures every turn and tool call live. Manual (`substrate-claude-manual`, new) keeps recall on every prompt and ships no capture hooks (`memory_capture_tool`, `memory_capture_turn`, `memory_session_boundary`), so nothing from a conversation is saved unless the user asks (`memory_remember`) or runs an import. The two modes are two plugins because Claude Code calls `mcp_tool` hooks directly on the server, so no local setting can turn them off.
+
+- **`plugins/substrate-claude-manual/`:** generated from `substrate-claude` by `scripts/build_manual_variant.py` (never edit it by hand). Its scripts are byte-identical; commands, skills and hooks use its own tool prefix and namespace. A test fails when the generated plugin is stale.
+- **`substrate_sync.py`:** reads its plugin name from its own manifest (tool prefix, skill names, `/mcp` server name and permission rules follow it). New `--mode-check` and `--record-mode automatic|manual` print the `claude plugin` commands that leave exactly one variant installed. `--offer-check` warns once when both are installed.
+- **`/substrate-connect`:** asks for the capture mode once, after connecting, and switches plugins on request.
+- **Marketplace:** new `substrate-claude-manual` entry. There is no release archive for it yet; Cowork keeps using `substrate-claude`.
+
+Session scopes (Claude Code): `/substrate-claude:scope DIR [question]` limits the session's memory reads to one Wiki page and the pages under it, enforced by the server; `/substrate-claude:scope off` lifts it. Needs the matching Substrate server release (migration 0108).
+
+- **`commands/scope.md`:** reads the server's confirmation line and answers the question with the read tools. No tool sets or lifts a scope: the server parses the typed command from the `UserPromptSubmit` prompt.
+- **`PreToolUse` hook (`scripts/session_id_hook.py`):** sets `session_id` on `memory_search`, `memory_expand` and `memory_evidence` (overwriting any the model passed) and denies the model's own calls to the hook-only tools. `"onFailure": "block"`: a hook that cannot start or crashes blocks the read.
+- **Skill:** `substrate-memory` explains scoped sessions.
+- **Docs:** `docs/mcp-contract.md` 4.1 and 7.
+
 ## 0.11.4
 
 OpenAI directory package (ChatGPT and Codex listing, MCP only) now versions with the plugins. No behavior change in any plugin.

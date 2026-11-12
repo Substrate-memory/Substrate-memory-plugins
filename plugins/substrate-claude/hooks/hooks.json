@@ -26,6 +26,19 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__plugin_substrate-claude_substrate-memory__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "P=\"$(command -v python3 || command -v python)\"; exec \"$P\" \"${CLAUDE_PLUGIN_ROOT}/scripts/session_id_hook.py\"",
+            "timeout": 5,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [

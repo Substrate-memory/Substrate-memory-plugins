@@ -18,13 +18,24 @@
     },
     {
       "name": "substrate-claude",
-      "description": "Substrate memory for Claude Cowork and Claude Code: recall, automatic capture, and history import over remote MCP",
+      "description": "Substrate memory for Claude Cowork and Claude Code: recall, automatic capture, and history import over remote MCP (Automatic capture mode)",
       "version": "0.11.4",
       "author": {
         "name": "Sightline Technologies Inc"
       },
       "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
       "source": "./plugins/substrate-claude",
+      "category": "productivity"
+    },
+    {
+      "name": "substrate-claude-manual",
+      "description": "Substrate memory for Claude Code, Manual capture mode: recall and on-request saving and import, with no live conversation capture",
+      "version": "0.11.4",
+      "author": {
+        "name": "Sightline Technologies Inc"
+      },
+      "homepage": "https://github.com/Substrate-memory/Substrate-memory-plugins",
+      "source": "./plugins/substrate-claude-manual",
       "category": "productivity"
     }
   ]
