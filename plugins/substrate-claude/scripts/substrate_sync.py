@@ -24,8 +24,6 @@ Usage:
     substrate_sync.py --host H --signin-start         (PostToolUse hook: authenticate ran)
     substrate_sync.py --host H --stop-check           (Stop hook: keep a pending sign-in polling)
     substrate_sync.py --host claude --permissions-check | --permissions-allow [--decline]
-    substrate_sync.py --host claude --mode-check | --record-mode automatic|manual
-                      (capture mode; prints the plugin switch commands when needed)
     (every mode also takes --data-dir DIR)
 
 Upload reads the import ticket from --ticket-file: a file the agent wrote with
@@ -1190,28 +1188,7 @@ MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 PLUGIN_VERSION = "0.11.4"
 # Claude Code permission rules: every memory tool of the plugin server except memory_forget,
 # which stays behind a prompt. Listed one by one: a wildcard would include memory_forget.
-# The two Claude variants share this script. substrate-claude is Automatic: live capture
-# of tool calls and turns. substrate-claude-manual is Manual: recall only, with no capture
-# hooks. Claude Code names tools, skills and commands after the plugin, so the name comes
-# from this copy's own manifest. Codex or any other copy falls back to substrate-claude.
-CLAUDE_PLUGIN_NAMES = ("substrate-claude", "substrate-claude-manual")
-MARKETPLACE_NAME = "substrate-marketplace"
-MODES = ("automatic", "manual")
-MODE_PLUGINS = {"automatic": CLAUDE_PLUGIN_NAMES[0], "manual": CLAUDE_PLUGIN_NAMES[1]}
-
-
-def _claude_plugin_name() -> str:
-    try:
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(root, ".claude-plugin", "plugin.json"), encoding="utf-8") as handle:
-            name = json.load(handle).get("name")
-    except (OSError, ValueError, AttributeError):
-        return CLAUDE_PLUGIN_NAMES[0]
-    return name if name in CLAUDE_PLUGIN_NAMES else CLAUDE_PLUGIN_NAMES[0]
-
-
-CLAUDE_PLUGIN = _claude_plugin_name()
-CLAUDE_TOOL_PREFIX = "mcp__plugin_%s_substrate-memory__" % CLAUDE_PLUGIN
+CLAUDE_TOOL_PREFIX = "mcp__plugin_substrate-claude_substrate-memory__"
 MEMORY_TOOLS = (
     "memory_search", "memory_remember", "memory_turn_context", "memory_capture_tool",
     "memory_capture_turn", "memory_session_boundary", "memory_evidence", "memory_expand",
@@ -1506,7 +1483,7 @@ def _quote(value: str) -> str:
 
 # The plugin's own server, as Claude Code names its tools. Tools from a claude.ai
 # connector (mcp__claude_ai_*) are a different server and prove nothing here.
-CLAUDE_SEARCH_TOOL = CLAUDE_TOOL_PREFIX + "memory_search"
+CLAUDE_SEARCH_TOOL = "mcp__plugin_substrate-claude_substrate-memory__memory_search"
 
 
 def _search_tool(host: str) -> str:
@@ -1517,7 +1494,7 @@ def _import_invoke(host: str) -> str:
     """How the agent must start the import skill: Codex has no Skill tool, and its skill is substrate-import."""
     if host == "codex":
         return "use the `$substrate-import` skill"
-    return "invoke the Skill tool with skill `%s:substrate-import`" % CLAUDE_PLUGIN
+    return "invoke the Skill tool with skill `substrate-claude:substrate-import`"
 
 
 def _sync_base(host: str, data_dir: str, session_id: str) -> str:
@@ -1662,7 +1639,7 @@ def _setup_text(host: str, data_dir: str, session_id: str,
     text = (
         "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
         "reply, before anything else, in a few short lines. First invoke the Skill tool with skill "
-        "`%(plugin)s:substrate-connect` and follow it: its permissions apply to this turn. If "
+        "`substrate-claude:substrate-connect` and follow it: its permissions apply to this turn. If "
         "the Skill tool is not available, follow the steps below. A bare \"continue\", \"done\", "
         "\"ok\" or \"approved\" from the user just means: carry on with Substrate setup. Do not "
         "comment on it or ask what to work on. SYNC means: `%(base)s`.\n"
@@ -1676,24 +1653,24 @@ def _setup_text(host: str, data_dir: str, session_id: str,
         "authentication\" or \"unauthorized\" (or only an `authenticate` tool for substrate-memory "
         "exists): if that tool is not loaded, load it with ToolSearch first. If the server is listed "
         "as disabled, or Claude Code says it is not connected, say exactly: \"Open /mcp, select "
-        "plugin:%(plugin)s:substrate-memory, choose Enable if shown, then Authenticate.\" "
+        "plugin:substrate-claude:substrate-memory, choose Enable if shown, then Authenticate.\" "
         "Then call the tool. In your reply, paste the full sign-in URL it returns "
         "as plain text (the user cannot see tool output), then say: \"Open this link, sign in and "
         "choose Approve connection. I'll continue automatically.\" Omit the tool's notes about error pages, "
         "localhost, redirects or pasting the URL. Paste the link again whenever "
         "the user says they cannot see it. If the result has no link, say so and ask the user to "
-        "run /mcp, choose plugin:%(plugin)s:substrate-memory, Authenticate, and send you the "
+        "run /mcp, choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the "
         "link it shows. Never describe this session or computer as remote, local or SSH, and never "
         "mention ports, callback addresses or localhost, even if the tool's result says so. Only if "
         "the user reports an error page, ask them to paste the full address-bar URL. Then do NOT end your turn: run `SYNC --pause 15`, then call `%(search)s` "
         "again (load it with ToolSearch if it is deferred); repeat up to 20 times (about 5 "
         "minutes). As soon as it works, do step 1 and continue. If it never works, say: "
-        "\"Substrate is not connected yet. Open /mcp, choose plugin:%(plugin)s:"
+        "\"Substrate is not connected yet. Open /mcp, choose plugin:substrate-claude:"
         "substrate-memory, finish Authenticate, then say continue.\" Never ask for a token or "
         "key, and never say Connected in that case.\n"
         "3. If no Substrate memory tools exist at all, tell the user to type /reload-plugins "
         "and then say \"continue\"."
-    ) % {"base": base, "search": search, "connector": connector, "plugin": CLAUDE_PLUGIN}
+    ) % {"base": base, "search": search, "connector": connector}
     if offer:
         if summary is not None:
             offer_text = 'say, word for word: "%s"' % _offer_sentence(summary)
@@ -1701,7 +1678,7 @@ def _setup_text(host: str, data_dir: str, session_id: str,
             offer_text = ("run `SYNC --preview` and say its conversation count and date range, "
                           "then Import all / Let me pick / Not now")
         follow = ("$substrate-import" if host == "codex"
-                  else "/%s:substrate-import (or $substrate-import)" % CLAUDE_PLUGIN)
+                  else "/substrate-claude:substrate-import (or $substrate-import)")
         text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
                  "they choose, follow %s; "
                  "the import ticket never goes in a command or in your reply. For the user's choice, %s "
@@ -1772,15 +1749,6 @@ def _cmd_offer_check(host: str, data_dir: str) -> int:
             except OSError:
                 pass
             connected = True
-        if host == "claude" and len(_installed_claude_variants()) > 1 and not _read_json(
-                os.path.join(data_dir, OFFER_FILE)).get("dual_warned"):
-            # Automatic and Manual installed together: both hook sets run. Warned once.
-            try:
-                _record_flag(data_dir, "dual_warned", "yes")
-            except OSError:
-                return 0  # read-only: never repeat the warning on every prompt
-            _emit_context(_dual_install_text())
-            return 0
         # The import offer is made exactly once: after the connection checks out, and never
         # again once it was made or answered.
         if connected and (decided or _offered(data_dir)):
@@ -1879,7 +1847,7 @@ def _signin_start_text(link: str, reconnect: bool, host: str = "claude") -> str:
                 "connection**. I'll continue automatically.\" Then the link: %s") % link
     else:
         show = ("No sign-in link was found in the tool result. Say so, and ask the user to run /mcp, "
-                "choose plugin:%s:substrate-memory, Authenticate, and send you the link it shows." % CLAUDE_PLUGIN
+                "choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the link it shows."
                 if host == "claude" else
                 "No sign-in link was found in the tool result. Say so, and ask the user to run "
                 "`codex mcp login substrate-memory` and send you the link it prints.")
@@ -2140,66 +2108,6 @@ def _cmd_permissions(host: str, data_dir: str, allow: bool, decline: bool) -> in
     _record_flag(data_dir, "permissions_offered", "accepted")
     print(json.dumps({"ok": True, "changed": bool(missing), "added": len(missing), "path": path}))
     return 0
-
-
-# ---------------------------------------------------------------------------
-# Capture mode (Claude Code). Automatic and Manual are two plugins, not a setting:
-# Claude Code calls the capture hooks (mcp_tool) straight on the server, so the only
-# way to stop them is to install the variant that has none. The recorded mode is
-# kept in the shared data dir, so both variants read it.
-# ---------------------------------------------------------------------------
-
-def _installed_claude_variants() -> List[str]:
-    """The Substrate Claude variants that Claude Code has installed: names only, from
-    $CLAUDE_CONFIG_DIR/plugins/installed_plugins.json. Returns [] when the file is missing or unreadable."""
-    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    doc = _read_json(os.path.join(base, "plugins", "installed_plugins.json"))
-    plugins = doc.get("plugins") if isinstance(doc.get("plugins"), dict) else doc
-    found = set()
-    for key in plugins:
-        name = str(key).split("@", 1)[0]
-        if name in CLAUDE_PLUGIN_NAMES:
-            found.add(name)
-    return [name for name in CLAUDE_PLUGIN_NAMES if name in found]
-
-
-def _mode_report(data_dir: str) -> Dict[str, Any]:
-    recorded = _read_json(os.path.join(data_dir, OFFER_FILE)).get("mode")
-    recorded = recorded if recorded in MODES else None
-    running = "manual" if CLAUDE_PLUGIN == MODE_PLUGINS["manual"] else "automatic"
-    installed = _installed_claude_variants()
-    report = {"mode": recorded, "running": running, "plugin": CLAUDE_PLUGIN,
-              "installed": installed, "switch": None}  # type: Dict[str, Any]
-    # The commands that leave exactly the recorded mode's plugin installed (None: nothing to change).
-    target = MODE_PLUGINS[recorded or running]
-    remove = [name for name in installed if name != target]
-    if CLAUDE_PLUGIN != target and CLAUDE_PLUGIN not in remove:
-        remove.append(CLAUDE_PLUGIN)  # installed_plugins.json was unreadable: trust this copy
-    steps = ["claude plugin install %s@%s" % (target, MARKETPLACE_NAME)] if (
-        target not in installed and target != CLAUDE_PLUGIN) else []
-    steps += ["claude plugin uninstall %s@%s" % (name, MARKETPLACE_NAME) for name in remove]
-    if steps:
-        report["switch"] = steps
-        report["restart"] = True
-    return report
-
-
-def _cmd_mode(host: str, data_dir: str, record: str) -> int:
-    if host != "claude":
-        print(json.dumps({"ok": False, "error": "Claude Code only"}))
-        return 1
-    if record:
-        _record_flag(data_dir, "mode", record)
-    print(json.dumps(_mode_report(data_dir)))
-    return 0
-
-
-def _dual_install_text() -> str:
-    return ("[substrate] Both Substrate plugins are installed: substrate-claude (Automatic capture) and "
-            "substrate-claude-manual (Manual, recall only). Their hooks both run, so memory is recalled "
-            "twice and Automatic capture is still on. Tell the user in one sentence, then offer to "
-            "uninstall the one they do not want (`claude plugin uninstall NAME@%s`) and restart "
-            "Claude Code." % MARKETPLACE_NAME)
 
 
 def _cmd_stop_check(host: str, data_dir: str) -> int:
@@ -2996,8 +2904,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--permissions-check", action="store_true")
     parser.add_argument("--permissions-allow", action="store_true")
     parser.add_argument("--decline", action="store_true")
-    parser.add_argument("--record-mode", choices=MODES)
-    parser.add_argument("--mode-check", action="store_true")
     parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)
     if "--signin-detach" in argv:
         try:
@@ -3044,8 +2950,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     if args.permissions_check or args.permissions_allow:
         return _cmd_permissions(args.host, data_dir, allow=args.permissions_allow, decline=args.decline)
-    if args.record_mode or args.mode_check:
-        return _cmd_mode(args.host, data_dir, args.record_mode or "")
     if args.record_decision:
         _record_decision(data_dir, args.record_decision)
         print(json.dumps({"decision": args.record_decision}))

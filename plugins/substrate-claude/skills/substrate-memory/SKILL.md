@@ -73,11 +73,6 @@ missing: tell the user to update the plugin.
   captured. Live capture runs through session hooks; turns before install,
   turns missed while hooks were unavailable, and the launch-time session start
   are covered only by the sync command, and only after it reports success.
-- Capture mode: `substrate-claude` is Automatic (the hooks capture every turn
-  and tool call). `substrate-claude-manual` is Manual: there is no live capture
-  at all, and recall still runs. In Manual, never say this conversation is being
-  saved. Save only what the user asks to remember (`memory_remember`) or imports.
-  To switch, follow the connect command's capture-mode step.
 - Never send secrets, API keys, OAuth tokens, client secrets, passwords, or
   private credentials to memory tools. Redact them before any recall query or
   write. The client and server both redact, but do not rely on that: strip

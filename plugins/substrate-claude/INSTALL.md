@@ -15,12 +15,6 @@ only for the browser approval and the user's import choice.
    claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
    claude plugin install substrate-claude@substrate-marketplace
    ```
-
-   That is **Automatic** capture (every turn and tool call is saved). For
-   **Manual** capture (recall only; nothing saved unless asked), install
-   `substrate-claude-manual@substrate-marketplace` instead. Never install both:
-   a `substrate-claude-manual@…` entry also counts as the one copy above. The
-   connect flow asks for the mode and prints the switch commands (`SYNC --mode-check`).
 2. If the Substrate tools (or their `authenticate` tool) are already in this
    session, go straight to `/substrate-claude:substrate-connect` step 1 (the check
    is the plugin's own `mcp__plugin_substrate-claude_substrate-memory__memory_search`;
