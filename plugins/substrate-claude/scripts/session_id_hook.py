@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse hook for the plugin's Substrate MCP tools (docs/mcp-contract.md section 7).
 
-Session scopes (`/substrate-claude:scope DIR`) are enforced by the server per
+Session scopes (`/substrate:scope DIR`) are enforced by the server per
 host session, and the read tools carry no session of their own. This hook:
 
 - memory_search, memory_expand, memory_evidence: sets `session_id` to this

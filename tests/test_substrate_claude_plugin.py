@@ -23,7 +23,7 @@ if HERMES_SRC not in sys.path:
 
 from substrate import contract as c  # noqa: E402
 
-SERVER = "plugin:substrate-claude:substrate-memory"
+SERVER = "plugin:substrate:substrate-memory"
 
 # event -> (tool, required input keys with ${} placeholders or literals)
 CONTRACT_TABLE = {
@@ -53,7 +53,7 @@ def _load_sync():
 
 def test_manifest_shape() -> None:
     manifest = json.loads((PLUG / ".claude-plugin" / "plugin.json").read_text())
-    assert manifest["name"] == "substrate-claude"
+    assert manifest["name"] == "substrate"
     assert manifest["version"] == (REPO / "VERSION").read_text().strip()
     assert manifest["author"]["name"] == "Sightline Technologies Inc"
     assert manifest["description"].strip()
@@ -98,7 +98,7 @@ def test_post_tool_use_has_no_matcher() -> None:
     # hook for the plugin's own authenticate tool.
     for group in entries["PostToolUse"]:
         if group.get("matcher"):
-            assert group["matcher"] == "mcp__plugin_substrate-claude_substrate-memory__authenticate", group
+            assert group["matcher"] == "mcp__plugin_substrate_substrate-memory__authenticate", group
             continue
         assert group.get("matcher", "") in ("", "*"), group
 
@@ -131,7 +131,7 @@ def test_hook_timeouts() -> None:
 
 
 SESSION_HOOK = PLUG / "scripts" / "session_id_hook.py"
-TOOL = "mcp__plugin_substrate-claude_substrate-memory__"
+TOOL = "mcp__plugin_substrate_substrate-memory__"
 
 
 def test_pre_tool_use_session_hook_is_wired_fail_closed() -> None:
@@ -168,7 +168,7 @@ def test_session_hook_sets_the_session_on_reads(tool: str) -> None:
 
 @pytest.mark.parametrize("tool", ["memory_turn_context", "memory_capture_tool", "memory_capture_turn", "memory_session_boundary"])
 def test_session_hook_denies_the_model_calling_hook_tools(tool: str) -> None:
-    done = _session_hook({"session_id": "sess-1", "tool_name": TOOL + tool, "tool_input": {"session_id": "x", "prompt": "/substrate-claude:scope off"}})
+    done = _session_hook({"session_id": "sess-1", "tool_name": TOOL + tool, "tool_input": {"session_id": "x", "prompt": "/substrate:scope off"}})
     assert done.returncode == 2
     assert done.stdout == ""
     assert "never directly" in done.stderr

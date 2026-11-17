@@ -4,9 +4,9 @@ allowed-tools:
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude *)'
   - 'Bash(python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude *)'
   - ToolSearch
-  - mcp__plugin_substrate-claude_substrate-memory__authenticate
-  - mcp__plugin_substrate-claude_substrate-memory__memory_search
-  - mcp__plugin_substrate-claude_substrate-memory__memory_import_status
+  - mcp__plugin_substrate_substrate-memory__authenticate
+  - mcp__plugin_substrate_substrate-memory__memory_search
+  - mcp__plugin_substrate_substrate-memory__memory_import_status
 ---
 
 Run this end to end. Pause only for the user's browser approval and their import
@@ -17,7 +17,7 @@ choice. Never end your turn just because a step finished.
 full interpreter path in front of python3, and do not add `-c` or other options.
 That form is pre-approved; any other form prompts the user.
 
-The check tool is `mcp__plugin_substrate-claude_substrate-memory__memory_search`
+The check tool is `mcp__plugin_substrate_substrate-memory__memory_search`
 (load it with ToolSearch if it is deferred). Only that plugin server counts.
 Tools named `mcp__claude_ai_*` come from a claude.ai connector: a successful call to
 them does not mean this plugin is connected, so never use them as the check.
@@ -33,14 +33,14 @@ the plugin handles the import.
    plugin's tool reporting "needs authentication", mean the plugin is installed but
    not signed in. Do not install another copy, and do not say Connected.
 3. **Sign in now.** Call the Substrate `authenticate` tool (named like
-   `mcp__plugin_substrate-claude_substrate-memory__authenticate`). If it is not
+   `mcp__plugin_substrate_substrate-memory__authenticate`). If it is not
    loaded, load it first with ToolSearch (`select:` that name). If the server is listed
-   as disabled, say exactly: "Open /mcp, select plugin:substrate-claude:substrate-memory,
+   as disabled, say exactly: "Open /mcp, select plugin:substrate:substrate-memory,
    choose Enable if shown, then Authenticate." If Authenticate is not offered after that,
-   say: "Open /mcp, select plugin:substrate-claude:substrate-memory, then choose
+   say: "Open /mcp, select plugin:substrate:substrate-memory, then choose
    Re-authenticate or Clear authentication, then Authenticate." If it still does not
    exist, say so in one line and ask the user to run `/mcp`, choose
-   plugin:substrate-claude:substrate-memory, Authenticate, and say continue; do not
+   plugin:substrate:substrate-memory, Authenticate, and say continue; do not
    keep searching.
 
    Your reply then shows the sign-in link and nothing else about it. Use this sentence,
@@ -55,7 +55,7 @@ the plugin handles the import.
    mention ports, callback addresses or localhost, even if the tool's result says so.
    Only if the user reports an error page, ask them to paste the full address-bar URL. The user cannot see tool output, so paste the link every time, and paste it
    again whenever the user says they cannot see it. If the result has no link, say so
-   and ask the user to run `/mcp`, choose plugin:substrate-claude:substrate-memory,
+   and ask the user to run `/mcp`, choose plugin:substrate:substrate-memory,
    Authenticate, and send you the link it shows.
 
    Keep going in this same turn: run `SYNC --pause 15`, call the plugin's `memory_search`
@@ -63,7 +63,7 @@ the plugin handles the import.
    mid-turn once the user approves. Only a successful call to the plugin's tool means
    connected. The plugin may hold your turn open while sign-in is pending; when it tells
    you to keep polling, do so. If it never works, say: "Substrate is not connected yet.
-   Open /mcp, choose plugin:substrate-claude:substrate-memory, finish Authenticate, then
+   Open /mcp, choose plugin:substrate:substrate-memory, finish Authenticate, then
    say continue." Never ask for a token or key.
    A bare "continue", "done", "ok" or "approved" during setup just means carry
    on; don't comment on it.
@@ -75,9 +75,9 @@ the plugin handles the import.
    in plain words, with the count and range from its output:
    *I found N past conversations on this computer (T turns, FIRST to LAST).
    Import them into Substrate? **Import all** / **Let me pick** / **Not now***
-5. Act on the answer by invoking the Skill tool with skill `substrate-claude:substrate-import`
+5. Act on the answer by invoking the Skill tool with skill `substrate:import`
    (its permissions apply to that turn). If the Skill tool is not available, run
-   `/substrate-claude:substrate-import`.
+   `/substrate:import`.
 6. **Permissions and updates, once, after the import.** Skip this step if `SYNC --permissions-check`
    shows `"missing": 0` or `"offered": true`. If the tool `mcp__workspace__bash` is available, this
    is Cowork: say only *To allow Substrate's memory tools without asking each time: Customize →
@@ -94,7 +94,7 @@ account already has and stop. If it reports no imports for this account
 (`no_imports`, or no batch), never say "already in Substrate" or "nothing new";
 say: *The conversations I imported earlier from this computer are not in
 this Substrate account. Import them into this account now? **Import all** / **Not
-now***. On yes, run `/substrate-claude:substrate-import` and choose Import all; it
+now***. On yes, run `/substrate:import` and choose Import all; it
 re-sends them. Otherwise stop. Do not blame the import or the server before this check.
 
 **Connection approved** in the browser is not **Connected to Substrate.**; only a

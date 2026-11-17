@@ -18,8 +18,8 @@ the upload script deletes after reading it.
 
 - In **Cowork** (cloud and local sessions): memory recall on every prompt,
   automatic capture of prompts, tool use, and answers, plus
-  `/substrate-claude:substrate-connect`, `/substrate-claude:substrate-sync`,
-  and `/substrate-claude:substrate-import`.
+  `/substrate:connect`, `/substrate:sync`,
+  and `/substrate:import`.
 - In **Claude Code**: the same skill, commands, and automatic capture, plus
   past-conversation import and catch-up sync through `scripts/substrate_sync.py`.
 
@@ -45,7 +45,7 @@ the upload script deletes after reading it.
    marketplace**.
 2. Choose **Add from a repository (GitHub URL)** and enter
    `https://github.com/Substrate-memory/Substrate-memory-plugins`.
-3. Choose **Browse**, then install `substrate-claude`.
+3. Choose **Browse**, then install `substrate`.
 4. **Start a new session.** Plugin MCP servers register only at session start.
 5. In the new session, paste:
 
@@ -55,12 +55,12 @@ the upload script deletes after reading it.
 
 ## Install for Claude Code
 
-If `claude plugin list` already shows `substrate-claude@synced` (synced from
+If `claude plugin list` already shows `substrate@synced` (synced from
 claude.ai), do not install another copy: just sign in. Otherwise:
 
 ```text
 claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
-claude plugin install substrate-claude@substrate-marketplace
+claude plugin install substrate@substrate-marketplace
 ```
 
 Then type `/reload-plugins` and say "continue": the plugin's hook makes the
@@ -114,7 +114,7 @@ send credentials to a memory tool yourself.
   directly. When the connection is gone (signed out, or removed on the Agents
   page), Claude Code shows their errors ("Unauthorized", "MCP server not
   connected"). A plugin script cannot silence those, and it does not read the
-  host's sign-in files to detect it; run `/substrate-claude:substrate-connect`.
+  host's sign-in files to detect it; run `/substrate:connect`.
 - The import ticket reaches the model once, as the `memory_import_ticket` result
   (and the agent's file write), so it is part of the session transcript. It is
   60 minutes long, works only for import, and is redacted by Substrate as a
@@ -137,12 +137,12 @@ send credentials to a memory tool yourself.
 - **Tools absent after install:** start a new session (Cowork) or run
   `/reload-plugins` (Claude Code), then rerun the self-check prompt.
 - **`[substrate] … not saved yet` line:** run
-  `/substrate-claude:substrate-sync` to send the missing turns.
+  `/substrate:sync` to send the missing turns.
 - **Authorization required:** follow the browser link, approve, and rerun the
   smoke test. **Connection approved** is not **Connected to Substrate.**
 - **"MCP server … not connected" or "Unauthorized" hook errors:** installed but
   not signed in, or the connection was removed on the Agents page. Run
-  `/substrate-claude:substrate-connect` to reconnect; do not install a second
+  `/substrate:connect` to reconnect; do not install a second
   copy. Claude Code shows these hook errors itself, and the plugin cannot hide
   them: the capture hooks are MCP tool hooks that Claude Code calls directly.
 - **Import stopped:** ask the agent to continue the import; finished

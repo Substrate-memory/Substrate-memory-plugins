@@ -2,9 +2,9 @@
 description: Limit this session's Substrate memory reads to one Wiki page and the pages under it (or lift the limit with "off").
 argument-hint: '<page | "Path/To Page" | p:handle | off> [question]'
 allowed-tools:
-  - mcp__plugin_substrate-claude_substrate-memory__memory_search
-  - mcp__plugin_substrate-claude_substrate-memory__memory_expand
-  - mcp__plugin_substrate-claude_substrate-memory__memory_evidence
+  - mcp__plugin_substrate_substrate-memory__memory_search
+  - mcp__plugin_substrate_substrate-memory__memory_expand
+  - mcp__plugin_substrate_substrate-memory__memory_evidence
 ---
 
 Arguments: $ARGUMENTS
@@ -31,8 +31,8 @@ act on it:
   line states it (do not guess another), then answer any question as usual.
 - **No `[substrate]` line at all**: the Substrate plugin is not connected in
   this session, so the scope could not be confirmed. Say so and suggest
-  `/substrate-claude:substrate-connect`.
+  `/substrate:connect`.
 
 Never pass `session_id` or `share` to a Substrate tool; the plugin sets the
 session itself. A page title with spaces must be quoted:
-`/substrate-claude:scope "Projects/Big Idea" what changed?`.
+`/substrate:scope "Projects/Big Idea" what changed?`.

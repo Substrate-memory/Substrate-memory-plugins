@@ -103,7 +103,7 @@ def _settings(home) -> dict:
 def test_memory_tools_exclude_forget_and_are_listed_one_by_one() -> None:
     assert "memory_forget" not in sync.MEMORY_TOOLS
     assert len(sync.MEMORY_TOOLS) == len(set(sync.MEMORY_TOOLS)) == 12
-    assert sync.CLAUDE_TOOL_PREFIX == "mcp__plugin_substrate-claude_substrate-memory__"
+    assert sync.CLAUDE_TOOL_PREFIX == "mcp__plugin_substrate_substrate-memory__"
 
 
 def test_check_reports_missing_rules_and_writes_nothing(home) -> None:

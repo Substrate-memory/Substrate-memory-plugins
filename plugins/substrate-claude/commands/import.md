@@ -1,19 +1,18 @@
 ---
-name: substrate-import
 description: Import past local conversations into Substrate. The script uploads them directly; nothing passes through the chat.
 allowed-tools:
   - 'Bash(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude *)'
   - 'Bash(python "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude *)'
   - ToolSearch
-  - mcp__plugin_substrate-claude_substrate-memory__memory_import_ticket
-  - mcp__plugin_substrate-claude_substrate-memory__memory_import_status
-  - mcp__plugin_substrate-claude_substrate-memory__memory_search
+  - mcp__plugin_substrate_substrate-memory__memory_import_ticket
+  - mcp__plugin_substrate_substrate-memory__memory_import_status
+  - mcp__plugin_substrate_substrate-memory__memory_search
 ---
 
 `SYNC` means `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/substrate_sync.py" --host claude`
 (use `python` if `python3` is missing), in exactly that form: no full interpreter
 path, no extra options before the script. Requires **Connected to Substrate.**
-(`/substrate-claude:substrate-connect`). The current conversation is excluded
+(`/substrate:connect`). The current conversation is excluded
 automatically: hooks already capture it. Conversations already imported are not
 listed or counted again.
 
@@ -49,7 +48,7 @@ after 10 minutes.
    counts that the line does not give.
    Keep polling in the same turn; do not wait for the user.
 
-**Import again** (only after the account note in `/substrate-claude:substrate-connect`
+**Import again** (only after the account note in `/substrate:connect`
 found that this account has none of the earlier imports): run `SYNC --preview --force`
 for the count, then do **Import all** with `--force` added to the upload command in
 step 2 (`SYNC --upload --all --force --background ...`).

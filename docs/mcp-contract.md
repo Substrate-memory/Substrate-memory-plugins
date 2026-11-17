@@ -84,9 +84,9 @@ backoff. Hooks always **fail open**: a failed memory call never blocks the host.
 `memory_shares {}`. `memory_search` is the connection smoke test: an
 authenticated call, even with an empty result, proves **Connected to Substrate.**
 
-**Session scope** (Claude Code). The user typing `/substrate-claude:scope DIR`
+**Session scope** (Claude Code). The user typing `/substrate:scope DIR`
 limits every read of that session to the Wiki page DIR and the pages under it;
-`/substrate-claude:scope off` lifts it. The server parses the command from the
+`/substrate:scope off` lifts it. The server parses the command from the
 `UserPromptSubmit` prompt (`memory_turn_context`); no tool sets or lifts a scope.
 `session_id` on the three read tools is set by the plugin's `PreToolUse` hook
 (section 7), never by the model. In a scoped session reads answer only the
@@ -359,7 +359,7 @@ hook event. Reference mapping (the plugin packages ship the exact files):
 | `SessionStart` | — (Codex only; Claude Code rejects `mcp_tool` hooks on this event) | |
 | `PreCompact` | `memory_session_boundary` | `boundary: compact` |
 | `SessionEnd` | — (Claude Code and Codex both refuse MCP tool hooks here) | |
-| `PreToolUse` (Claude Code; matcher `mcp__plugin_substrate-claude_substrate-memory__.*`, `type: "command"`) | — rewrites the call: `scripts/session_id_hook.py` | adds `session_id` to `memory_search`/`memory_expand`/`memory_evidence` (`updatedInput` with `permissionDecision: "allow"`: read-only, and auto mode refuses a hook-changed call without a decision); denies the model's own calls to the hook tools (exit 2) |
+| `PreToolUse` (Claude Code; matcher `mcp__plugin_substrate_substrate-memory__.*`, `type: "command"`) | — rewrites the call: `scripts/session_id_hook.py` | adds `session_id` to `memory_search`/`memory_expand`/`memory_evidence` (`updatedInput` with `permissionDecision: "allow"`: read-only, and auto mode refuses a hook-changed call without a decision); denies the model's own calls to the hook tools (exit 2) |
 
 Timeouts: 5 s for every hook. Every hook fails open except Claude Code's `PreToolUse` session hook, which sets `"onFailure": "block"` (Claude Code 2.1.295+) and exits 2 on any error: a read must never leave a scoped session without its `session_id`. Both packages add one `type: "command"` hook on `UserPromptSubmit`: `substrate_sync.py --offer-check` (section 8), local and silent once the import offer is answered. Known host limits,
 documented to users (verified on Claude Code 2.1.289): Claude Code refuses

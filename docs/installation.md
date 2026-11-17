@@ -54,11 +54,11 @@ These are client-specific preparation steps, not different Substrate sign-in flo
 
 ### Claude Code (`plugins/substrate-claude`)
 
-First run `claude plugin list --json`. If any `substrate-claude@…` entry exists (a copy synced from claude.ai shows as `substrate-claude@synced`), it is already installed: do not install a second copy, enable it if needed (`claude plugin enable <id>`) and just sign in. Otherwise the agent installs it:
+First run `claude plugin list --json`. If any `substrate@…` entry exists (a copy synced from claude.ai shows as `substrate@synced`), it is already installed: do not install a second copy, enable it if needed (`claude plugin enable <id>`) and just sign in. Otherwise the agent installs it:
 
 ```text
 claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
-claude plugin install substrate-claude@substrate-marketplace
+claude plugin install substrate@substrate-marketplace
 ```
 
 The agent ends its reply with: *Installed. Type `/reload-plugins`, then say "continue".* On that next message the plugin's offer hook tells the agent to finish setup: it starts sign-in at once, keeps checking while the user approves in the browser (no "done" needed), verifies with `memory_search`, reports **Connected to Substrate.**, and offers the import in the same reply. The package wires `memory_*` hooks so recall is injected before every turn and every completed turn is captured automatically, including bounded redacted tool calls and results. The host transcript is the spool: if the server reports missing turns, the agent runs the package sync command to re-import them with deterministic ids. After the import it asks once whether to allow the memory tools without prompts (every tool except `memory_forget`, written to `permissions.allow` in `~/.claude/settings.json`), and tells you where to turn on auto-update.
@@ -67,7 +67,7 @@ Do not use the deprecated API-key plugin described below.
 
 ### Cowork (`plugins/substrate-claude`)
 
-Install the `substrate-claude` package through the client's supported interface. Automate it when the host permits it. Otherwise give the exact instructions from the package README, without asking for credentials. The menu flow below was observed working in the current Cowork build; its public official documentation is not yet confirmed:
+Install the `substrate` plugin through the client's supported interface. Automate it when the host permits it. Otherwise give the exact instructions from the package README, without asking for credentials. The menu flow below was observed working in the current Cowork build; its public official documentation is not yet confirmed:
 
 1. Open the **Cowork** tab.
 2. Choose **Customize → Plugins → Personal plugins → + → Add marketplace**.
@@ -129,7 +129,7 @@ Secrets are redacted client- and server-side. Imports are idempotent: repeats ar
 
 `VERSION` in the repository is the one version number. Each host updates on its own rule:
 
-- **Claude Code.** Turn on auto-update once: `/plugin` → Marketplaces → substrate-marketplace → **Enable auto-update**. By hand: `claude plugin update substrate-claude@substrate-marketplace` in the shell, or `/plugin marketplace update substrate-marketplace` in a session, then `/reload-plugins`. An administrator can set `"autoUpdate": true` for the marketplace in managed settings.
+- **Claude Code.** Turn on auto-update once: `/plugin` → Marketplaces → substrate-marketplace → **Enable auto-update**. By hand: `claude plugin update substrate@substrate-marketplace` in the shell, or `/plugin marketplace update substrate-marketplace` in a session, then `/reload-plugins`. An administrator can set `"autoUpdate": true` for the marketplace in managed settings.
 - **Cowork.** Turn on **Sync automatically** for the Substrate marketplace in Customize → Plugins (reported from the Cowork build; not in the public docs yet). By hand: Settings → Plugins → **Sync**, then start a new session.
 - **Codex (app and CLI).** No automatic update setting is documented for Codex. Update Substrate Memory in the plugin list, then start a new session. [TODO: exact Codex update command.] The hook command is stable across versions, so an update needs no new approval.
 - **Hermes.** Set `plugins.auto_apply: true` in `~/.hermes/config.yaml` for unattended updates (off by default). `plugins.auto_update_check_hours` sets how often Hermes checks (default 24; `0` turns the check off). By hand: `hermes plugins update substrate`.
