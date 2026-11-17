@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-Session scopes (Claude Code): `/substrate-claude:scope DIR [question]` limits the session's memory reads to one Wiki page and the pages under it, enforced by the server; `/substrate-claude:scope off` lifts it. Needs the matching Substrate server release (migration 0108).
+Session scopes (Claude Code): `/substrate-claude:scope DIR [question]` limits the session's memory reads to one Wiki page and the pages under it, enforced by the server; `/substrate-claude:scope off` lifts it. Needs the matching Substrate server release (migration 0108); deploy the server first. The plugin is renamed `substrate-claude` → `substrate`, so existing users reinstall it (a new MCP server key: expect one more sign-in).
 
+- **`UserPromptSubmit` hook:** sends `features: "session_scope"` so the server allows scoping for this client only.
 - **`commands/scope.md`:** reads the server's confirmation line and answers the question with the read tools. No tool sets or lifts a scope: the server parses the typed command from the `UserPromptSubmit` prompt.
 - **`PreToolUse` hook (`scripts/session_id_hook.py`):** sets `session_id` on `memory_search`, `memory_expand` and `memory_evidence` (overwriting any the model passed) and denies the model's own calls to the hook-only tools. `"onFailure": "block"`: a hook that cannot start or crashes blocks the read.
 - **Skill:** `substrate-memory` explains scoped sessions.

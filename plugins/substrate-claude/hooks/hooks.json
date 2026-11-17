@@ -11,7 +11,8 @@
             "input": {
               "session_id": "${session_id}",
               "prompt": "${prompt}",
-              "platform": "claude"
+              "platform": "claude",
+              "features": "session_scope"
             }
           }
         ]

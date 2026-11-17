@@ -87,7 +87,8 @@ authenticated call, even with an empty result, proves **Connected to Substrate.*
 **Session scope** (Claude Code). The user typing `/substrate:scope DIR`
 limits every read of that session to the Wiki page DIR and the pages under it;
 `/substrate:scope off` lifts it. The server parses the command from the
-`UserPromptSubmit` prompt (`memory_turn_context`); no tool sets or lifts a scope.
+`UserPromptSubmit` prompt (`memory_turn_context`); no tool sets or lifts a scope. A scope can only be
+set by a client that sends `features: "session_scope"` on `memory_turn_context` (the Claude plugin's hook does); for any other client the server answers that scoping needs the updated plugin and changes nothing. `features` never relaxes enforcement.
 `session_id` on the three read tools is set by the plugin's `PreToolUse` hook
 (section 7), never by the model. In a scoped session reads answer only the
 scope's members (no saved memories, no shares; `share` is `forbidden`), there is
