@@ -337,7 +337,7 @@ def test_offer_emitted_when_undecided(env) -> None:
                    "--ticket-file", "import-ticket-", "--mcp-url", "--new-claim", "claim_pending", "--status --wait 60",
                    "--record-decision no", "never appear in your reply",
                    "Do not stop and wait for the user",
-                   "mcp__plugin_substrate-claude_substrate-memory__memory_search"):
+                   "mcp__plugin_substrate_substrate-memory__memory_search"):
         assert phrase in text, phrase
     assert "SUBSTRATE_IMPORT_TICKET" not in text
     assert '--exclude-session "current-1"' in text
@@ -509,7 +509,7 @@ def test_setup_continues_until_connected(env) -> None:
                    "I found 1 past conversation on this computer",
                    "Import all / Let me pick / Not now",
                    "Never ask for a token", "/reload-plugins",
-                   "mcp__plugin_substrate-claude_substrate-memory__memory_search",
+                   "mcp__plugin_substrate_substrate-memory__memory_search",
                    "mcp__claude_ai_"):
         assert phrase in text, phrase
     assert str(SCRIPT) in text and '--exclude-session "current-1"' in text
@@ -1293,7 +1293,7 @@ def test_codex_missing_binary_is_not_signed_in(env, monkeypatch) -> None:
 
 def test_claude_sign_in_is_never_read_from_the_credential_store(env) -> None:
     """A Claude Code MCP sign-in on disk does not count: only memory_search + --record-connected do."""
-    store = {"mcpOAuth": {"plugin:substrate-claude:substrate-memory|abc": {
+    store = {"mcpOAuth": {"plugin:substrate:substrate-memory|abc": {
         "serverUrl": sync.MCP_SERVER_URL, "accessToken": "at-test", "refreshToken": "rt-test"}}}
     (env["claude"] / ".credentials.json").write_text(json.dumps(store))
     text = json.loads(_offer(env).stdout)["hookSpecificOutput"]["additionalContext"]

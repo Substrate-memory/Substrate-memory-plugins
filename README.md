@@ -112,7 +112,7 @@ Known limits, stated honestly:
 - If a Cowork cloud session ends while Substrate is unreachable and is never reopened, its last turn is not recovered.
 - Codex asks you to approve Substrate's hooks once: in the Codex app, in its hooks settings; in the terminal, `/hooks`.
 - Cowork needs a new session after install before tools appear.
-- Claude Code can show red "MCP server not connected" or "Unauthorized" hook errors while you are signed out or after a removed sign-in. Claude Code reports these from the plugin's capture hooks and the plugin cannot hide them. Reconnect with `/substrate-claude:substrate-connect`.
+- Claude Code can show red "MCP server not connected" or "Unauthorized" hook errors while you are signed out or after a removed sign-in. Claude Code reports these from the plugin's capture hooks and the plugin cannot hide them. Reconnect with `/substrate:substrate-connect`.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix and history.
 

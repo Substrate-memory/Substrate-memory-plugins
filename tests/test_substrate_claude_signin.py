@@ -25,7 +25,7 @@ AUTH_LINK = (
     "https://sync.example.test:8446/oauth/mcp/authorize?response_type=code"
     "&client_id=mcp_test&code_challenge=abc&state=xyz&scope=retrieve+capture"
 )
-AUTH_TOOL = "mcp__plugin_substrate-claude_substrate-memory__authenticate"
+AUTH_TOOL = "mcp__plugin_substrate_substrate-memory__authenticate"
 
 
 def _load():

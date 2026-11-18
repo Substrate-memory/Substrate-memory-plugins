@@ -1188,7 +1188,7 @@ MCP_SERVER_URL = "https://app.trysubstrate.co/mcp"
 PLUGIN_VERSION = "0.11.4"
 # Claude Code permission rules: every memory tool of the plugin server except memory_forget,
 # which stays behind a prompt. Listed one by one: a wildcard would include memory_forget.
-CLAUDE_TOOL_PREFIX = "mcp__plugin_substrate-claude_substrate-memory__"
+CLAUDE_TOOL_PREFIX = "mcp__plugin_substrate_substrate-memory__"
 MEMORY_TOOLS = (
     "memory_search", "memory_remember", "memory_turn_context", "memory_capture_tool",
     "memory_capture_turn", "memory_session_boundary", "memory_evidence", "memory_expand",
@@ -1483,7 +1483,7 @@ def _quote(value: str) -> str:
 
 # The plugin's own server, as Claude Code names its tools. Tools from a claude.ai
 # connector (mcp__claude_ai_*) are a different server and prove nothing here.
-CLAUDE_SEARCH_TOOL = "mcp__plugin_substrate-claude_substrate-memory__memory_search"
+CLAUDE_SEARCH_TOOL = "mcp__plugin_substrate_substrate-memory__memory_search"
 
 
 def _search_tool(host: str) -> str:
@@ -1494,7 +1494,7 @@ def _import_invoke(host: str) -> str:
     """How the agent must start the import skill: Codex has no Skill tool, and its skill is substrate-import."""
     if host == "codex":
         return "use the `$substrate-import` skill"
-    return "invoke the Skill tool with skill `substrate-claude:substrate-import`"
+    return "invoke the Skill tool with skill `substrate:import`"
 
 
 def _sync_base(host: str, data_dir: str, session_id: str) -> str:
@@ -1639,7 +1639,7 @@ def _setup_text(host: str, data_dir: str, session_id: str,
     text = (
         "[substrate] Substrate setup is not finished on this computer. Finish it now, in this "
         "reply, before anything else, in a few short lines. First invoke the Skill tool with skill "
-        "`substrate-claude:substrate-connect` and follow it: its permissions apply to this turn. If "
+        "`substrate:connect` and follow it: its permissions apply to this turn. If "
         "the Skill tool is not available, follow the steps below. A bare \"continue\", \"done\", "
         "\"ok\" or \"approved\" from the user just means: carry on with Substrate setup. Do not "
         "comment on it or ask what to work on. SYNC means: `%(base)s`.\n"
@@ -1653,19 +1653,19 @@ def _setup_text(host: str, data_dir: str, session_id: str,
         "authentication\" or \"unauthorized\" (or only an `authenticate` tool for substrate-memory "
         "exists): if that tool is not loaded, load it with ToolSearch first. If the server is listed "
         "as disabled, or Claude Code says it is not connected, say exactly: \"Open /mcp, select "
-        "plugin:substrate-claude:substrate-memory, choose Enable if shown, then Authenticate.\" "
+        "plugin:substrate:substrate-memory, choose Enable if shown, then Authenticate.\" "
         "Then call the tool. In your reply, paste the full sign-in URL it returns "
         "as plain text (the user cannot see tool output), then say: \"Open this link, sign in and "
         "choose Approve connection. I'll continue automatically.\" Omit the tool's notes about error pages, "
         "localhost, redirects or pasting the URL. Paste the link again whenever "
         "the user says they cannot see it. If the result has no link, say so and ask the user to "
-        "run /mcp, choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the "
+        "run /mcp, choose plugin:substrate:substrate-memory, Authenticate, and send you the "
         "link it shows. Never describe this session or computer as remote, local or SSH, and never "
         "mention ports, callback addresses or localhost, even if the tool's result says so. Only if "
         "the user reports an error page, ask them to paste the full address-bar URL. Then do NOT end your turn: run `SYNC --pause 15`, then call `%(search)s` "
         "again (load it with ToolSearch if it is deferred); repeat up to 20 times (about 5 "
         "minutes). As soon as it works, do step 1 and continue. If it never works, say: "
-        "\"Substrate is not connected yet. Open /mcp, choose plugin:substrate-claude:"
+        "\"Substrate is not connected yet. Open /mcp, choose plugin:substrate:"
         "substrate-memory, finish Authenticate, then say continue.\" Never ask for a token or "
         "key, and never say Connected in that case.\n"
         "3. If no Substrate memory tools exist at all, tell the user to type /reload-plugins "
@@ -1678,7 +1678,7 @@ def _setup_text(host: str, data_dir: str, session_id: str,
             offer_text = ("run `SYNC --preview` and say its conversation count and date range, "
                           "then Import all / Let me pick / Not now")
         follow = ("$substrate-import" if host == "codex"
-                  else "/substrate-claude:substrate-import (or $substrate-import)")
+                  else "/substrate:import (or $substrate-import)")
         text += ("\n4. Right after \"Connected to Substrate.\", in the same reply: %s. Then, if "
                  "they choose, follow %s; "
                  "the import ticket never goes in a command or in your reply. For the user's choice, %s "
@@ -1847,7 +1847,7 @@ def _signin_start_text(link: str, reconnect: bool, host: str = "claude") -> str:
                 "connection**. I'll continue automatically.\" Then the link: %s") % link
     else:
         show = ("No sign-in link was found in the tool result. Say so, and ask the user to run /mcp, "
-                "choose plugin:substrate-claude:substrate-memory, Authenticate, and send you the link it shows."
+                "choose plugin:substrate:substrate-memory, Authenticate, and send you the link it shows."
                 if host == "claude" else
                 "No sign-in link was found in the tool result. Say so, and ask the user to run "
                 "`codex mcp login substrate-memory` and send you the link it prints.")

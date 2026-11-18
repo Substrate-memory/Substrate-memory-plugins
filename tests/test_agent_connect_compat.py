@@ -62,22 +62,22 @@ def _rule_matches(rule, command):
     return re.fullmatch(pattern, command) is not None
 
 
-MCP = "mcp__plugin_substrate-claude_substrate-memory__"
+MCP = "mcp__plugin_substrate_substrate-memory__"
 ROOT = "${CLAUDE_PLUGIN_ROOT}"
 # Exactly the plugin's own script at the plugin root (Claude Code substitutes ${CLAUDE_PLUGIN_ROOT}
 # in plugin skills' and commands' allowed-tools), for --host claude. No wildcard path, no Bash(*).
 EXPECTED_BASH = {f'Bash({i} "{ROOT}/scripts/substrate_sync.py" --host claude *)' for i in ("python3", "python")}
 MCP_TOOLS = {
-    "substrate-connect": {"ToolSearch", MCP + "authenticate", MCP + "memory_search", MCP + "memory_import_status"},
-    "substrate-import": {"ToolSearch", MCP + "memory_import_ticket", MCP + "memory_import_status", MCP + "memory_search"},
-    "substrate-sync": set(),
+    "connect": {"ToolSearch", MCP + "authenticate", MCP + "memory_search", MCP + "memory_import_status"},
+    "import": {"ToolSearch", MCP + "memory_import_ticket", MCP + "memory_import_status", MCP + "memory_search"},
+    "sync": set(),
 }
 
 
 @pytest.mark.parametrize("folder,name", [
-    ("commands", "substrate-connect"), ("commands", "substrate-import"),
-    ("skills", "substrate-connect"), ("skills", "substrate-import"),
-    ("commands", "substrate-sync"),
+    ("commands", "connect"), ("commands", "import"),
+    ("skills", "connect"), ("skills", "import"),
+    ("commands", "sync"),
 ])
 def test_claude_commands_pre_approve_only_the_plugin_script(folder, name):
     tools = _allowed_tools(name, folder)
@@ -111,7 +111,7 @@ def test_claude_commands_pre_approve_only_the_plugin_script(folder, name):
 
 
 def test_import_command_has_no_write_pre_approval():
-    assert "Write" not in _allowed_tools("substrate-import").split()
+    assert "Write" not in _allowed_tools("import").split()
 
 
 def test_claude_and_codex_sync_scripts_stay_identical():

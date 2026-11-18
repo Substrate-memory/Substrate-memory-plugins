@@ -7,17 +7,17 @@ only for the browser approval and the user's import choice.
 ## Claude Code
 
 1. **One copy only.** Run `claude plugin list --json`. If any
-   `substrate-claude@…` entry exists (a copy synced from claude.ai is
-   `substrate-claude@synced`), do not install another. If it is disabled, run
+   `substrate@…` entry exists (a copy synced from claude.ai is
+   `substrate@synced`), do not install another. If it is disabled, run
    `claude plugin enable <id>`. Otherwise install it yourself:
 
    ```text
    claude plugin marketplace add Substrate-memory/Substrate-memory-plugins
-   claude plugin install substrate-claude@substrate-marketplace
+   claude plugin install substrate@substrate-marketplace
    ```
 2. If the Substrate tools (or their `authenticate` tool) are already in this
-   session, go straight to `/substrate-claude:substrate-connect` step 1 (the check
-   is the plugin's own `mcp__plugin_substrate-claude_substrate-memory__memory_search`;
+   session, go straight to `/substrate:connect` step 1 (the check
+   is the plugin's own `mcp__plugin_substrate_substrate-memory__memory_search`;
    a claude.ai connector's tools do not count).
    Otherwise end the install reply with exactly this, in plain words:
    *Installed. Type `/reload-plugins`, then say "continue".* On the next
@@ -25,7 +25,7 @@ only for the browser approval and the user's import choice.
    approves in the browser), verify with `memory_search`, say **Connected to
    Substrate.**, and in the same reply offer **Import all** / **Let me pick** /
    **Not now**. Nothing else to type.
-3. On **Import all**, follow `/substrate-claude:substrate-import`: it starts the
+3. On **Import all**, follow `/substrate:import`: it starts the
    upload in the background and reports progress until the final summary
    line, without waiting for the user.
 
@@ -34,7 +34,7 @@ only for the browser approval and the user's import choice.
 1. **Cowork → Customize → Plugins → Personal plugins → + → Add marketplace →
    Add from a repository (GitHub URL)**:
    `https://github.com/Substrate-memory/Substrate-memory-plugins`. **Browse**,
-   install `substrate-claude`.
+   install `substrate`.
 2. **Start a new session** (plugin MCP servers register at session start; if
    tools still do not appear, quit and reopen the app). There, paste:
 

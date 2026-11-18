@@ -5,13 +5,14 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:substrate-claude:substrate-memory",
+            "server": "plugin:substrate:substrate-memory",
             "tool": "memory_turn_context",
             "timeout": 5,
             "input": {
               "session_id": "${session_id}",
               "prompt": "${prompt}",
-              "platform": "claude"
+              "platform": "claude",
+              "features": "session_scope"
             }
           }
         ]
@@ -26,12 +27,25 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__plugin_substrate_substrate-memory__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "P=\"$(command -v python3 || command -v python)\"; exec \"$P\" \"${CLAUDE_PLUGIN_ROOT}/scripts/session_id_hook.py\"",
+            "timeout": 5,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:substrate-claude:substrate-memory",
+            "server": "plugin:substrate:substrate-memory",
             "tool": "memory_capture_tool",
             "timeout": 5,
             "input": {
@@ -46,7 +60,7 @@
         ]
       },
       {
-        "matcher": "mcp__plugin_substrate-claude_substrate-memory__authenticate",
+        "matcher": "mcp__plugin_substrate_substrate-memory__authenticate",
         "hooks": [
           {
             "type": "command",
@@ -61,7 +75,7 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:substrate-claude:substrate-memory",
+            "server": "plugin:substrate:substrate-memory",
             "tool": "memory_capture_turn",
             "timeout": 5,
             "input": {
@@ -88,7 +102,7 @@
         "hooks": [
           {
             "type": "mcp_tool",
-            "server": "plugin:substrate-claude:substrate-memory",
+            "server": "plugin:substrate:substrate-memory",
             "tool": "memory_session_boundary",
             "timeout": 5,
             "input": {

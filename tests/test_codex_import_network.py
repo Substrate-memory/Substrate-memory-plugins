@@ -314,20 +314,20 @@ def test_codex_offer_names_codex_import_skill_not_claude() -> None:
     """The Codex hook must point at the Codex import skill (``$substrate-import``), never the Claude one."""
     for module in (sync, _load(CLAUDE_SCRIPT)):
         codex_text = module._offer_text("codex", "/tmp/data", "sess-1", None)
-        assert "substrate-claude:substrate-import" not in codex_text
+        assert "substrate:import" not in codex_text
         assert "Skill tool" not in codex_text
         assert "use the `$substrate-import` skill" in codex_text
         # The Codex setup note makes no import offer: the offer hook makes it once, after the check.
         setup = module._setup_text("codex", "/tmp/data", "sess-1", None, offer=True)
-        assert "substrate-claude:substrate-import" not in setup
+        assert "substrate:import" not in setup
         assert "Import all" not in setup and "Import offer" not in setup
 
 
 def test_claude_offer_still_names_claude_import_skill() -> None:
     text = sync._offer_text("claude", "/tmp/data", "sess-1", None)
-    assert "invoke the Skill tool with skill `substrate-claude:substrate-import`" in text
+    assert "invoke the Skill tool with skill `substrate:import`" in text
     setup = sync._setup_text("claude", "/tmp/data", "sess-1", None, offer=True)
-    assert "/substrate-claude:substrate-import (or $substrate-import)" in setup
+    assert "/substrate:import (or $substrate-import)" in setup
 
 
 CODEX_HOST_TEXTS = ("setup", "offer", "stop", "signin")
@@ -348,7 +348,8 @@ def test_codex_hook_texts_name_only_codex_skills_and_commands() -> None:
     for name in CODEX_HOST_TEXTS:
         text = texts[name]
         for claude_only in (
-            "substrate-claude",
+            "substrate:import",
+            "substrate:connect",
             "Skill tool",
             "/reload-plugins",
             "plugin:substrate",
@@ -369,7 +370,7 @@ def test_codex_hook_texts_name_only_codex_skills_and_commands() -> None:
 def test_claude_hook_texts_are_unchanged_in_naming() -> None:
     claude = _load(CLAUDE_SCRIPT)
     setup = claude._setup_text("claude", "/tmp/data", "sess-1", None, offer=True)
-    assert "substrate-claude:substrate-connect" in setup
+    assert "substrate:connect" in setup
     assert "/reload-plugins" in setup
     assert "--host claude" in claude._plain_command("--pause 15")
     assert "--host codex" in sync._plain_command("--pause 15", "codex")

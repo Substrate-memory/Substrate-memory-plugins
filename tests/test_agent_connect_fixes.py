@@ -148,7 +148,7 @@ def test_setup_text_pastes_the_link_and_invents_no_network_advice(tmp_path) -> N
 
 
 @pytest.mark.parametrize("path", [
-    CLAUDE / "commands" / "substrate-connect.md",
+    CLAUDE / "commands" / "connect.md",
     CODEX / "skills" / "substrate-connect" / "SKILL.md",
 ])
 def test_connect_texts_paste_the_link_and_ignore_the_mcp_offer(path: Path) -> None:
@@ -159,7 +159,7 @@ def test_connect_texts_paste_the_link_and_ignore_the_mcp_offer(path: Path) -> No
 
 
 @pytest.mark.parametrize("path", [
-    CLAUDE / "skills" / "substrate-memory" / "SKILL.md",
+    CLAUDE / "skills" / "memory" / "SKILL.md",
     CODEX / "skills" / "substrate-memory" / "SKILL.md",
     CODEX / "skills" / "substrate-import" / "SKILL.md",
 ])
@@ -168,10 +168,10 @@ def test_memory_and_import_skills_ignore_the_mcp_offer(path: Path) -> None:
 
 
 def test_import_texts_handle_timeouts_and_the_account_check() -> None:
-    connect = _text(CLAUDE / "commands" / "substrate-connect.md")
+    connect = _text(CLAUDE / "commands" / "connect.md")
     assert "already_imported" in connect and "memory_import_status" in connect
-    assert "--preview --force" in _text(CLAUDE / "commands" / "substrate-import.md")
-    for path in (CLAUDE / "commands" / "substrate-import.md", CODEX / "skills" / "substrate-import" / "SKILL.md"):
+    assert "--preview --force" in _text(CLAUDE / "commands" / "import.md")
+    for path in (CLAUDE / "commands" / "import.md", CODEX / "skills" / "substrate-import" / "SKILL.md"):
         text = _text(path)
         assert "claim_timeout" in text and "server_unavailable" in text
     codex_connect = _text(CODEX / "skills" / "substrate-connect" / "SKILL.md")
@@ -246,7 +246,7 @@ def test_upload_on_a_trial_ended_account_says_so_plainly(home, monkeypatch, caps
 
 
 @pytest.mark.parametrize("path", [
-    CLAUDE / "skills" / "substrate-memory" / "SKILL.md",
+    CLAUDE / "skills" / "memory" / "SKILL.md",
     CODEX / "skills" / "substrate-memory" / "SKILL.md",
     REPO / "plugins" / "substrate-mcp" / "skills" / "substrate-memory" / "SKILL.md",
 ])
@@ -260,7 +260,7 @@ def test_every_skill_says_the_trial_ended_plainly(path: Path) -> None:
 
 
 def test_commands_name_the_exact_sync_form_and_the_tool_load() -> None:
-    connect = _text(CLAUDE / "commands" / "substrate-connect.md")
+    connect = _text(CLAUDE / "commands" / "connect.md")
     assert "Run it exactly in that form" in connect and "full interpreter path" in connect
     assert "load it first with ToolSearch" in connect
     assert "Never describe this session or computer as remote" in connect
@@ -298,7 +298,7 @@ def _body(path: Path) -> str:
     return path.read_text(encoding="utf-8").split("---\n", 2)[2]
 
 
-@pytest.mark.parametrize("name", ["substrate-connect", "substrate-import"])
+@pytest.mark.parametrize("name", ["connect", "import"])
 def test_claude_skill_and_command_share_the_same_steps(name: str) -> None:
     skill = CLAUDE / "skills" / name / "SKILL.md"
     command = CLAUDE / "commands" / f"{name}.md"
@@ -309,9 +309,9 @@ def test_claude_skill_and_command_share_the_same_steps(name: str) -> None:
 
 def test_hook_text_invokes_the_skills_first() -> None:
     setup = _text_of_setup()
-    assert "Skill tool with skill `substrate-claude:substrate-connect`" in setup
+    assert "Skill tool with skill `substrate:connect`" in setup
     import_offer = sync._offer_text("claude", "/tmp/x", "s1", None)
-    assert "Skill tool with skill `substrate-claude:substrate-import`" in import_offer
+    assert "Skill tool with skill `substrate:import`" in import_offer
 
 
 def test_record_connected_reports_a_reconnect_once(tmp_path, capsys) -> None:
